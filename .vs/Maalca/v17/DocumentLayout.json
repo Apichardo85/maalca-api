@@ -1,0 +1,61 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "C:\\Users\\apich\\source\\maalca-api\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{7DE529A2-64F8-49F1-8E36-BEA07F19C6C1}|src\\Maalca.Application\\Maalca.Application.csproj|c:\\users\\apich\\source\\maalca-api\\src\\maalca.application\\services\\affiliateservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{7DE529A2-64F8-49F1-8E36-BEA07F19C6C1}|src\\Maalca.Application\\Maalca.Application.csproj|solutionrelative:src\\maalca.application\\services\\affiliateservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 6,
+          "Children": [
+            {
+              "$type": "Bookmark",
+              "Name": "ST:130:0:{1fc202d4-d401-403c-9834-5b218574bb67}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:133:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{34e76e81-ee4a-11d0-ae2e-00a0c90fffc3}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:130:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:131:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:132:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "AffiliateService.cs",
+              "DocumentMoniker": "C:\\Users\\apich\\source\\maalca-api\\src\\Maalca.Application\\Services\\AffiliateService.cs",
+              "RelativeDocumentMoniker": "src\\Maalca.Application\\Services\\AffiliateService.cs",
+              "ToolTip": "C:\\Users\\apich\\source\\maalca-api\\src\\Maalca.Application\\Services\\AffiliateService.cs",
+              "RelativeToolTip": "src\\Maalca.Application\\Services\\AffiliateService.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAcAAAAmAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-03-07T17:08:35.872Z",
+              "EditorCaption": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+C:\Users\apich\source\maalca-api\src\Maalca.Domain\bin\Debug\net8.0\Maalca.Domain.deps.json
+C:\Users\apich\source\maalca-api\src\Maalca.Domain\bin\Debug\net8.0\Maalca.Domain.dll
+C:\Users\apich\source\maalca-api\src\Maalca.Domain\bin\Debug\net8.0\Maalca.Domain.pdb
+C:\Users\apich\source\maalca-api\src\Maalca.Domain\obj\Debug\net8.0\Maalca.Domain.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\apich\source\maalca-api\src\Maalca.Domain\obj\Debug\net8.0\Maalca.Domain.AssemblyInfoInputs.cache
+C:\Users\apich\source\maalca-api\src\Maalca.Domain\obj\Debug\net8.0\Maalca.Domain.AssemblyInfo.cs
+C:\Users\apich\source\maalca-api\src\Maalca.Domain\obj\Debug\net8.0\Maalca.Domain.csproj.CoreCompileInputs.cache
+C:\Users\apich\source\maalca-api\src\Maalca.Domain\obj\Debug\net8.0\Maalca.Domain.sourcelink.json
+C:\Users\apich\source\maalca-api\src\Maalca.Domain\obj\Debug\net8.0\Maalca.Domain.dll
+C:\Users\apich\source\maalca-api\src\Maalca.Domain\obj\Debug\net8.0\refint\Maalca.Domain.dll
+C:\Users\apich\source\maalca-api\src\Maalca.Domain\obj\Debug\net8.0\Maalca.Domain.pdb
+C:\Users\apich\source\maalca-api\src\Maalca.Domain\obj\Debug\net8.0\ref\Maalca.Domain.dll
