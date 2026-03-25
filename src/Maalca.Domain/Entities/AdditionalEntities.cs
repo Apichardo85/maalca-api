@@ -31,7 +31,7 @@ public class InventoryItem : AuditableEntity
     public ICollection<InventoryMovement> Movements { get; set; } = new List<InventoryMovement>();
 }
 
-public class InventoryMovement : BaseEntity
+public class InventoryMovement : AuditableEntity
 {
     public Guid InventoryItemId { get; set; }
     public string Type { get; set; } = "in"; // in, out
@@ -41,7 +41,7 @@ public class InventoryMovement : BaseEntity
     public InventoryItem? InventoryItem { get; set; }
 }
 
-public class QueueEntry : BaseEntity
+public class QueueEntry : AuditableEntity
 {
     public Guid AffiliateId { get; set; }
     public string DisplayName { get; set; } = string.Empty;
@@ -93,7 +93,7 @@ public class Invoice : AuditableEntity
     public ICollection<InvoiceItem> Items { get; set; } = new List<InvoiceItem>();
 }
 
-public class InvoiceItem : BaseEntity
+public class InvoiceItem : AuditableEntity
 {
     public Guid InvoiceId { get; set; }
     public string Description { get; set; } = string.Empty;
@@ -131,7 +131,7 @@ public class Campaign : AuditableEntity
     public Affiliate? Affiliate { get; set; }
 }
 
-public class Lead : BaseEntity
+public class Lead : AuditableEntity
 {
     public string Name { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;

@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using Maalca.Application.Common.DTOs;
 using Maalca.Application.Common.Interfaces;
@@ -36,7 +37,7 @@ public class AuthService : IAuthService
         var token = GenerateJwtToken(user);
         var refreshToken = GenerateRefreshToken();
 
-        user.RefreshToken = refreshToken;
+        user.RefreshToken = HashToken(refreshToken);
         user.RefreshTokenExpiry = DateTime.UtcNow.AddDays(7);
         await _context.SaveChangesAsync();
 
@@ -56,8 +57,9 @@ public class AuthService : IAuthService
 
     public async Task<RefreshTokenResponse?> RefreshTokenAsync(RefreshTokenRequest request)
     {
-        var user = await _context.Users.FirstOrDefaultAsync(u => 
-            u.RefreshToken == request.RefreshToken && 
+        var hashedToken = HashToken(request.RefreshToken);
+        var user = await _context.Users.FirstOrDefaultAsync(u =>
+            u.RefreshToken == hashedToken &&
             u.RefreshTokenExpiry > DateTime.UtcNow);
 
         if (user == null)
@@ -68,7 +70,7 @@ public class AuthService : IAuthService
         var token = GenerateJwtToken(user);
         var refreshToken = GenerateRefreshToken();
 
-        user.RefreshToken = refreshToken;
+        user.RefreshToken = HashToken(refreshToken);
         user.RefreshTokenExpiry = DateTime.UtcNow.AddDays(7);
         await _context.SaveChangesAsync();
 
@@ -81,7 +83,11 @@ public class AuthService : IAuthService
 
     private string GenerateJwtToken(User user)
     {
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"] ?? "MaalcaSecretKey12345678901234567890"));
+        var jwtKey = _configuration["Jwt:Key"]
+            ?? Environment.GetEnvironmentVariable("JWT_SECRET_KEY")
+            ?? throw new InvalidOperationException("JWT key not configured");
+
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
         var claims = new[]
@@ -104,8 +110,17 @@ public class AuthService : IAuthService
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
-    private string GenerateRefreshToken()
+    private static string GenerateRefreshToken()
     {
-        return Convert.ToBase64String(Guid.NewGuid().ToByteArray());
+        var randomBytes = new byte[32];
+        using var rng = RandomNumberGenerator.Create();
+        rng.GetBytes(randomBytes);
+        return Convert.ToBase64String(randomBytes);
+    }
+
+    private static string HashToken(string token)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(token));
+        return Convert.ToBase64String(bytes);
     }
 }

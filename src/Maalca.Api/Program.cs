@@ -1,6 +1,11 @@
+using System.Threading.RateLimiting;
+using Maalca.Api.Filters;
+using Maalca.Api.Middleware;
+using Maalca.Api.Services;
 using Maalca.Application.Common.DTOs;
 using Maalca.Application.Common.Interfaces;
 using Maalca.Application.Services;
+using Maalca.Domain.Common.Interfaces;
 using Maalca.Domain.Entities;
 using Maalca.Infrastructure.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -18,8 +23,14 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+// Current User Service
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+
 // JWT Authentication
-var jwtKey = builder.Configuration["Jwt:Key"] ?? "MaalcaSecretKey12345678901234567890";
+var jwtKey = builder.Configuration["Jwt:Key"]
+    ?? Environment.GetEnvironmentVariable("JWT_SECRET_KEY")
+    ?? throw new InvalidOperationException("JWT key not configured. Set Jwt:Key in configuration or JWT_SECRET_KEY environment variable.");
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "maalca-api";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "maalca-web";
 
@@ -36,9 +47,57 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidAudience = jwtAudience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
         };
+
+        // Support SignalR JWT via query string
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs/queue"))
+                {
+                    context.Token = accessToken;
+                }
+                return Task.CompletedTask;
+            }
+        };
     });
 
-builder.Services.AddAuthorization();
+// Authorization policies
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AdminOnly", policy => policy.RequireClaim("role", "Admin"));
+    options.AddPolicy("ManagerOrAdmin", policy => policy.RequireClaim("role", "Admin", "Manager"));
+});
+
+// Rate Limiting
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.AddPolicy("auth", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+
+    options.AddPolicy("api", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 100,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+});
+
+// Global Exception Handler
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddProblemDetails();
 
 // Application Services
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -55,31 +114,37 @@ builder.Services.AddScoped<IGiftCardService, GiftCardService>();
 builder.Services.AddScoped<ICampaignService, CampaignService>();
 builder.Services.AddScoped<IMetricsService, MetricsService>();
 builder.Services.AddScoped<ILeadService, LeadService>();
+builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline
+// Middleware pipeline (order matters)
+app.UseMiddleware<CorrelationIdMiddleware>();
+app.UseMiddleware<SecurityHeadersMiddleware>();
+app.UseExceptionHandler();
+
 app.UseSwagger();
 app.UseSwaggerUI();
 app.MapGet("/", () => Results.Redirect("/swagger"));
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapControllers();
 app.MapHub<Maalca.Api.Hubs.QueueHub>("/hubs/queue");
 
-// ============ AUTH ENDPOINTS ============
+// ============ AUTH ENDPOINTS (Public) ============
 app.MapPost("/api/auth/login", async (IAuthService authService, LoginRequest request) =>
 {
     var result = await authService.LoginAsync(request);
     if (result == null)
         return Results.Unauthorized();
     return Results.Ok(result);
-});
+}).RequireRateLimiting("auth");
 
 app.MapPost("/api/auth/refresh", async (IAuthService authService, RefreshTokenRequest request) =>
 {
@@ -87,10 +152,16 @@ app.MapPost("/api/auth/refresh", async (IAuthService authService, RefreshTokenRe
     if (result == null)
         return Results.Unauthorized();
     return Results.Ok(result);
-});
+}).RequireRateLimiting("auth");
 
-// ============ AFFILIATE ENDPOINTS ============
-app.MapGet("/api/affiliates/{affiliateId:guid}", async (IAffiliateService affiliateService, Guid affiliateId) =>
+// ============ AFFILIATE-SCOPED ENDPOINTS (Authenticated + Tenant-Isolated) ============
+var affiliateGroup = app.MapGroup("/api/affiliates/{affiliateId:guid}")
+    .RequireAuthorization()
+    .AddEndpointFilter<AffiliateAuthorizationFilter>()
+    .RequireRateLimiting("api");
+
+// -- Affiliate Config --
+affiliateGroup.MapGet("", async (IAffiliateService affiliateService, Guid affiliateId) =>
 {
     var result = await affiliateService.GetAffiliateAsync(affiliateId);
     if (result == null)
@@ -98,14 +169,14 @@ app.MapGet("/api/affiliates/{affiliateId:guid}", async (IAffiliateService affili
     return Results.Ok(result);
 });
 
-// ============ CUSTOMER ENDPOINTS ============
-app.MapGet("/api/affiliates/{affiliateId:guid}/customers", async (ICustomerService customerService, Guid affiliateId, int page = 1, int limit = 20, string? search = null, string? status = null) =>
+// -- Customers --
+affiliateGroup.MapGet("/customers", async (ICustomerService customerService, Guid affiliateId, int page = 1, int limit = 20, string? search = null, string? status = null) =>
 {
     var result = await customerService.GetCustomersAsync(affiliateId, page, limit, search, status);
     return Results.Ok(result);
 });
 
-app.MapGet("/api/affiliates/{affiliateId:guid}/customers/{id:guid}", async (ICustomerService customerService, Guid affiliateId, Guid id) =>
+affiliateGroup.MapGet("/customers/{id:guid}", async (ICustomerService customerService, Guid affiliateId, Guid id) =>
 {
     var result = await customerService.GetCustomerAsync(affiliateId, id);
     if (result == null)
@@ -113,13 +184,13 @@ app.MapGet("/api/affiliates/{affiliateId:guid}/customers/{id:guid}", async (ICus
     return Results.Ok(result);
 });
 
-app.MapPost("/api/affiliates/{affiliateId:guid}/customers", async (ICustomerService customerService, Guid affiliateId, Customer customer) =>
+affiliateGroup.MapPost("/customers", async (ICustomerService customerService, Guid affiliateId, Customer customer) =>
 {
     var result = await customerService.CreateCustomerAsync(affiliateId, customer);
-    return Results.Created($"/api/affiliates/{affiliateId:guid}/customers/{result.Id}", result);
+    return Results.Created($"/api/affiliates/{affiliateId}/customers/{result.Id}", result);
 });
 
-app.MapPut("/api/affiliates/{affiliateId:guid}/customers/{id:guid}", async (ICustomerService customerService, Guid affiliateId, Guid id, Customer customer) =>
+affiliateGroup.MapPut("/customers/{id:guid}", async (ICustomerService customerService, Guid affiliateId, Guid id, Customer customer) =>
 {
     var result = await customerService.UpdateCustomerAsync(affiliateId, id, customer);
     if (result == null)
@@ -127,22 +198,22 @@ app.MapPut("/api/affiliates/{affiliateId:guid}/customers/{id:guid}", async (ICus
     return Results.Ok(result);
 });
 
-app.MapDelete("/api/affiliates/{affiliateId:guid}/customers/{id:guid}", async (ICustomerService customerService, Guid affiliateId, Guid id) =>
+affiliateGroup.MapDelete("/customers/{id:guid}", async (ICustomerService customerService, Guid affiliateId, Guid id) =>
 {
     var result = await customerService.DeleteCustomerAsync(affiliateId, id);
     if (!result)
         return Results.NotFound();
     return Results.NoContent();
-});
+}).RequireAuthorization("ManagerOrAdmin");
 
-// ============ APPOINTMENT ENDPOINTS ============
-app.MapGet("/api/affiliates/{affiliateId:guid}/appointments", async (IAppointmentService appointmentService, Guid affiliateId, DateTime? date = null, string? status = null, int page = 1) =>
+// -- Appointments --
+affiliateGroup.MapGet("/appointments", async (IAppointmentService appointmentService, Guid affiliateId, DateTime? date = null, string? status = null, int page = 1) =>
 {
     var result = await appointmentService.GetAppointmentsAsync(affiliateId, date, status, page);
     return Results.Ok(result);
 });
 
-app.MapGet("/api/affiliates/{affiliateId:guid}/appointments/{id:guid}", async (IAppointmentService appointmentService, Guid affiliateId, Guid id) =>
+affiliateGroup.MapGet("/appointments/{id:guid}", async (IAppointmentService appointmentService, Guid affiliateId, Guid id) =>
 {
     var result = await appointmentService.GetAppointmentAsync(affiliateId, id);
     if (result == null)
@@ -150,13 +221,13 @@ app.MapGet("/api/affiliates/{affiliateId:guid}/appointments/{id:guid}", async (I
     return Results.Ok(result);
 });
 
-app.MapPost("/api/affiliates/{affiliateId:guid}/appointments", async (IAppointmentService appointmentService, Guid affiliateId, Appointment appointment) =>
+affiliateGroup.MapPost("/appointments", async (IAppointmentService appointmentService, Guid affiliateId, Appointment appointment) =>
 {
     var result = await appointmentService.CreateAppointmentAsync(affiliateId, appointment);
-    return Results.Created($"/api/affiliates/{affiliateId:guid}/appointments/{result.Id}", result);
+    return Results.Created($"/api/affiliates/{affiliateId}/appointments/{result.Id}", result);
 });
 
-app.MapPatch("/api/affiliates/{affiliateId:guid}/appointments/{id:guid}", async (IAppointmentService appointmentService, Guid affiliateId, Guid id, string status) =>
+affiliateGroup.MapPatch("/appointments/{id:guid}", async (IAppointmentService appointmentService, Guid affiliateId, Guid id, string status) =>
 {
     var result = await appointmentService.UpdateAppointmentStatusAsync(affiliateId, id, status);
     if (result == null)
@@ -164,14 +235,14 @@ app.MapPatch("/api/affiliates/{affiliateId:guid}/appointments/{id:guid}", async 
     return Results.Ok(result);
 });
 
-// ============ SERVICE ENDPOINTS ============
-app.MapGet("/api/affiliates/{affiliateId:guid}/services", async (IServiceService serviceService, Guid affiliateId, string? category = null, string? status = null) =>
+// -- Services --
+affiliateGroup.MapGet("/services", async (IServiceService serviceService, Guid affiliateId, string? category = null, string? status = null) =>
 {
     var result = await serviceService.GetServicesAsync(affiliateId, category, status);
     return Results.Ok(result);
 });
 
-app.MapGet("/api/affiliates/{affiliateId:guid}/services/{id:guid}", async (IServiceService serviceService, Guid affiliateId, Guid id) =>
+affiliateGroup.MapGet("/services/{id:guid}", async (IServiceService serviceService, Guid affiliateId, Guid id) =>
 {
     var result = await serviceService.GetServiceAsync(affiliateId, id);
     if (result == null)
@@ -179,13 +250,13 @@ app.MapGet("/api/affiliates/{affiliateId:guid}/services/{id:guid}", async (IServ
     return Results.Ok(result);
 });
 
-app.MapPost("/api/affiliates/{affiliateId:guid}/services", async (IServiceService serviceService, Guid affiliateId, Maalca.Domain.Entities.Service service) =>
+affiliateGroup.MapPost("/services", async (IServiceService serviceService, Guid affiliateId, Maalca.Domain.Entities.Service service) =>
 {
     var result = await serviceService.CreateServiceAsync(affiliateId, service);
-    return Results.Created($"/api/affiliates/{affiliateId:guid}/services/{result.Id}", result);
+    return Results.Created($"/api/affiliates/{affiliateId}/services/{result.Id}", result);
 });
 
-app.MapPut("/api/affiliates/{affiliateId:guid}/services/{id:guid}", async (IServiceService serviceService, Guid affiliateId, Guid id, Maalca.Domain.Entities.Service service) =>
+affiliateGroup.MapPut("/services/{id:guid}", async (IServiceService serviceService, Guid affiliateId, Guid id, Maalca.Domain.Entities.Service service) =>
 {
     var result = await serviceService.UpdateServiceAsync(affiliateId, id, service);
     if (result == null)
@@ -193,48 +264,41 @@ app.MapPut("/api/affiliates/{affiliateId:guid}/services/{id:guid}", async (IServ
     return Results.Ok(result);
 });
 
-app.MapDelete("/api/affiliates/{affiliateId:guid}/services/{id:guid}", async (IServiceService serviceService, Guid affiliateId, Guid id) =>
+affiliateGroup.MapDelete("/services/{id:guid}", async (IServiceService serviceService, Guid affiliateId, Guid id) =>
 {
     var result = await serviceService.DeleteServiceAsync(affiliateId, id);
     if (!result)
         return Results.NotFound();
     return Results.NoContent();
-});
+}).RequireAuthorization("ManagerOrAdmin");
 
-// ============ INVENTORY ENDPOINTS ============
-app.MapGet("/api/affiliates/{affiliateId:guid}/inventory", async (IInventoryService inventoryService, Guid affiliateId, string? category = null, string? status = null, int page = 1) =>
+// -- Inventory --
+affiliateGroup.MapGet("/inventory", async (IInventoryService inventoryService, Guid affiliateId, string? category = null, string? status = null, int page = 1) =>
 {
     var result = await inventoryService.GetInventoryAsync(affiliateId, category, status, page);
     return Results.Ok(result);
 });
 
-app.MapPost("/api/affiliates/{affiliateId:guid}/inventory/movements", async (IInventoryService inventoryService, Guid affiliateId, InventoryMovement movement) =>
+affiliateGroup.MapPost("/inventory/movements", async (IInventoryService inventoryService, Guid affiliateId, InventoryMovement movement) =>
 {
-    try
-    {
-        var result = await inventoryService.CreateMovementAsync(affiliateId, movement);
-        return Results.Created($"/api/affiliates/{affiliateId:guid}/inventory/{movement.InventoryItemId}", result);
-    }
-    catch (InvalidOperationException ex)
-    {
-        return Results.BadRequest(new { error = new { code = "INVALID_OPERATION", message = ex.Message } });
-    }
+    var result = await inventoryService.CreateMovementAsync(affiliateId, movement);
+    return Results.Created($"/api/affiliates/{affiliateId}/inventory/{movement.InventoryItemId}", result);
 });
 
-// ============ QUEUE ENDPOINTS ============
-app.MapGet("/api/affiliates/{affiliateId:guid}/queue", async (IQueueService queueService, Guid affiliateId) =>
+// -- Queue --
+affiliateGroup.MapGet("/queue", async (IQueueService queueService, Guid affiliateId) =>
 {
     var result = await queueService.GetQueueAsync(affiliateId);
     return Results.Ok(result);
 });
 
-app.MapPost("/api/affiliates/{affiliateId:guid}/queue", async (IQueueService queueService, Guid affiliateId, QueueEntry entry) =>
+affiliateGroup.MapPost("/queue", async (IQueueService queueService, Guid affiliateId, QueueEntry entry) =>
 {
     var result = await queueService.AddToQueueAsync(affiliateId, entry);
-    return Results.Created($"/api/affiliates/{affiliateId:guid}/queue/{result.Id}", result);
+    return Results.Created($"/api/affiliates/{affiliateId}/queue/{result.Id}", result);
 });
 
-app.MapPatch("/api/affiliates/{affiliateId:guid}/queue/{id:guid}", async (IQueueService queueService, Guid affiliateId, Guid id, string status, Guid? barberId = null) =>
+affiliateGroup.MapPatch("/queue/{id:guid}", async (IQueueService queueService, Guid affiliateId, Guid id, string status, Guid? barberId = null) =>
 {
     var result = await queueService.UpdateQueueEntryAsync(affiliateId, id, status, barberId);
     if (result == null)
@@ -242,14 +306,14 @@ app.MapPatch("/api/affiliates/{affiliateId:guid}/queue/{id:guid}", async (IQueue
     return Results.Ok(result);
 });
 
-// ============ TEAM ENDPOINTS ============
-app.MapGet("/api/affiliates/{affiliateId:guid}/team", async (ITeamService teamService, Guid affiliateId, string? department = null, string? status = null) =>
+// -- Team --
+affiliateGroup.MapGet("/team", async (ITeamService teamService, Guid affiliateId, string? department = null, string? status = null) =>
 {
     var result = await teamService.GetTeamAsync(affiliateId, department, status);
     return Results.Ok(result);
 });
 
-app.MapGet("/api/affiliates/{affiliateId:guid}/team/{id:guid}", async (ITeamService teamService, Guid affiliateId, Guid id) =>
+affiliateGroup.MapGet("/team/{id:guid}", async (ITeamService teamService, Guid affiliateId, Guid id) =>
 {
     var result = await teamService.GetTeamMemberAsync(affiliateId, id);
     if (result == null)
@@ -257,13 +321,13 @@ app.MapGet("/api/affiliates/{affiliateId:guid}/team/{id:guid}", async (ITeamServ
     return Results.Ok(result);
 });
 
-app.MapPost("/api/affiliates/{affiliateId:guid}/team", async (ITeamService teamService, Guid affiliateId, TeamMember member) =>
+affiliateGroup.MapPost("/team", async (ITeamService teamService, Guid affiliateId, TeamMember member) =>
 {
     var result = await teamService.CreateTeamMemberAsync(affiliateId, member);
-    return Results.Created($"/api/affiliates/{affiliateId:guid}/team/{result.Id}", result);
+    return Results.Created($"/api/affiliates/{affiliateId}/team/{result.Id}", result);
 });
 
-app.MapPut("/api/affiliates/{affiliateId:guid}/team/{id:guid}", async (ITeamService teamService, Guid affiliateId, Guid id, TeamMember member) =>
+affiliateGroup.MapPut("/team/{id:guid}", async (ITeamService teamService, Guid affiliateId, Guid id, TeamMember member) =>
 {
     var result = await teamService.UpdateTeamMemberAsync(affiliateId, id, member);
     if (result == null)
@@ -271,22 +335,22 @@ app.MapPut("/api/affiliates/{affiliateId:guid}/team/{id:guid}", async (ITeamServ
     return Results.Ok(result);
 });
 
-app.MapDelete("/api/affiliates/{affiliateId:guid}/team/{id:guid}", async (ITeamService teamService, Guid affiliateId, Guid id) =>
+affiliateGroup.MapDelete("/team/{id:guid}", async (ITeamService teamService, Guid affiliateId, Guid id) =>
 {
     var result = await teamService.DeleteTeamMemberAsync(affiliateId, id);
     if (!result)
         return Results.NotFound();
     return Results.NoContent();
-});
+}).RequireAuthorization("ManagerOrAdmin");
 
-// ============ PRODUCT ENDPOINTS ============
-app.MapGet("/api/affiliates/{affiliateId:guid}/products", async (IProductService productService, Guid affiliateId, string? category = null, string? status = null) =>
+// -- Products --
+affiliateGroup.MapGet("/products", async (IProductService productService, Guid affiliateId, string? category = null, string? status = null) =>
 {
     var result = await productService.GetProductsAsync(affiliateId, category, status);
     return Results.Ok(result);
 });
 
-app.MapGet("/api/affiliates/{affiliateId:guid}/products/{id:guid}", async (IProductService productService, Guid affiliateId, Guid id) =>
+affiliateGroup.MapGet("/products/{id:guid}", async (IProductService productService, Guid affiliateId, Guid id) =>
 {
     var result = await productService.GetProductAsync(affiliateId, id);
     if (result == null)
@@ -294,13 +358,13 @@ app.MapGet("/api/affiliates/{affiliateId:guid}/products/{id:guid}", async (IProd
     return Results.Ok(result);
 });
 
-app.MapPost("/api/affiliates/{affiliateId:guid}/products", async (IProductService productService, Guid affiliateId, Product product) =>
+affiliateGroup.MapPost("/products", async (IProductService productService, Guid affiliateId, Product product) =>
 {
     var result = await productService.CreateProductAsync(affiliateId, product);
-    return Results.Created($"/api/affiliates/{affiliateId:guid}/products/{result.Id}", result);
+    return Results.Created($"/api/affiliates/{affiliateId}/products/{result.Id}", result);
 });
 
-app.MapPut("/api/affiliates/{affiliateId:guid}/products/{id:guid}", async (IProductService productService, Guid affiliateId, Guid id, Product product) =>
+affiliateGroup.MapPut("/products/{id:guid}", async (IProductService productService, Guid affiliateId, Guid id, Product product) =>
 {
     var result = await productService.UpdateProductAsync(affiliateId, id, product);
     if (result == null)
@@ -308,22 +372,22 @@ app.MapPut("/api/affiliates/{affiliateId:guid}/products/{id:guid}", async (IProd
     return Results.Ok(result);
 });
 
-app.MapDelete("/api/affiliates/{affiliateId:guid}/products/{id:guid}", async (IProductService productService, Guid affiliateId, Guid id) =>
+affiliateGroup.MapDelete("/products/{id:guid}", async (IProductService productService, Guid affiliateId, Guid id) =>
 {
     var result = await productService.DeleteProductAsync(affiliateId, id);
     if (!result)
         return Results.NotFound();
     return Results.NoContent();
-});
+}).RequireAuthorization("ManagerOrAdmin");
 
-// ============ INVOICE ENDPOINTS ============
-app.MapGet("/api/affiliates/{affiliateId:guid}/invoices", async (IInvoiceService invoiceService, Guid affiliateId, string? status = null, DateTime? dateFrom = null, DateTime? dateTo = null) =>
+// -- Invoices --
+affiliateGroup.MapGet("/invoices", async (IInvoiceService invoiceService, Guid affiliateId, string? status = null, DateTime? dateFrom = null, DateTime? dateTo = null) =>
 {
     var result = await invoiceService.GetInvoicesAsync(affiliateId, status, dateFrom, dateTo);
     return Results.Ok(result);
 });
 
-app.MapGet("/api/affiliates/{affiliateId:guid}/invoices/{id:guid}", async (IInvoiceService invoiceService, Guid affiliateId, Guid id) =>
+affiliateGroup.MapGet("/invoices/{id:guid}", async (IInvoiceService invoiceService, Guid affiliateId, Guid id) =>
 {
     var result = await invoiceService.GetInvoiceAsync(affiliateId, id);
     if (result == null)
@@ -331,20 +395,20 @@ app.MapGet("/api/affiliates/{affiliateId:guid}/invoices/{id:guid}", async (IInvo
     return Results.Ok(result);
 });
 
-app.MapPost("/api/affiliates/{affiliateId:guid}/invoices", async (IInvoiceService invoiceService, Guid affiliateId, Invoice invoice) =>
+affiliateGroup.MapPost("/invoices", async (IInvoiceService invoiceService, Guid affiliateId, Invoice invoice) =>
 {
     var result = await invoiceService.CreateInvoiceAsync(affiliateId, invoice);
-    return Results.Created($"/api/affiliates/{affiliateId:guid}/invoices/{result.Id}", result);
+    return Results.Created($"/api/affiliates/{affiliateId}/invoices/{result.Id}", result);
 });
 
-// ============ GIFT CARD ENDPOINTS ============
-app.MapGet("/api/affiliates/{affiliateId:guid}/giftcards", async (IGiftCardService giftCardService, Guid affiliateId, string? status = null) =>
+// -- Gift Cards --
+affiliateGroup.MapGet("/giftcards", async (IGiftCardService giftCardService, Guid affiliateId, string? status = null) =>
 {
     var result = await giftCardService.GetGiftCardsAsync(affiliateId, status);
     return Results.Ok(result);
 });
 
-app.MapGet("/api/affiliates/{affiliateId:guid}/giftcards/{id:guid}", async (IGiftCardService giftCardService, Guid affiliateId, Guid id) =>
+affiliateGroup.MapGet("/giftcards/{id:guid}", async (IGiftCardService giftCardService, Guid affiliateId, Guid id) =>
 {
     var result = await giftCardService.GetGiftCardAsync(affiliateId, id);
     if (result == null)
@@ -352,20 +416,20 @@ app.MapGet("/api/affiliates/{affiliateId:guid}/giftcards/{id:guid}", async (IGif
     return Results.Ok(result);
 });
 
-app.MapPost("/api/affiliates/{affiliateId:guid}/giftcards", async (IGiftCardService giftCardService, Guid affiliateId, GiftCard giftCard) =>
+affiliateGroup.MapPost("/giftcards", async (IGiftCardService giftCardService, Guid affiliateId, GiftCard giftCard) =>
 {
     var result = await giftCardService.CreateGiftCardAsync(affiliateId, giftCard);
-    return Results.Created($"/api/affiliates/{affiliateId:guid}/giftcards/{result.Id}", result);
+    return Results.Created($"/api/affiliates/{affiliateId}/giftcards/{result.Id}", result);
 });
 
-// ============ CAMPAIGN ENDPOINTS ============
-app.MapGet("/api/affiliates/{affiliateId:guid}/campaigns", async (ICampaignService campaignService, Guid affiliateId, string? status = null) =>
+// -- Campaigns --
+affiliateGroup.MapGet("/campaigns", async (ICampaignService campaignService, Guid affiliateId, string? status = null) =>
 {
     var result = await campaignService.GetCampaignsAsync(affiliateId, status);
     return Results.Ok(result);
 });
 
-app.MapGet("/api/affiliates/{affiliateId:guid}/campaigns/{id:guid}", async (ICampaignService campaignService, Guid affiliateId, Guid id) =>
+affiliateGroup.MapGet("/campaigns/{id:guid}", async (ICampaignService campaignService, Guid affiliateId, Guid id) =>
 {
     var result = await campaignService.GetCampaignAsync(affiliateId, id);
     if (result == null)
@@ -373,43 +437,50 @@ app.MapGet("/api/affiliates/{affiliateId:guid}/campaigns/{id:guid}", async (ICam
     return Results.Ok(result);
 });
 
-app.MapPost("/api/affiliates/{affiliateId:guid}/campaigns", async (ICampaignService campaignService, Guid affiliateId, Campaign campaign) =>
+affiliateGroup.MapPost("/campaigns", async (ICampaignService campaignService, Guid affiliateId, Campaign campaign) =>
 {
     var result = await campaignService.CreateCampaignAsync(affiliateId, campaign);
-    return Results.Created($"/api/affiliates/{affiliateId:guid}/campaigns/{result.Id}", result);
+    return Results.Created($"/api/affiliates/{affiliateId}/campaigns/{result.Id}", result);
 });
 
-// ============ METRICS ENDPOINTS ============
-app.MapGet("/api/affiliates/{affiliateId:guid}/metrics", async (IMetricsService metricsService, Guid affiliateId) =>
+// -- Metrics --
+affiliateGroup.MapGet("/metrics", async (IMetricsService metricsService, Guid affiliateId) =>
 {
     var result = await metricsService.GetMetricsAsync(affiliateId);
     return Results.Ok(result);
 });
 
+// -- Audit Logs (Admin/Manager only) --
+affiliateGroup.MapGet("/audit-logs", async (IAuditLogService auditLogService, Guid affiliateId, string? entityType = null, string? entityId = null, string? userId = null, DateTime? from = null, DateTime? to = null, int page = 1, int limit = 50) =>
+{
+    var result = await auditLogService.GetAuditLogsAsync(affiliateId, entityType, entityId, userId, from, to, page, limit);
+    return Results.Ok(result);
+}).RequireAuthorization("ManagerOrAdmin");
+
+// ============ PUBLIC ENDPOINTS ============
 app.MapGet("/api/metrics/overview", async (ILeadService leadService) =>
 {
     var result = await leadService.GetOverviewMetricsAsync();
     return Results.Ok(result);
 });
 
-// ============ LEAD ENDPOINTS ============
 app.MapPost("/api/leads/properties", async (ILeadService leadService, Lead lead) =>
 {
     var result = await leadService.CreatePropertyLeadAsync(lead);
     return Results.Created($"/api/leads/properties/{result.Id}", result);
-});
+}).RequireRateLimiting("api");
 
 app.MapPost("/api/leads/cirisonic", async (ILeadService leadService, Lead lead) =>
 {
     var result = await leadService.CreateCirisonicLeadAsync(lead);
     return Results.Created($"/api/leads/cirisonic/{result.Id}", result);
-});
+}).RequireRateLimiting("api");
 
 // Apply migrations on startup
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();
+    await db.Database.MigrateAsync();
 }
 
 app.Run();

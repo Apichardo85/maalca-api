@@ -1,7 +1,9 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 
 namespace Maalca.Api.Hubs;
 
+[Authorize]
 public class QueueHub : Hub
 {
     public async Task JoinQueueGroup(string affiliateId)

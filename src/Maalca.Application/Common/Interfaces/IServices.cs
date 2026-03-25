@@ -104,3 +104,16 @@ public interface ILeadService
     Task<Lead> CreatePropertyLeadAsync(Lead lead);
     Task<Lead> CreateCirisonicLeadAsync(Lead lead);
 }
+
+public interface IAuditLogService
+{
+    Task<PaginatedResponse<AuditLog>> GetAuditLogsAsync(
+        Guid? affiliateId = null,
+        string? entityType = null,
+        string? entityId = null,
+        string? userId = null,
+        DateTime? from = null,
+        DateTime? to = null,
+        int page = 1,
+        int limit = 50);
+}
