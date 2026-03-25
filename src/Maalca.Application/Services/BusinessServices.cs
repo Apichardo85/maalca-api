@@ -15,7 +15,7 @@ public class AppointmentService : IAppointmentService
     public async Task<PaginatedResponse<Appointment>> GetAppointmentsAsync(Guid affiliateId, DateTime? date = null, string? status = null, int page = 1)
     {
         var baseQuery = _context.Appointments.Where(a => a.AffiliateId == affiliateId);
-        
+
         IQueryable<Appointment> query = baseQuery.Include(a => a.Customer).Include(a => a.Service);
 
         if (date.HasValue)
@@ -37,7 +37,6 @@ public class AppointmentService : IAppointmentService
     {
         appointment.AffiliateId = affiliateId;
         appointment.Id = Guid.NewGuid();
-        appointment.CreatedAt = DateTime.UtcNow;
         _context.Appointments.Add(appointment);
         await _context.SaveChangesAsync();
         return appointment;
@@ -48,7 +47,6 @@ public class AppointmentService : IAppointmentService
         var appointment = await _context.Appointments.FirstOrDefaultAsync(a => a.Id == id && a.AffiliateId == affiliateId);
         if (appointment == null) return null;
         appointment.Status = status;
-        appointment.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
         return appointment;
     }
@@ -75,7 +73,6 @@ public class ServiceService : IServiceService
     {
         service.AffiliateId = affiliateId;
         service.Id = Guid.NewGuid();
-        service.CreatedAt = DateTime.UtcNow;
         _context.Services.Add(service);
         await _context.SaveChangesAsync();
         return service;
@@ -91,7 +88,6 @@ public class ServiceService : IServiceService
         existing.DurationMinutes = service.DurationMinutes;
         existing.Category = service.Category;
         existing.IsActive = service.IsActive;
-        existing.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
         return existing;
     }
@@ -132,8 +128,7 @@ public class InventoryService : IInventoryService
             throw new InvalidOperationException("Inventory item not found");
 
         movement.Id = Guid.NewGuid();
-        movement.CreatedAt = DateTime.UtcNow;
-        
+
         if (movement.Type == "in")
             item.Quantity += movement.Quantity;
         else
@@ -159,13 +154,12 @@ public class QueueService : IQueueService
     {
         var maxPosition = await _context.QueueEntries.Where(q => q.AffiliateId == affiliateId && q.Status == "waiting")
             .MaxAsync(q => (int?)q.Position) ?? 0;
-        
+
         entry.AffiliateId = affiliateId;
         entry.Id = Guid.NewGuid();
         entry.Position = maxPosition + 1;
         entry.Status = "waiting";
-        entry.CreatedAt = DateTime.UtcNow;
-        
+
         _context.QueueEntries.Add(entry);
         await _context.SaveChangesAsync();
         return entry;
@@ -178,7 +172,6 @@ public class QueueService : IQueueService
         entry.Status = status;
         if (barberId.HasValue) entry.AssignedToId = barberId;
         if (status == "in_service") entry.CalledAt = DateTime.UtcNow;
-        entry.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
         return entry;
     }
@@ -205,7 +198,6 @@ public class TeamService : ITeamService
     {
         member.AffiliateId = affiliateId;
         member.Id = Guid.NewGuid();
-        member.CreatedAt = DateTime.UtcNow;
         _context.TeamMembers.Add(member);
         await _context.SaveChangesAsync();
         return member;
@@ -221,7 +213,6 @@ public class TeamService : ITeamService
         existing.Role = member.Role;
         existing.Department = member.Department;
         existing.IsActive = member.IsActive;
-        existing.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
         return existing;
     }
@@ -259,7 +250,6 @@ public class ProductService : IProductService
     {
         product.AffiliateId = affiliateId;
         product.Id = Guid.NewGuid();
-        product.CreatedAt = DateTime.UtcNow;
         _context.Products.Add(product);
         await _context.SaveChangesAsync();
         return product;
@@ -276,7 +266,6 @@ public class ProductService : IProductService
         existing.Stock = product.Stock;
         existing.ImageUrl = product.ImageUrl;
         existing.Status = product.Status;
-        existing.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
         return existing;
     }
@@ -300,13 +289,13 @@ public class InvoiceService : IInvoiceService
     public async Task<PaginatedResponse<Invoice>> GetInvoicesAsync(Guid affiliateId, string? status = null, DateTime? dateFrom = null, DateTime? dateTo = null)
     {
         var baseQuery = _context.Invoices.Where(i => i.AffiliateId == affiliateId);
-        
+
         IQueryable<Invoice> query = baseQuery.Include(i => i.Customer);
 
         if (!string.IsNullOrEmpty(status)) query = query.Where(i => i.Status == status);
         if (dateFrom.HasValue) query = query.Where(i => i.IssueDate >= dateFrom.Value);
         if (dateTo.HasValue) query = query.Where(i => i.IssueDate <= dateTo.Value);
-        
+
         var total = await query.CountAsync();
         var data = await query.OrderByDescending(i => i.IssueDate).ToListAsync();
         return new PaginatedResponse<Invoice> { Data = data, Total = total, Page = 1, TotalPages = 1 };
@@ -320,7 +309,6 @@ public class InvoiceService : IInvoiceService
         invoice.AffiliateId = affiliateId;
         invoice.Id = Guid.NewGuid();
         invoice.InvoiceNumber = $"INV-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString()[..8]}";
-        invoice.CreatedAt = DateTime.UtcNow;
         _context.Invoices.Add(invoice);
         await _context.SaveChangesAsync();
         return invoice;
@@ -350,7 +338,6 @@ public class GiftCardService : IGiftCardService
         giftCard.Code = Guid.NewGuid().ToString("N").ToUpper()[..16];
         giftCard.Balance = giftCard.InitialAmount;
         giftCard.Status = "Active";
-        giftCard.CreatedAt = DateTime.UtcNow;
         _context.GiftCards.Add(giftCard);
         await _context.SaveChangesAsync();
         return giftCard;
@@ -377,7 +364,6 @@ public class CampaignService : ICampaignService
     {
         campaign.AffiliateId = affiliateId;
         campaign.Id = Guid.NewGuid();
-        campaign.CreatedAt = DateTime.UtcNow;
         _context.Campaigns.Add(campaign);
         await _context.SaveChangesAsync();
         return campaign;
@@ -420,7 +406,6 @@ public class LeadService : ILeadService
     {
         lead.Id = Guid.NewGuid();
         lead.Source = "properties";
-        lead.CreatedAt = DateTime.UtcNow;
         _context.Leads.Add(lead);
         await _context.SaveChangesAsync();
         return lead;
@@ -430,7 +415,6 @@ public class LeadService : ILeadService
     {
         lead.Id = Guid.NewGuid();
         lead.Source = "cirisonic";
-        lead.CreatedAt = DateTime.UtcNow;
         _context.Leads.Add(lead);
         await _context.SaveChangesAsync();
         return lead;

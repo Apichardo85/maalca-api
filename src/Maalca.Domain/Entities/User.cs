@@ -16,7 +16,7 @@ public class User : AuditableEntity
     public Affiliate? Affiliate { get; set; }
 }
 
-public class Affiliate : BaseEntity
+public class Affiliate : AuditableEntity
 {
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }

@@ -56,11 +56,10 @@ public class CustomerService : ICustomerService
     {
         customer.AffiliateId = affiliateId;
         customer.Id = Guid.NewGuid();
-        customer.CreatedAt = DateTime.UtcNow;
-        
+
         _context.Customers.Add(customer);
         await _context.SaveChangesAsync();
-        
+
         return customer;
     }
 
@@ -74,7 +73,6 @@ public class CustomerService : ICustomerService
         existing.Phone = customer.Phone;
         existing.Notes = customer.Notes;
         existing.Status = customer.Status;
-        existing.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
         return existing;
