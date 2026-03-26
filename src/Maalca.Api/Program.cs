@@ -116,7 +116,7 @@ app.MapGet("/api/affiliates/{affiliateId:guid}/customers/{id:guid}", async (ICus
 app.MapPost("/api/affiliates/{affiliateId:guid}/customers", async (ICustomerService customerService, Guid affiliateId, Customer customer) =>
 {
     var result = await customerService.CreateCustomerAsync(affiliateId, customer);
-    return Results.Created($"/api/affiliates/{affiliateId:guid}/customers/{result.Id}", result);
+    return Results.Created($"/api/affiliates/{affiliateId}/customers/{result.Id}", result);
 });
 
 app.MapPut("/api/affiliates/{affiliateId:guid}/customers/{id:guid}", async (ICustomerService customerService, Guid affiliateId, Guid id, Customer customer) =>
@@ -153,7 +153,15 @@ app.MapGet("/api/affiliates/{affiliateId:guid}/appointments/{id:guid}", async (I
 app.MapPost("/api/affiliates/{affiliateId:guid}/appointments", async (IAppointmentService appointmentService, Guid affiliateId, Appointment appointment) =>
 {
     var result = await appointmentService.CreateAppointmentAsync(affiliateId, appointment);
-    return Results.Created($"/api/affiliates/{affiliateId:guid}/appointments/{result.Id}", result);
+    return Results.Created($"/api/affiliates/{affiliateId}/appointments/{result.Id}", result);
+});
+
+app.MapPut("/api/affiliates/{affiliateId:guid}/appointments/{id:guid}", async (IAppointmentService appointmentService, Guid affiliateId, Guid id, Appointment appointment) =>
+{
+    var result = await appointmentService.UpdateAppointmentAsync(affiliateId, id, appointment);
+    if (result == null)
+        return Results.NotFound();
+    return Results.Ok(result);
 });
 
 app.MapPatch("/api/affiliates/{affiliateId:guid}/appointments/{id:guid}", async (IAppointmentService appointmentService, Guid affiliateId, Guid id, string status) =>
@@ -162,6 +170,14 @@ app.MapPatch("/api/affiliates/{affiliateId:guid}/appointments/{id:guid}", async 
     if (result == null)
         return Results.NotFound();
     return Results.Ok(result);
+});
+
+app.MapDelete("/api/affiliates/{affiliateId:guid}/appointments/{id:guid}", async (IAppointmentService appointmentService, Guid affiliateId, Guid id) =>
+{
+    var result = await appointmentService.DeleteAppointmentAsync(affiliateId, id);
+    if (!result)
+        return Results.NotFound();
+    return Results.NoContent();
 });
 
 // ============ SERVICE ENDPOINTS ============
@@ -182,7 +198,7 @@ app.MapGet("/api/affiliates/{affiliateId:guid}/services/{id:guid}", async (IServ
 app.MapPost("/api/affiliates/{affiliateId:guid}/services", async (IServiceService serviceService, Guid affiliateId, Maalca.Domain.Entities.Service service) =>
 {
     var result = await serviceService.CreateServiceAsync(affiliateId, service);
-    return Results.Created($"/api/affiliates/{affiliateId:guid}/services/{result.Id}", result);
+    return Results.Created($"/api/affiliates/{affiliateId}/services/{result.Id}", result);
 });
 
 app.MapPut("/api/affiliates/{affiliateId:guid}/services/{id:guid}", async (IServiceService serviceService, Guid affiliateId, Guid id, Maalca.Domain.Entities.Service service) =>
@@ -208,12 +224,42 @@ app.MapGet("/api/affiliates/{affiliateId:guid}/inventory", async (IInventoryServ
     return Results.Ok(result);
 });
 
+app.MapGet("/api/affiliates/{affiliateId:guid}/inventory/{id:guid}", async (IInventoryService inventoryService, Guid affiliateId, Guid id) =>
+{
+    var result = await inventoryService.GetInventoryItemAsync(affiliateId, id);
+    if (result == null)
+        return Results.NotFound();
+    return Results.Ok(result);
+});
+
+app.MapPost("/api/affiliates/{affiliateId:guid}/inventory", async (IInventoryService inventoryService, Guid affiliateId, InventoryItem item) =>
+{
+    var result = await inventoryService.CreateInventoryItemAsync(affiliateId, item);
+    return Results.Created($"/api/affiliates/{affiliateId}/inventory/{result.Id}", result);
+});
+
+app.MapPut("/api/affiliates/{affiliateId:guid}/inventory/{id:guid}", async (IInventoryService inventoryService, Guid affiliateId, Guid id, InventoryItem item) =>
+{
+    var result = await inventoryService.UpdateInventoryItemAsync(affiliateId, id, item);
+    if (result == null)
+        return Results.NotFound();
+    return Results.Ok(result);
+});
+
+app.MapDelete("/api/affiliates/{affiliateId:guid}/inventory/{id:guid}", async (IInventoryService inventoryService, Guid affiliateId, Guid id) =>
+{
+    var result = await inventoryService.DeleteInventoryItemAsync(affiliateId, id);
+    if (!result)
+        return Results.NotFound();
+    return Results.NoContent();
+});
+
 app.MapPost("/api/affiliates/{affiliateId:guid}/inventory/movements", async (IInventoryService inventoryService, Guid affiliateId, InventoryMovement movement) =>
 {
     try
     {
         var result = await inventoryService.CreateMovementAsync(affiliateId, movement);
-        return Results.Created($"/api/affiliates/{affiliateId:guid}/inventory/{movement.InventoryItemId}", result);
+        return Results.Created($"/api/affiliates/{affiliateId}/inventory/{movement.InventoryItemId}", result);
     }
     catch (InvalidOperationException ex)
     {
@@ -231,7 +277,7 @@ app.MapGet("/api/affiliates/{affiliateId:guid}/queue", async (IQueueService queu
 app.MapPost("/api/affiliates/{affiliateId:guid}/queue", async (IQueueService queueService, Guid affiliateId, QueueEntry entry) =>
 {
     var result = await queueService.AddToQueueAsync(affiliateId, entry);
-    return Results.Created($"/api/affiliates/{affiliateId:guid}/queue/{result.Id}", result);
+    return Results.Created($"/api/affiliates/{affiliateId}/queue/{result.Id}", result);
 });
 
 app.MapPatch("/api/affiliates/{affiliateId:guid}/queue/{id:guid}", async (IQueueService queueService, Guid affiliateId, Guid id, string status, Guid? barberId = null) =>
@@ -260,7 +306,7 @@ app.MapGet("/api/affiliates/{affiliateId:guid}/team/{id:guid}", async (ITeamServ
 app.MapPost("/api/affiliates/{affiliateId:guid}/team", async (ITeamService teamService, Guid affiliateId, TeamMember member) =>
 {
     var result = await teamService.CreateTeamMemberAsync(affiliateId, member);
-    return Results.Created($"/api/affiliates/{affiliateId:guid}/team/{result.Id}", result);
+    return Results.Created($"/api/affiliates/{affiliateId}/team/{result.Id}", result);
 });
 
 app.MapPut("/api/affiliates/{affiliateId:guid}/team/{id:guid}", async (ITeamService teamService, Guid affiliateId, Guid id, TeamMember member) =>
@@ -297,7 +343,7 @@ app.MapGet("/api/affiliates/{affiliateId:guid}/products/{id:guid}", async (IProd
 app.MapPost("/api/affiliates/{affiliateId:guid}/products", async (IProductService productService, Guid affiliateId, Product product) =>
 {
     var result = await productService.CreateProductAsync(affiliateId, product);
-    return Results.Created($"/api/affiliates/{affiliateId:guid}/products/{result.Id}", result);
+    return Results.Created($"/api/affiliates/{affiliateId}/products/{result.Id}", result);
 });
 
 app.MapPut("/api/affiliates/{affiliateId:guid}/products/{id:guid}", async (IProductService productService, Guid affiliateId, Guid id, Product product) =>
@@ -334,7 +380,23 @@ app.MapGet("/api/affiliates/{affiliateId:guid}/invoices/{id:guid}", async (IInvo
 app.MapPost("/api/affiliates/{affiliateId:guid}/invoices", async (IInvoiceService invoiceService, Guid affiliateId, Invoice invoice) =>
 {
     var result = await invoiceService.CreateInvoiceAsync(affiliateId, invoice);
-    return Results.Created($"/api/affiliates/{affiliateId:guid}/invoices/{result.Id}", result);
+    return Results.Created($"/api/affiliates/{affiliateId}/invoices/{result.Id}", result);
+});
+
+app.MapPut("/api/affiliates/{affiliateId:guid}/invoices/{id:guid}", async (IInvoiceService invoiceService, Guid affiliateId, Guid id, Invoice invoice) =>
+{
+    var result = await invoiceService.UpdateInvoiceAsync(affiliateId, id, invoice);
+    if (result == null)
+        return Results.NotFound();
+    return Results.Ok(result);
+});
+
+app.MapDelete("/api/affiliates/{affiliateId:guid}/invoices/{id:guid}", async (IInvoiceService invoiceService, Guid affiliateId, Guid id) =>
+{
+    var result = await invoiceService.DeleteInvoiceAsync(affiliateId, id);
+    if (!result)
+        return Results.NotFound();
+    return Results.NoContent();
 });
 
 // ============ GIFT CARD ENDPOINTS ============
@@ -355,7 +417,15 @@ app.MapGet("/api/affiliates/{affiliateId:guid}/giftcards/{id:guid}", async (IGif
 app.MapPost("/api/affiliates/{affiliateId:guid}/giftcards", async (IGiftCardService giftCardService, Guid affiliateId, GiftCard giftCard) =>
 {
     var result = await giftCardService.CreateGiftCardAsync(affiliateId, giftCard);
-    return Results.Created($"/api/affiliates/{affiliateId:guid}/giftcards/{result.Id}", result);
+    return Results.Created($"/api/affiliates/{affiliateId}/giftcards/{result.Id}", result);
+});
+
+app.MapPost("/api/affiliates/{affiliateId:guid}/giftcards/{id:guid}/redeem", async (IGiftCardService giftCardService, Guid affiliateId, Guid id, RedeemGiftCardRequest request) =>
+{
+    var result = await giftCardService.RedeemGiftCardAsync(affiliateId, id, request.Amount);
+    if (result == null)
+        return Results.BadRequest(new { error = new { code = "REDEEM_FAILED", message = "Gift card not found, inactive, or insufficient balance" } });
+    return Results.Ok(result);
 });
 
 // ============ CAMPAIGN ENDPOINTS ============
@@ -376,7 +446,23 @@ app.MapGet("/api/affiliates/{affiliateId:guid}/campaigns/{id:guid}", async (ICam
 app.MapPost("/api/affiliates/{affiliateId:guid}/campaigns", async (ICampaignService campaignService, Guid affiliateId, Campaign campaign) =>
 {
     var result = await campaignService.CreateCampaignAsync(affiliateId, campaign);
-    return Results.Created($"/api/affiliates/{affiliateId:guid}/campaigns/{result.Id}", result);
+    return Results.Created($"/api/affiliates/{affiliateId}/campaigns/{result.Id}", result);
+});
+
+app.MapPut("/api/affiliates/{affiliateId:guid}/campaigns/{id:guid}", async (ICampaignService campaignService, Guid affiliateId, Guid id, Campaign campaign) =>
+{
+    var result = await campaignService.UpdateCampaignAsync(affiliateId, id, campaign);
+    if (result == null)
+        return Results.NotFound();
+    return Results.Ok(result);
+});
+
+app.MapDelete("/api/affiliates/{affiliateId:guid}/campaigns/{id:guid}", async (ICampaignService campaignService, Guid affiliateId, Guid id) =>
+{
+    var result = await campaignService.DeleteCampaignAsync(affiliateId, id);
+    if (!result)
+        return Results.NotFound();
+    return Results.NoContent();
 });
 
 // ============ METRICS ENDPOINTS ============
@@ -405,11 +491,42 @@ app.MapPost("/api/leads/cirisonic", async (ILeadService leadService, Lead lead) 
     return Results.Created($"/api/leads/cirisonic/{result.Id}", result);
 });
 
-// Apply migrations on startup
+// Apply migrations + seed on startup
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
+
+    // Seed affiliates and users if DB is empty
+    if (!db.Set<Affiliate>().Any())
+    {
+        var affiliates = new[]
+        {
+            new Affiliate { Id = Guid.Parse("a1000000-0000-0000-0000-000000000001"), Name = "Pegote Barbershop", Description = "Barbería premium", Modules = "appointments,payments,inventory,queue,team,products,campaigns", IsActive = true },
+            new Affiliate { Id = Guid.Parse("a1000000-0000-0000-0000-000000000002"), Name = "BritoColor", Description = "Salón de belleza", Modules = "appointments,payments,inventory,team,products,campaigns", IsActive = true },
+            new Affiliate { Id = Guid.Parse("a1000000-0000-0000-0000-000000000003"), Name = "The Little Dominican", Description = "Restaurante dominicano", Modules = "appointments,payments,inventory,team,products,campaigns", IsActive = true },
+            new Affiliate { Id = Guid.Parse("a1000000-0000-0000-0000-000000000004"), Name = "Dr. Pichardo", Description = "Consulta médica", Modules = "appointments,payments,team,campaigns", IsActive = true },
+            new Affiliate { Id = Guid.Parse("a1000000-0000-0000-0000-000000000005"), Name = "Masa Tina", Description = "Restaurante", Modules = "appointments,payments,inventory,team,products,campaigns", IsActive = true },
+            new Affiliate { Id = Guid.Parse("a1000000-0000-0000-0000-000000000006"), Name = "MaalCa LLC", Description = "Ecosistema creativo", Modules = "appointments,payments,inventory,team,products,campaigns", IsActive = true },
+        };
+        db.Set<Affiliate>().AddRange(affiliates);
+        db.SaveChanges();
+
+        var hashedDemo = BCrypt.Net.BCrypt.HashPassword("demo");
+        var users = new[]
+        {
+            new User { Email = "admin@maalca.com",      PasswordHash = hashedDemo, FullName = "Admin MaalCa",    Role = "Admin",   AffiliateId = affiliates[0].Id, IsActive = true },
+            new User { Email = "pegote@maalca.com",      PasswordHash = hashedDemo, FullName = "Pegote Team",     Role = "Manager", AffiliateId = affiliates[0].Id, IsActive = true },
+            new User { Email = "britocolor@maalca.com",  PasswordHash = hashedDemo, FullName = "BritoColor Team", Role = "Manager", AffiliateId = affiliates[1].Id, IsActive = true },
+            new User { Email = "tld@maalca.com",         PasswordHash = hashedDemo, FullName = "TLD Team",        Role = "Manager", AffiliateId = affiliates[2].Id, IsActive = true },
+            new User { Email = "drpichardo@maalca.com",  PasswordHash = hashedDemo, FullName = "Dr. Pichardo",    Role = "Manager", AffiliateId = affiliates[3].Id, IsActive = true },
+            new User { Email = "masatina@maalca.com",    PasswordHash = hashedDemo, FullName = "Masa Tina",       Role = "Manager", AffiliateId = affiliates[4].Id, IsActive = true },
+        };
+        db.Set<User>().AddRange(users);
+        db.SaveChanges();
+
+        app.Logger.LogInformation("Seeded {Affiliates} affiliates and {Users} users", affiliates.Length, users.Length);
+    }
 }
 
 app.Run();
