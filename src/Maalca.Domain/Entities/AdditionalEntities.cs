@@ -131,6 +131,25 @@ public class Campaign : AuditableEntity
     public Affiliate? Affiliate { get; set; }
 }
 
+public class AgentExecution : BaseEntity
+{
+    public int IssueNumber { get; set; }
+    public string IssueTitle { get; set; } = string.Empty;
+    public string Repo { get; set; } = string.Empty;
+    public string AgentRole { get; set; } = string.Empty; // frontend, backend, architect, qa
+    public string ModelUsed { get; set; } = string.Empty; // groq/llama-3.3-70b, openrouter/llama-3.3-70b
+    public string Tier { get; set; } = "free"; // free, standard, premium
+    public int TokensInput { get; set; }
+    public int TokensOutput { get; set; }
+    public decimal CostUsd { get; set; }
+    public long DurationMs { get; set; }
+    public string Status { get; set; } = "running"; // running, success, failed, timeout
+    public int RetryCount { get; set; }
+    public string? ErrorMessage { get; set; }
+    public string? PrUrl { get; set; }
+    public string? BranchName { get; set; }
+}
+
 public class Lead : BaseEntity
 {
     public string Name { get; set; } = string.Empty;

@@ -22,6 +22,7 @@ public class AppDbContext : DbContext
     public DbSet<GiftCard> GiftCards => Set<GiftCard>();
     public DbSet<Campaign> Campaigns => Set<Campaign>();
     public DbSet<Lead> Leads => Set<Lead>();
+    public DbSet<AgentExecution> AgentExecutions => Set<AgentExecution>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -214,6 +215,20 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired();
             entity.Property(e => e.Email).IsRequired();
+        });
+
+        // AgentExecution
+        modelBuilder.Entity<AgentExecution>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.IssueTitle).IsRequired();
+            entity.Property(e => e.Repo).IsRequired();
+            entity.Property(e => e.AgentRole).IsRequired();
+            entity.Property(e => e.ModelUsed).IsRequired();
+            entity.Property(e => e.CostUsd).HasPrecision(18, 8);
+            entity.HasIndex(e => e.IssueNumber);
+            entity.HasIndex(e => e.Status);
+            entity.HasIndex(e => e.CreatedAt);
         });
     }
 }

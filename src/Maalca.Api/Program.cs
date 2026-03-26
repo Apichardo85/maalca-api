@@ -641,4 +641,94 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
+// ============================================================
+// AGENT EXECUTIONS — observability for n8n AI agents
+// ============================================================
+
+// POST /api/agents/executions — log an execution from n8n
+app.MapPost("/api/agents/executions", async (AgentExecution execution, AppDbContext db) =>
+{
+    execution.Id = Guid.NewGuid();
+    execution.CreatedAt = DateTime.UtcNow;
+    db.AgentExecutions.Add(execution);
+    await db.SaveChangesAsync();
+    return Results.Created($"/api/agents/executions/{execution.Id}", execution);
+})
+.WithName("LogAgentExecution")
+.WithTags("Agents")
+.AllowAnonymous();
+
+// GET /api/agents/executions — list recent executions
+app.MapGet("/api/agents/executions", async (AppDbContext db, int? limit, string? status) =>
+{
+    var query = db.AgentExecutions.AsQueryable();
+    if (!string.IsNullOrEmpty(status))
+        query = query.Where(e => e.Status == status);
+    var results = await query
+        .OrderByDescending(e => e.CreatedAt)
+        .Take(limit ?? 50)
+        .ToListAsync();
+    return Results.Ok(results);
+})
+.WithName("ListAgentExecutions")
+.WithTags("Agents")
+.AllowAnonymous();
+
+// GET /api/agents/executions/{id}
+app.MapGet("/api/agents/executions/{id:guid}", async (Guid id, AppDbContext db) =>
+{
+    var execution = await db.AgentExecutions.FindAsync(id);
+    return execution is not null ? Results.Ok(execution) : Results.NotFound();
+})
+.WithName("GetAgentExecution")
+.WithTags("Agents")
+.AllowAnonymous();
+
+// PATCH /api/agents/executions/{id} — update status (n8n calls when done)
+app.MapMethods("/api/agents/executions/{id:guid}", new[] { "PATCH" }, async (Guid id, AgentExecution update, AppDbContext db) =>
+{
+    var execution = await db.AgentExecutions.FindAsync(id);
+    if (execution is null) return Results.NotFound();
+
+    if (!string.IsNullOrEmpty(update.Status)) execution.Status = update.Status;
+    if (update.TokensInput > 0) execution.TokensInput = update.TokensInput;
+    if (update.TokensOutput > 0) execution.TokensOutput = update.TokensOutput;
+    if (update.CostUsd > 0) execution.CostUsd = update.CostUsd;
+    if (update.DurationMs > 0) execution.DurationMs = update.DurationMs;
+    if (!string.IsNullOrEmpty(update.ErrorMessage)) execution.ErrorMessage = update.ErrorMessage;
+    if (!string.IsNullOrEmpty(update.PrUrl)) execution.PrUrl = update.PrUrl;
+    if (!string.IsNullOrEmpty(update.BranchName)) execution.BranchName = update.BranchName;
+    if (update.RetryCount > 0) execution.RetryCount = update.RetryCount;
+    execution.UpdatedAt = DateTime.UtcNow;
+
+    await db.SaveChangesAsync();
+    return Results.Ok(execution);
+})
+.WithName("UpdateAgentExecution")
+.WithTags("Agents")
+.AllowAnonymous();
+
+// GET /api/agents/stats — aggregate stats
+app.MapGet("/api/agents/stats", async (AppDbContext db) =>
+{
+    var total = await db.AgentExecutions.CountAsync();
+    var success = await db.AgentExecutions.CountAsync(e => e.Status == "success");
+    var failed = await db.AgentExecutions.CountAsync(e => e.Status == "failed");
+    var totalCost = await db.AgentExecutions.SumAsync(e => e.CostUsd);
+    var avgDuration = total > 0 ? await db.AgentExecutions.AverageAsync(e => e.DurationMs) : 0;
+
+    return Results.Ok(new
+    {
+        total,
+        success,
+        failed,
+        successRate = total > 0 ? (double)success / total * 100 : 0,
+        totalCostUsd = totalCost,
+        avgDurationMs = avgDuration
+    });
+})
+.WithName("GetAgentStats")
+.WithTags("Agents")
+.AllowAnonymous();
+
 app.Run();
