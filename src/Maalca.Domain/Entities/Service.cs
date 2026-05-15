@@ -9,9 +9,13 @@ public class Service : AuditableEntity
     public string? Description { get; set; }
     public decimal Price { get; set; }
     public int DurationMinutes { get; set; } = 30;
-    public string Category { get; set; } = "General";
+    public string? Category { get; set; }
+    public string? ImageUrl { get; set; }
     public bool IsActive { get; set; } = true;
     public string Status { get; set; } = "Active";
+    public bool IsPubliclyVisible { get; set; } = false;
+    public int SortOrder { get; set; } = 0;
+    public bool IsDemo { get; set; } = false;
 
     public Affiliate? Affiliate { get; set; }
     public ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();

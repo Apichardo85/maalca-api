@@ -1,7 +1,9 @@
 using Maalca.Application.Common.DTOs;
 using Maalca.Application.Common.Interfaces;
 using Maalca.Application.Services;
+using Maalca.Api.Middleware;
 using Maalca.Domain.Entities;
+using Maalca.Infrastructure.Auth;
 using Maalca.Infrastructure.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -55,6 +57,12 @@ builder.Services.AddScoped<IGiftCardService, GiftCardService>();
 builder.Services.AddScoped<ICampaignService, CampaignService>();
 builder.Services.AddScoped<IMetricsService, MetricsService>();
 builder.Services.AddScoped<ILeadService, LeadService>();
+builder.Services.AddScoped<IAffiliateMapService, AffiliateMapService>();
+builder.Services.AddScoped<IPublicCatalogService, PublicCatalogService>();
+
+builder.Services.AddHttpClient();
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<SupabaseJwksCache>();
 
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
@@ -66,6 +74,7 @@ app.UseSwagger();
 app.UseSwaggerUI();
 app.MapGet("/", () => Results.Redirect("/swagger"));
 
+app.UseMiddleware<SupabaseAuthMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -95,6 +104,35 @@ app.MapGet("/api/affiliates/{affiliateId:guid}", async (IAffiliateService affili
     var result = await affiliateService.GetAffiliateAsync(affiliateId);
     if (result == null)
         return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
+    return Results.Ok(result);
+});
+
+app.MapGet("/api/me/affiliates", async (HttpContext ctx, IAffiliateMapService mapService, AppDbContext db) =>
+{
+    var sub = ctx.User.FindFirst("sub")?.Value;
+    if (string.IsNullOrEmpty(sub))
+        return Results.Unauthorized();
+
+    var maps = await mapService.GetMapsForUserAsync(sub);
+    if (maps.Count == 0)
+        return Results.Ok(Array.Empty<AffiliateSummaryDto>());
+
+    var affiliateIds = maps.Select(m => m.AffiliateId).ToList();
+    var affiliates = await db.Affiliates
+        .Where(a => affiliateIds.Contains(a.Id))
+        .ToDictionaryAsync(a => a.Id);
+
+    var result = maps
+        .Where(m => affiliates.ContainsKey(m.AffiliateId))
+        .Select(m => new AffiliateSummaryDto(
+            m.AffiliateId,
+            affiliates[m.AffiliateId].Name,
+            affiliates[m.AffiliateId].Slug,
+            affiliates[m.AffiliateId].BusinessType.ToString(),
+            affiliates[m.AffiliateId].Plan.ToString(),
+            m.Role.ToString()
+        ));
+
     return Results.Ok(result);
 });
 
@@ -491,11 +529,32 @@ app.MapPost("/api/leads/cirisonic", async (ILeadService leadService, Lead lead) 
     return Results.Created($"/api/leads/cirisonic/{result.Id}", result);
 });
 
+// ============ PUBLIC CATALOG ENDPOINTS (no auth) ============
+app.MapGet("/api/public/affiliates/{slug}", async (IPublicCatalogService catalogService, string slug, HttpResponse response) =>
+{
+    var result = await catalogService.GetAffiliateBySlugAsync(slug);
+    if (result == null)
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
+    response.Headers.CacheControl = "public, max-age=60";
+    return Results.Ok(result);
+})
+.AllowAnonymous();
+
+app.MapGet("/api/public/affiliates/{slug}/catalog", async (IPublicCatalogService catalogService, string slug, HttpResponse response) =>
+{
+    var result = await catalogService.GetCatalogAsync(slug);
+    if (result == null)
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
+    response.Headers.CacheControl = "public, max-age=60";
+    return Results.Ok(result);
+})
+.AllowAnonymous();
+
 // Apply migrations + seed on startup
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();
+    db.Database.Migrate();
 
     // Seed affiliates and users if DB is empty
     if (!db.Set<Affiliate>().Any())

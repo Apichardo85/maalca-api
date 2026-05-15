@@ -23,6 +23,7 @@ public class AppDbContext : DbContext
     public DbSet<Campaign> Campaigns => Set<Campaign>();
     public DbSet<Lead> Leads => Set<Lead>();
     public DbSet<AgentExecution> AgentExecutions => Set<AgentExecution>();
+    public DbSet<UserAffiliateMap> UserAffiliateMaps => Set<UserAffiliateMap>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -46,6 +47,12 @@ public class AppDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired();
+            entity.Property(e => e.Description).HasMaxLength(1000);
+            entity.Property(e => e.PrimaryColor).HasMaxLength(7);
+            entity.Property(e => e.Slug).HasMaxLength(100);
+            entity.HasIndex(e => e.Slug).IsUnique().HasFilter("\"Slug\" IS NOT NULL");
+            entity.Property(e => e.StripeCustomerId).HasMaxLength(255);
+            entity.Property(e => e.StripeSubscriptionId).HasMaxLength(255);
         });
 
         // Customer
@@ -215,6 +222,20 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired();
             entity.Property(e => e.Email).IsRequired();
+        });
+
+        // UserAffiliateMap
+        modelBuilder.Entity<UserAffiliateMap>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.SupabaseUserId).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.Email).IsRequired().HasMaxLength(256);
+            entity.HasIndex(e => e.SupabaseUserId);
+            entity.HasIndex(e => new { e.SupabaseUserId, e.AffiliateId }).IsUnique();
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         // AgentExecution

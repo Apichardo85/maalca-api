@@ -1,4 +1,5 @@
 using Maalca.Domain.Common;
+using Maalca.Domain.Enums;
 
 namespace Maalca.Domain.Entities;
 
@@ -28,6 +29,26 @@ public class Affiliate : BaseEntity
     public string Features { get; set; } = "{}"; // JSON string
     public string Settings { get; set; } = "{}"; // JSON string
     public bool IsActive { get; set; } = true;
+
+    // ── Fase B: SaaS public fields ──────────────────────────────
+    public string? Slug { get; set; }
+    public BusinessType BusinessType { get; set; } = BusinessType.Service;
+    public Plan Plan { get; set; } = Plan.Free;
+    public PlanStatus PlanStatus { get; set; } = PlanStatus.Active;
+    public bool Published { get; set; } = false;
+    public string? StripeCustomerId { get; set; }
+    public string? StripeSubscriptionId { get; set; }
+    public DateTime? PlanStartedAt { get; set; }
+
+    // ── Fase B: Branding (Description, PrimaryColor, Logo, HeroImage preexisten) ──
+    public string? LogoUrl { get; set; }
+    public string? CoverImageUrl { get; set; }
+
+    // ── Fase B: Contact ──────────────────────────────────────
+    public string? WhatsApp { get; set; }
+    public string? ContactEmail { get; set; }
+    public string? Address { get; set; }
+    public string? Website { get; set; }
 
     public ICollection<User> Users { get; set; } = new List<User>();
     public ICollection<Customer> Customers { get; set; } = new List<Customer>();

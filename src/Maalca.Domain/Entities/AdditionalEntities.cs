@@ -21,11 +21,15 @@ public class InventoryItem : AuditableEntity
     public Guid AffiliateId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
-    public string Category { get; set; } = "General";
+    public string? Category { get; set; }
     public int Quantity { get; set; } = 0;
     public int MinStock { get; set; } = 0;
     public decimal UnitPrice { get; set; }
     public string Status { get; set; } = "Active";
+    public string? ImageUrl { get; set; }
+    public bool IsPubliclyVisible { get; set; } = false;
+    public int SortOrder { get; set; } = 0;
+    public bool IsDemo { get; set; } = false;
 
     public Affiliate? Affiliate { get; set; }
     public ICollection<InventoryMovement> Movements { get; set; } = new List<InventoryMovement>();
@@ -65,11 +69,14 @@ public class Product : AuditableEntity
     public Guid AffiliateId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
-    public string Category { get; set; } = "General";
+    public string? Category { get; set; }
     public decimal Price { get; set; }
     public int Stock { get; set; } = 0;
     public string? ImageUrl { get; set; }
     public string Status { get; set; } = "Active";
+    public bool IsPubliclyVisible { get; set; } = false;
+    public int SortOrder { get; set; } = 0;
+    public bool IsDemo { get; set; } = false;
 
     public Affiliate? Affiliate { get; set; }
 }
