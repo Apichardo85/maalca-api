@@ -60,6 +60,8 @@ builder.Services.AddScoped<ILeadService, LeadService>();
 builder.Services.AddScoped<IAffiliateMapService, AffiliateMapService>();
 builder.Services.AddScoped<IPublicCatalogService, PublicCatalogService>();
 builder.Services.AddScoped<IOnboardingService, OnboardingService>();
+builder.Services.AddScoped<IPlanLimitService, PlanLimitService>();
+builder.Services.AddScoped<ICatalogCrudService, CatalogCrudService>();
 
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
@@ -552,6 +554,78 @@ app.MapPost("/api/onboarding", async (HttpContext ctx, IOnboardingService onboar
     {
         return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
     }
+});
+
+// ============ CATALOG CRUD (dashboard) ============
+app.MapGet("/api/affiliates/{id}/catalog-items", async (HttpContext ctx, ICatalogCrudService catalogCrud, Guid id) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    var items = await catalogCrud.GetItemsAsync(id);
+    return Results.Ok(items);
+});
+
+app.MapGet("/api/affiliates/{id}/catalog-items/{itemId}", async (HttpContext ctx, ICatalogCrudService catalogCrud, Guid id, Guid itemId) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    var item = await catalogCrud.GetItemAsync(id, itemId);
+    return item == null ? Results.NotFound() : Results.Ok(item);
+});
+
+app.MapPost("/api/affiliates/{id}/catalog-items", async (HttpContext ctx, ICatalogCrudService catalogCrud, Guid id, CreateCatalogItemRequest request) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    try
+    {
+        var item = await catalogCrud.CreateItemAsync(id, request);
+        return Results.Created($"/api/affiliates/{id}/catalog-items/{item.Id}", item);
+    }
+    catch (InvalidOperationException ex) when (ex.Message.StartsWith("Plan limit"))
+    {
+        return Results.Problem(statusCode: 402, title: "Payment Required",
+            detail: ex.Message);
+    }
+    catch (KeyNotFoundException ex)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = ex.Message } });
+    }
+});
+
+app.MapMethods("/api/affiliates/{id}/catalog-items/{itemId}", new[] { "PATCH" },
+    async (HttpContext ctx, ICatalogCrudService catalogCrud, Guid id, Guid itemId, UpdateCatalogItemRequest request) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    try
+    {
+        var item = await catalogCrud.UpdateItemAsync(id, itemId, request);
+        return item == null ? Results.NotFound() : Results.Ok(item);
+    }
+    catch (InvalidOperationException ex) when (ex.Message.StartsWith("Plan limit"))
+    {
+        return Results.Problem(statusCode: 402, title: "Payment Required",
+            detail: ex.Message);
+    }
+});
+
+app.MapDelete("/api/affiliates/{id}/catalog-items/{itemId}", async (HttpContext ctx, ICatalogCrudService catalogCrud, Guid id, Guid itemId) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    var deleted = await catalogCrud.DeleteItemAsync(id, itemId);
+    return deleted ? Results.NoContent() : Results.NotFound();
 });
 
 // ============ PUBLIC CATALOG ENDPOINTS (no auth) ============
