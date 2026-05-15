@@ -59,6 +59,7 @@ builder.Services.AddScoped<IMetricsService, MetricsService>();
 builder.Services.AddScoped<ILeadService, LeadService>();
 builder.Services.AddScoped<IAffiliateMapService, AffiliateMapService>();
 builder.Services.AddScoped<IPublicCatalogService, PublicCatalogService>();
+builder.Services.AddScoped<IOnboardingService, OnboardingService>();
 
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
@@ -527,6 +528,30 @@ app.MapPost("/api/leads/cirisonic", async (ILeadService leadService, Lead lead) 
 {
     var result = await leadService.CreateCirisonicLeadAsync(lead);
     return Results.Created($"/api/leads/cirisonic/{result.Id}", result);
+});
+
+// ============ ONBOARDING ============
+app.MapPost("/api/onboarding", async (HttpContext ctx, IOnboardingService onboardingService, OnboardingRequest request) =>
+{
+    var sub = ctx.User.FindFirst("sub")?.Value;
+    if (string.IsNullOrEmpty(sub))
+        return Results.Unauthorized();
+
+    var email = ctx.User.FindFirst("email")?.Value ?? string.Empty;
+
+    try
+    {
+        var result = await onboardingService.OnboardAsync(sub, email, request);
+        return Results.Created($"/api/public/affiliates/{result.Slug}", result);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.Conflict(new { error = new { code = "ALREADY_ONBOARDED", message = ex.Message } });
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
 });
 
 // ============ PUBLIC CATALOG ENDPOINTS (no auth) ============
