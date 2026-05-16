@@ -70,6 +70,22 @@ builder.Services.AddSingleton<SupabaseJwksCache>();
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("MaalCaWeb", policy =>
+    {
+        policy.WithOrigins(
+                "http://localhost:3000",
+                "http://localhost:3001",
+                "https://maalca.com",
+                "https://www.maalca.com")
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials()
+              .WithExposedHeaders("X-Onboarding-Required");
+    });
+});
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline
@@ -77,6 +93,7 @@ app.UseSwagger();
 app.UseSwaggerUI();
 app.MapGet("/", () => Results.Redirect("/swagger"));
 
+app.UseCors("MaalCaWeb");
 app.UseMiddleware<SupabaseAuthMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
