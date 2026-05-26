@@ -66,6 +66,7 @@ builder.Services.AddScoped<ICatalogCrudService, CatalogCrudService>();
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<SupabaseJwksCache>();
+builder.Services.AddSingleton<SupabaseTokenVerifier>();
 
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
@@ -905,5 +906,8 @@ app.MapGet("/api/agents/stats", async (AppDbContext db) =>
 .WithName("GetAgentStats")
 .WithTags("Agents")
 .AllowAnonymous();
+
+app.MapGet("/health", () => Results.Ok(new { status = "healthy" }))
+   .AllowAnonymous();
 
 app.Run();

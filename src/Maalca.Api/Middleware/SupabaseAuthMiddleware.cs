@@ -20,7 +20,8 @@ public class SupabaseAuthMiddleware
     public async Task InvokeAsync(
         HttpContext context,
         IAffiliateMapService mapService,
-        SupabaseJwksCache jwksCache)
+        SupabaseJwksCache jwksCache,
+        SupabaseTokenVerifier tokenVerifier)
     {
         var token = ExtractBearerToken(context);
         if (token == null)
@@ -84,6 +85,13 @@ public class SupabaseAuthMiddleware
             principal = handler.ValidateToken(token, validationParams, out _);
         }
         catch
+        {
+            context.Response.StatusCode = 401;
+            return;
+        }
+
+        // Verify the token is still active server-side (catches post-logout tokens)
+        if (!await tokenVerifier.IsTokenActiveAsync(token))
         {
             context.Response.StatusCode = 401;
             return;
