@@ -28,7 +28,9 @@ public interface IAppointmentService
     Task<PaginatedResponse<Appointment>> GetAppointmentsAsync(Guid affiliateId, DateTime? date = null, string? status = null, int page = 1);
     Task<Appointment?> GetAppointmentAsync(Guid affiliateId, Guid id);
     Task<Appointment> CreateAppointmentAsync(Guid affiliateId, Appointment appointment);
+    Task<Appointment?> UpdateAppointmentAsync(Guid affiliateId, Guid id, Appointment appointment);
     Task<Appointment?> UpdateAppointmentStatusAsync(Guid affiliateId, Guid id, string status);
+    Task<bool> DeleteAppointmentAsync(Guid affiliateId, Guid id);
 }
 
 public interface IServiceService
@@ -44,6 +46,9 @@ public interface IInventoryService
 {
     Task<PaginatedResponse<InventoryItem>> GetInventoryAsync(Guid affiliateId, string? category = null, string? status = null, int page = 1);
     Task<InventoryItem?> GetInventoryItemAsync(Guid affiliateId, Guid id);
+    Task<InventoryItem> CreateInventoryItemAsync(Guid affiliateId, InventoryItem item);
+    Task<InventoryItem?> UpdateInventoryItemAsync(Guid affiliateId, Guid id, InventoryItem item);
+    Task<bool> DeleteInventoryItemAsync(Guid affiliateId, Guid id);
     Task<InventoryMovement> CreateMovementAsync(Guid affiliateId, InventoryMovement movement);
 }
 
@@ -77,6 +82,8 @@ public interface IInvoiceService
     Task<PaginatedResponse<Invoice>> GetInvoicesAsync(Guid affiliateId, string? status = null, DateTime? dateFrom = null, DateTime? dateTo = null);
     Task<Invoice?> GetInvoiceAsync(Guid affiliateId, Guid id);
     Task<Invoice> CreateInvoiceAsync(Guid affiliateId, Invoice invoice);
+    Task<Invoice?> UpdateInvoiceAsync(Guid affiliateId, Guid id, Invoice invoice);
+    Task<bool> DeleteInvoiceAsync(Guid affiliateId, Guid id);
 }
 
 public interface IGiftCardService
@@ -84,6 +91,7 @@ public interface IGiftCardService
     Task<List<GiftCard>> GetGiftCardsAsync(Guid affiliateId, string? status = null);
     Task<GiftCard?> GetGiftCardAsync(Guid affiliateId, Guid id);
     Task<GiftCard> CreateGiftCardAsync(Guid affiliateId, GiftCard giftCard);
+    Task<GiftCard?> RedeemGiftCardAsync(Guid affiliateId, Guid id, decimal amount);
 }
 
 public interface ICampaignService
@@ -91,6 +99,8 @@ public interface ICampaignService
     Task<List<Campaign>> GetCampaignsAsync(Guid affiliateId, string? status = null);
     Task<Campaign?> GetCampaignAsync(Guid affiliateId, Guid id);
     Task<Campaign> CreateCampaignAsync(Guid affiliateId, Campaign campaign);
+    Task<Campaign?> UpdateCampaignAsync(Guid affiliateId, Guid id, Campaign campaign);
+    Task<bool> DeleteCampaignAsync(Guid affiliateId, Guid id);
 }
 
 public interface IMetricsService

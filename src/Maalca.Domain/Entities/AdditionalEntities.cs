@@ -21,11 +21,15 @@ public class InventoryItem : AuditableEntity
     public Guid AffiliateId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
-    public string Category { get; set; } = "General";
+    public string? Category { get; set; }
     public int Quantity { get; set; } = 0;
     public int MinStock { get; set; } = 0;
     public decimal UnitPrice { get; set; }
     public string Status { get; set; } = "Active";
+    public string? ImageUrl { get; set; }
+    public bool IsPubliclyVisible { get; set; } = false;
+    public int SortOrder { get; set; } = 0;
+    public bool IsDemo { get; set; } = false;
 
     public Affiliate? Affiliate { get; set; }
     public ICollection<InventoryMovement> Movements { get; set; } = new List<InventoryMovement>();
@@ -65,11 +69,14 @@ public class Product : AuditableEntity
     public Guid AffiliateId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
-    public string Category { get; set; } = "General";
+    public string? Category { get; set; }
     public decimal Price { get; set; }
     public int Stock { get; set; } = 0;
     public string? ImageUrl { get; set; }
     public string Status { get; set; } = "Active";
+    public bool IsPubliclyVisible { get; set; } = false;
+    public int SortOrder { get; set; } = 0;
+    public bool IsDemo { get; set; } = false;
 
     public Affiliate? Affiliate { get; set; }
 }
@@ -129,6 +136,25 @@ public class Campaign : AuditableEntity
     public string Status { get; set; } = "Draft"; // Draft, Scheduled, Sent, Failed
 
     public Affiliate? Affiliate { get; set; }
+}
+
+public class AgentExecution : BaseEntity
+{
+    public int IssueNumber { get; set; }
+    public string IssueTitle { get; set; } = string.Empty;
+    public string Repo { get; set; } = string.Empty;
+    public string AgentRole { get; set; } = string.Empty; // frontend, backend, architect, qa
+    public string ModelUsed { get; set; } = string.Empty; // groq/llama-3.3-70b, openrouter/llama-3.3-70b
+    public string Tier { get; set; } = "free"; // free, standard, premium
+    public int TokensInput { get; set; }
+    public int TokensOutput { get; set; }
+    public decimal CostUsd { get; set; }
+    public long DurationMs { get; set; }
+    public string Status { get; set; } = "running"; // running, success, failed, timeout
+    public int RetryCount { get; set; }
+    public string? ErrorMessage { get; set; }
+    public string? PrUrl { get; set; }
+    public string? BranchName { get; set; }
 }
 
 public class Lead : BaseEntity

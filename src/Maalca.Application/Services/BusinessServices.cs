@@ -43,6 +43,22 @@ public class AppointmentService : IAppointmentService
         return appointment;
     }
 
+    public async Task<Appointment?> UpdateAppointmentAsync(Guid affiliateId, Guid id, Appointment appointment)
+    {
+        var existing = await _context.Appointments.FirstOrDefaultAsync(a => a.Id == id && a.AffiliateId == affiliateId);
+        if (existing == null) return null;
+        existing.CustomerId = appointment.CustomerId;
+        existing.ServiceId = appointment.ServiceId;
+        existing.Date = appointment.Date;
+        existing.Time = appointment.Time;
+        existing.Status = appointment.Status;
+        existing.Notes = appointment.Notes;
+        existing.AssignedToId = appointment.AssignedToId;
+        existing.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        return existing;
+    }
+
     public async Task<Appointment?> UpdateAppointmentStatusAsync(Guid affiliateId, Guid id, string status)
     {
         var appointment = await _context.Appointments.FirstOrDefaultAsync(a => a.Id == id && a.AffiliateId == affiliateId);
@@ -51,6 +67,15 @@ public class AppointmentService : IAppointmentService
         appointment.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
         return appointment;
+    }
+
+    public async Task<bool> DeleteAppointmentAsync(Guid affiliateId, Guid id)
+    {
+        var appointment = await _context.Appointments.FirstOrDefaultAsync(a => a.Id == id && a.AffiliateId == affiliateId);
+        if (appointment == null) return false;
+        _context.Appointments.Remove(appointment);
+        await _context.SaveChangesAsync();
+        return true;
     }
 }
 
@@ -125,6 +150,41 @@ public class InventoryService : IInventoryService
     public async Task<InventoryItem?> GetInventoryItemAsync(Guid affiliateId, Guid id)
         => await _context.InventoryItems.FirstOrDefaultAsync(i => i.Id == id && i.AffiliateId == affiliateId);
 
+    public async Task<InventoryItem> CreateInventoryItemAsync(Guid affiliateId, InventoryItem item)
+    {
+        item.AffiliateId = affiliateId;
+        item.Id = Guid.NewGuid();
+        item.CreatedAt = DateTime.UtcNow;
+        _context.InventoryItems.Add(item);
+        await _context.SaveChangesAsync();
+        return item;
+    }
+
+    public async Task<InventoryItem?> UpdateInventoryItemAsync(Guid affiliateId, Guid id, InventoryItem item)
+    {
+        var existing = await _context.InventoryItems.FirstOrDefaultAsync(i => i.Id == id && i.AffiliateId == affiliateId);
+        if (existing == null) return null;
+        existing.Name = item.Name;
+        existing.Description = item.Description;
+        existing.Category = item.Category;
+        existing.Quantity = item.Quantity;
+        existing.MinStock = item.MinStock;
+        existing.UnitPrice = item.UnitPrice;
+        existing.Status = item.Status;
+        existing.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        return existing;
+    }
+
+    public async Task<bool> DeleteInventoryItemAsync(Guid affiliateId, Guid id)
+    {
+        var item = await _context.InventoryItems.FirstOrDefaultAsync(i => i.Id == id && i.AffiliateId == affiliateId);
+        if (item == null) return false;
+        _context.InventoryItems.Remove(item);
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
     public async Task<InventoryMovement> CreateMovementAsync(Guid affiliateId, InventoryMovement movement)
     {
         var item = await _context.InventoryItems.FindAsync(movement.InventoryItemId);
@@ -133,7 +193,7 @@ public class InventoryService : IInventoryService
 
         movement.Id = Guid.NewGuid();
         movement.CreatedAt = DateTime.UtcNow;
-        
+
         if (movement.Type == "in")
             item.Quantity += movement.Quantity;
         else
@@ -325,6 +385,32 @@ public class InvoiceService : IInvoiceService
         await _context.SaveChangesAsync();
         return invoice;
     }
+
+    public async Task<Invoice?> UpdateInvoiceAsync(Guid affiliateId, Guid id, Invoice invoice)
+    {
+        var existing = await _context.Invoices.FirstOrDefaultAsync(i => i.Id == id && i.AffiliateId == affiliateId);
+        if (existing == null) return null;
+        existing.CustomerId = invoice.CustomerId;
+        existing.Subtotal = invoice.Subtotal;
+        existing.Tax = invoice.Tax;
+        existing.Total = invoice.Total;
+        existing.Status = invoice.Status;
+        existing.DueDate = invoice.DueDate;
+        existing.PaidDate = invoice.PaidDate;
+        existing.Notes = invoice.Notes;
+        existing.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        return existing;
+    }
+
+    public async Task<bool> DeleteInvoiceAsync(Guid affiliateId, Guid id)
+    {
+        var invoice = await _context.Invoices.FirstOrDefaultAsync(i => i.Id == id && i.AffiliateId == affiliateId);
+        if (invoice == null) return false;
+        _context.Invoices.Remove(invoice);
+        await _context.SaveChangesAsync();
+        return true;
+    }
 }
 
 public class GiftCardService : IGiftCardService
@@ -355,6 +441,18 @@ public class GiftCardService : IGiftCardService
         await _context.SaveChangesAsync();
         return giftCard;
     }
+
+    public async Task<GiftCard?> RedeemGiftCardAsync(Guid affiliateId, Guid id, decimal amount)
+    {
+        var giftCard = await _context.GiftCards.FirstOrDefaultAsync(g => g.Id == id && g.AffiliateId == affiliateId);
+        if (giftCard == null) return null;
+        if (giftCard.Status != "Active" || giftCard.Balance < amount) return null;
+        giftCard.Balance -= amount;
+        if (giftCard.Balance == 0) giftCard.Status = "Redeemed";
+        giftCard.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        return giftCard;
+    }
 }
 
 public class CampaignService : ICampaignService
@@ -381,6 +479,30 @@ public class CampaignService : ICampaignService
         _context.Campaigns.Add(campaign);
         await _context.SaveChangesAsync();
         return campaign;
+    }
+
+    public async Task<Campaign?> UpdateCampaignAsync(Guid affiliateId, Guid id, Campaign campaign)
+    {
+        var existing = await _context.Campaigns.FirstOrDefaultAsync(c => c.Id == id && c.AffiliateId == affiliateId);
+        if (existing == null) return null;
+        existing.Name = campaign.Name;
+        existing.Type = campaign.Type;
+        existing.TargetAudience = campaign.TargetAudience;
+        existing.Content = campaign.Content;
+        existing.Schedule = campaign.Schedule;
+        existing.Status = campaign.Status;
+        existing.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        return existing;
+    }
+
+    public async Task<bool> DeleteCampaignAsync(Guid affiliateId, Guid id)
+    {
+        var campaign = await _context.Campaigns.FirstOrDefaultAsync(c => c.Id == id && c.AffiliateId == affiliateId);
+        if (campaign == null) return false;
+        _context.Campaigns.Remove(campaign);
+        await _context.SaveChangesAsync();
+        return true;
     }
 }
 

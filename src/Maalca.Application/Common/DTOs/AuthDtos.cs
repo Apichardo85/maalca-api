@@ -70,3 +70,8 @@ public class ErrorDetail
     public string Message { get; set; } = string.Empty;
     public object? Details { get; set; }
 }
+
+public class RedeemGiftCardRequest
+{
+    public decimal Amount { get; set; }
+}
