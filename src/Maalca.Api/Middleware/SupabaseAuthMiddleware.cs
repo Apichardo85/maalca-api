@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Maalca.Application.Common.Interfaces;
 using Maalca.Infrastructure.Auth;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 
 namespace Maalca.Api.Middleware;
@@ -9,12 +10,14 @@ namespace Maalca.Api.Middleware;
 public class SupabaseAuthMiddleware
 {
     private readonly RequestDelegate _next;
+    private readonly ILogger<SupabaseAuthMiddleware> _logger;
     private const string SupabaseIssuer = "https://nyiocxrrbrphfczsbqpf.supabase.co/auth/v1";
     private const string InternalIssuer = "maalca-api";
 
-    public SupabaseAuthMiddleware(RequestDelegate next)
+    public SupabaseAuthMiddleware(RequestDelegate next, ILogger<SupabaseAuthMiddleware> logger)
     {
         _next = next;
+        _logger = logger;
     }
 
     public async Task InvokeAsync(
@@ -24,6 +27,7 @@ public class SupabaseAuthMiddleware
         SupabaseTokenVerifier tokenVerifier)
     {
         var token = ExtractBearerToken(context);
+        _logger.LogInformation("Auth: token extracted, length {Len}", token?.Length ?? 0);
         if (token == null)
         {
             await _next(context);
@@ -37,8 +41,9 @@ public class SupabaseAuthMiddleware
             var jwt = reader.ReadJwtToken(token);
             issuer = jwt.Issuer;
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogWarning("Auth: JWT validation FAILED: {Reason}", ex.Message);
             context.Response.StatusCode = 401;
             return;
         }
@@ -61,8 +66,9 @@ public class SupabaseAuthMiddleware
         {
             keySet = await jwksCache.GetKeysAsync();
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogWarning("Auth: JWT validation FAILED: {Reason}", ex.Message);
             context.Response.StatusCode = 401;
             return;
         }
@@ -84,15 +90,20 @@ public class SupabaseAuthMiddleware
             };
             principal = handler.ValidateToken(token, validationParams, out _);
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogWarning("Auth: JWT validation FAILED: {Reason}", ex.Message);
             context.Response.StatusCode = 401;
             return;
         }
 
+        _logger.LogInformation("Auth: JWT signature valid for sub {Sub}", principal.FindFirst("sub")?.Value);
+
         // Verify the token is still active server-side (catches post-logout tokens)
+        _logger.LogInformation("Auth: calling tokenVerifier for token");
         if (!await tokenVerifier.IsTokenActiveAsync(token))
         {
+            _logger.LogWarning("Auth: tokenVerifier returned INACTIVE, rejecting 401");
             context.Response.StatusCode = 401;
             return;
         }
@@ -107,6 +118,7 @@ public class SupabaseAuthMiddleware
         }
 
         var maps = await mapService.GetMapsForUserAsync(supabaseUserId);
+        _logger.LogInformation("Auth: affiliate map lookup for sub {Sub} returned {Count}", supabaseUserId, maps.Count);
         if (maps.Count == 0)
         {
             context.Response.Headers["X-Onboarding-Required"] = "true";

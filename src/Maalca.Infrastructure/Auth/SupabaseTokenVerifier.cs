@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace Maalca.Infrastructure.Auth;
 
@@ -11,16 +12,19 @@ public class SupabaseTokenVerifier
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IMemoryCache _cache;
+    private readonly ILogger<SupabaseTokenVerifier> _logger;
     private readonly string _userEndpoint;
     private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(60);
 
     public SupabaseTokenVerifier(
         IHttpClientFactory httpClientFactory,
         IMemoryCache cache,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        ILogger<SupabaseTokenVerifier> logger)
     {
         _httpClientFactory = httpClientFactory;
         _cache = cache;
+        _logger = logger;
 
         var projectUrl = configuration["Supabase:ProjectUrl"]
             ?? throw new InvalidOperationException("Supabase:ProjectUrl is not configured.");
@@ -42,6 +46,8 @@ public class SupabaseTokenVerifier
 
         var client = _httpClientFactory.CreateClient();
 
+        _logger.LogInformation("TokenVerifier: calling {Url}", _userEndpoint);
+
         HttpResponseMessage response;
         try
         {
@@ -51,10 +57,13 @@ public class SupabaseTokenVerifier
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             response = await client.SendAsync(request, cts.Token);
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogWarning("TokenVerifier: exception {Msg}", ex.Message);
             return false;
         }
+
+        _logger.LogInformation("TokenVerifier: Supabase /auth/v1/user returned {Status}", response.StatusCode);
 
         if (response.StatusCode == HttpStatusCode.Unauthorized)
             return false;
