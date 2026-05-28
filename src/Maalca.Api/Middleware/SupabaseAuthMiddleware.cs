@@ -1,6 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using System.Text;
 using Maalca.Application.Common.Interfaces;
 using Maalca.Infrastructure.Auth;
 using Microsoft.Extensions.Logging;
@@ -24,6 +23,7 @@ public class SupabaseAuthMiddleware
     public async Task InvokeAsync(
         HttpContext context,
         IAffiliateMapService mapService,
+        SupabaseJwksCache jwksCache,
         SupabaseTokenVerifier tokenVerifier)
     {
         var token = ExtractBearerToken(context);
@@ -60,29 +60,36 @@ public class SupabaseAuthMiddleware
             return;
         }
 
-        // Validate Supabase JWT signature using HS256 symmetric secret
-        var secret = Environment.GetEnvironmentVariable("SUPABASE_JWT_SECRET") ?? "";
-        var keyBytes = Encoding.UTF8.GetBytes(secret);
-
-        var tokenHandler = new JwtSecurityTokenHandler();
-        tokenHandler.InboundClaimTypeMap.Clear();
-
-        var validationParams = new TokenValidationParameters
+        // Validate Supabase JWT signature using ES256 (ECDSA) with JWKS
+        JsonWebKeySet keySet;
+        try
         {
-            ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(keyBytes),
-            ValidateIssuer = false,
-            ValidateAudience = false,
-            ValidateLifetime = true,
-            ClockSkew = TimeSpan.FromSeconds(30),
-            RequireSignedTokens = true,
-            TryAllIssuerSigningKeys = true,
-        };
+            keySet = await jwksCache.GetKeysAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("Auth: JWT validation FAILED: {Reason}", ex.Message);
+            context.Response.StatusCode = 401;
+            return;
+        }
 
         ClaimsPrincipal principal;
         try
         {
-            principal = tokenHandler.ValidateToken(token, validationParams, out _);
+            var handler = new JwtSecurityTokenHandler();
+            handler.InboundClaimTypeMap.Clear();
+            var validationParams = new TokenValidationParameters
+            {
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKeys = keySet.GetSigningKeys(),
+                ValidateIssuer = true,
+                ValidIssuer = SupabaseIssuer,
+                ValidateAudience = false,
+                ValidateLifetime = true,
+                ClockSkew = TimeSpan.FromSeconds(30),
+                ValidAlgorithms = new[] { SecurityAlgorithms.EcdsaSha256 },
+            };
+            principal = handler.ValidateToken(token, validationParams, out _);
         }
         catch (Exception ex)
         {
