@@ -907,7 +907,11 @@ app.MapGet("/api/agents/stats", async (AppDbContext db) =>
 .WithTags("Agents")
 .AllowAnonymous();
 
-app.MapGet("/health", () => Results.Ok(new { status = "healthy" }))
+app.MapGet("/health", () =>
+{
+    var sha = Environment.GetEnvironmentVariable("RAILWAY_GIT_COMMIT_SHA")?[..7] ?? "unknown";
+    return Results.Ok(new { status = "healthy", sha, buildTime = DateTime.UtcNow.ToString("o") });
+})
    .AllowAnonymous();
 
 app.Run();
