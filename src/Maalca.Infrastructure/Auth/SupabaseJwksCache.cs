@@ -41,6 +41,7 @@ public class SupabaseJwksCache
             return cached;
 
         var client = _httpClientFactory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = null;
 
         HttpResponseMessage response;
         try
