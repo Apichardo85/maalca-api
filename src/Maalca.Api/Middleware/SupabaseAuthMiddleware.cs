@@ -75,12 +75,10 @@ public class SupabaseAuthMiddleware
 
         // Diagnostic: log how many signing keys the JWKS returned and the JWT kid
         var signingKeys = keySet.GetSigningKeys();
-        _logger.LogInformation("Auth: JWKS has {KeyCount} keys, JWKS key ids: [{Kids}]",
-            keySet.Keys.Count,
-            string.Join(", ", keySet.Keys.Select(k => k.KeyId)));
+        Console.WriteLine($"[AUTH-DIAG] JWKS has {keySet.Keys.Count} keys, key ids: [{string.Join(", ", keySet.Keys.Select(k => k.KeyId))}]");
 
         var tokenKid = new JwtSecurityTokenHandler().ReadJwtToken(token).Header.Kid;
-        _logger.LogInformation("Auth: JWT kid={Kid}, signing keys resolved: {Count}", tokenKid, signingKeys.Count);
+        Console.WriteLine($"[AUTH-DIAG] JWT kid={tokenKid}, signing keys resolved: {signingKeys.Count}");
 
         ClaimsPrincipal principal;
         try
@@ -101,7 +99,7 @@ public class SupabaseAuthMiddleware
                 IssuerSigningKeyResolver = (_, _, kid, _) =>
                 {
                     var matched = signingKeys.Where(k => k.KeyId == kid).ToList();
-                    _logger.LogInformation("Auth: kid={Kid}, matched keys by kid: {Count}", kid, matched.Count);
+                    Console.WriteLine($"[AUTH-DIAG] kid={kid}, matched keys by kid: {matched.Count}");
                     return matched.Any() ? matched : signingKeys;
                 },
             };
