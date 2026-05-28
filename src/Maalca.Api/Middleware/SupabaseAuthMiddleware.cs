@@ -71,13 +71,17 @@ public class SupabaseAuthMiddleware
             handler.InboundClaimTypeMap.Clear();
             var validationParams = new TokenValidationParameters
             {
-                ValidateIssuer = true,
-                ValidIssuer = SupabaseIssuer,
-                ValidateAudience = false,
-                ValidateLifetime = true,
                 ValidateIssuerSigningKey = true,
                 IssuerSigningKey = key,
-                ValidAlgorithms = new[] { SecurityAlgorithms.HmacSha256 },
+                ValidateIssuer = false,
+                ValidateAudience = false,
+                ValidateLifetime = true,
+                ClockSkew = TimeSpan.Zero,
+                RequireSignedTokens = true,
+                ValidAlgorithms = new[] { "HS256" },
+                // Supabase HS256 tokens have no kid header — always use the configured key
+                IssuerSigningKeyResolver = (_, _, _, parameters) =>
+                    new[] { parameters.IssuerSigningKey },
             };
             principal = handler.ValidateToken(token, validationParams, out _);
         }
