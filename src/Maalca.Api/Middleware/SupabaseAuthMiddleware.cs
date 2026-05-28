@@ -73,6 +73,15 @@ public class SupabaseAuthMiddleware
             return;
         }
 
+        // Diagnostic: log how many signing keys the JWKS returned and the JWT kid
+        var signingKeys = keySet.GetSigningKeys();
+        _logger.LogInformation("Auth: JWKS has {KeyCount} keys, JWKS key ids: [{Kids}]",
+            keySet.Keys.Count,
+            string.Join(", ", keySet.Keys.Select(k => k.KeyId)));
+
+        var tokenKid = new JwtSecurityTokenHandler().ReadJwtToken(token).Header.Kid;
+        _logger.LogInformation("Auth: JWT kid={Kid}, signing keys resolved: {Count}", tokenKid, signingKeys.Count);
+
         ClaimsPrincipal principal;
         try
         {
@@ -81,13 +90,20 @@ public class SupabaseAuthMiddleware
             var validationParams = new TokenValidationParameters
             {
                 ValidateIssuerSigningKey = true,
-                IssuerSigningKeys = keySet.GetSigningKeys(),
+                IssuerSigningKeys = signingKeys,
                 ValidateIssuer = true,
                 ValidIssuer = SupabaseIssuer,
                 ValidateAudience = false,
                 ValidateLifetime = true,
                 ClockSkew = TimeSpan.FromSeconds(30),
                 ValidAlgorithms = new[] { SecurityAlgorithms.EcdsaSha256 },
+                // Resolve by kid from already-extracted ECDsaSecurityKey list
+                IssuerSigningKeyResolver = (_, _, kid, _) =>
+                {
+                    var matched = signingKeys.Where(k => k.KeyId == kid).ToList();
+                    _logger.LogInformation("Auth: kid={Kid}, matched keys by kid: {Count}", kid, matched.Count);
+                    return matched.Any() ? matched : signingKeys;
+                },
             };
             principal = handler.ValidateToken(token, validationParams, out _);
         }
