@@ -6,7 +6,7 @@ namespace Maalca.Infrastructure.Auth;
 public class SupabaseJwksCache
 {
     private readonly IMemoryCache _cache;
-    private const string JwksUrl = "https://nyiocxrrbrphfczsbqpf.supabase.co/auth/v1/keys";
+    private const string JwksUrl = "https://nyiocxrrbrphfczsbqpf.supabase.co/auth/v1/.well-known/jwks.json";
     private const string CacheKey = "supabase-jwks";
 
     public SupabaseJwksCache(IMemoryCache cache)
