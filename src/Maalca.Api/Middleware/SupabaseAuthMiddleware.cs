@@ -73,12 +73,7 @@ public class SupabaseAuthMiddleware
             return;
         }
 
-        // Diagnostic: log how many signing keys the JWKS returned and the JWT kid
         var signingKeys = keySet.GetSigningKeys();
-        Console.WriteLine($"[AUTH-DIAG] JWKS has {keySet.Keys.Count} keys, key ids: [{string.Join(", ", keySet.Keys.Select(k => k.KeyId))}]");
-
-        var tokenKid = new JwtSecurityTokenHandler().ReadJwtToken(token).Header.Kid;
-        Console.WriteLine($"[AUTH-DIAG] JWT kid={tokenKid}, signing keys resolved: {signingKeys.Count}");
 
         ClaimsPrincipal principal;
         try
@@ -95,11 +90,9 @@ public class SupabaseAuthMiddleware
                 ValidateLifetime = true,
                 ClockSkew = TimeSpan.FromSeconds(30),
                 ValidAlgorithms = new[] { SecurityAlgorithms.EcdsaSha256 },
-                // Resolve by kid from already-extracted ECDsaSecurityKey list
                 IssuerSigningKeyResolver = (_, _, kid, _) =>
                 {
                     var matched = signingKeys.Where(k => k.KeyId == kid).ToList();
-                    Console.WriteLine($"[AUTH-DIAG] kid={kid}, matched keys by kid: {matched.Count}");
                     return matched.Any() ? matched : signingKeys;
                 },
             };
@@ -107,7 +100,6 @@ public class SupabaseAuthMiddleware
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[AUTH-DIAG] JWT validation FAILED: {ex.GetType().Name}: {ex.Message}");
             _logger.LogWarning("Auth: JWT validation FAILED: {Reason}", ex.Message);
             context.Response.StatusCode = 401;
             return;
