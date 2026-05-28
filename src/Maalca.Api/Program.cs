@@ -65,7 +65,7 @@ builder.Services.AddScoped<ICatalogCrudService, CatalogCrudService>();
 
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
-builder.Services.AddSingleton<SupabaseJwksCache>();
+
 builder.Services.AddSingleton<SupabaseTokenVerifier>();
 
 builder.Services.AddControllers();

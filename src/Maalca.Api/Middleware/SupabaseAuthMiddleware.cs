@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Text;
 using Maalca.Application.Common.Interfaces;
 using Maalca.Infrastructure.Auth;
 using Microsoft.Extensions.Logging;
@@ -23,7 +24,6 @@ public class SupabaseAuthMiddleware
     public async Task InvokeAsync(
         HttpContext context,
         IAffiliateMapService mapService,
-        SupabaseJwksCache jwksCache,
         SupabaseTokenVerifier tokenVerifier)
     {
         var token = ExtractBearerToken(context);
@@ -60,33 +60,24 @@ public class SupabaseAuthMiddleware
             return;
         }
 
-        // Validate Supabase JWT signature + claims
-        JsonWebKeySet keySet;
-        try
-        {
-            keySet = await jwksCache.GetKeysAsync();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning("Auth: JWT validation FAILED: {Reason}", ex.Message);
-            context.Response.StatusCode = 401;
-            return;
-        }
-
+        // Validate Supabase JWT signature using HS256 symmetric secret
         ClaimsPrincipal principal;
         try
         {
+            var secret = Environment.GetEnvironmentVariable("SUPABASE_JWT_SECRET")
+                ?? throw new InvalidOperationException("SUPABASE_JWT_SECRET is not set.");
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
             var handler = new JwtSecurityTokenHandler();
             handler.InboundClaimTypeMap.Clear();
             var validationParams = new TokenValidationParameters
             {
                 ValidateIssuer = true,
                 ValidIssuer = SupabaseIssuer,
-                ValidateAudience = true,
-                ValidAudience = "authenticated",
+                ValidateAudience = false,
                 ValidateLifetime = true,
                 ValidateIssuerSigningKey = true,
-                IssuerSigningKeys = keySet.GetSigningKeys(),
+                IssuerSigningKey = key,
+                ValidAlgorithms = new[] { SecurityAlgorithms.HmacSha256 },
             };
             principal = handler.ValidateToken(token, validationParams, out _);
         }
