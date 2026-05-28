@@ -61,29 +61,28 @@ public class SupabaseAuthMiddleware
         }
 
         // Validate Supabase JWT signature using HS256 symmetric secret
+        var secret = Environment.GetEnvironmentVariable("SUPABASE_JWT_SECRET") ?? "";
+        var keyBytes = Encoding.UTF8.GetBytes(secret);
+
+        var tokenHandler = new JwtSecurityTokenHandler();
+        tokenHandler.InboundClaimTypeMap.Clear();
+
+        var validationParams = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(keyBytes),
+            ValidateIssuer = false,
+            ValidateAudience = false,
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.FromSeconds(30),
+            RequireSignedTokens = true,
+            TryAllIssuerSigningKeys = true,
+        };
+
         ClaimsPrincipal principal;
         try
         {
-            var secret = Environment.GetEnvironmentVariable("SUPABASE_JWT_SECRET")
-                ?? throw new InvalidOperationException("SUPABASE_JWT_SECRET is not set.");
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
-            var handler = new JwtSecurityTokenHandler();
-            handler.InboundClaimTypeMap.Clear();
-            var validationParams = new TokenValidationParameters
-            {
-                ValidateIssuerSigningKey = true,
-                IssuerSigningKey = key,
-                ValidateIssuer = false,
-                ValidateAudience = false,
-                ValidateLifetime = true,
-                ClockSkew = TimeSpan.Zero,
-                RequireSignedTokens = true,
-                ValidAlgorithms = new[] { "HS256" },
-                // Supabase HS256 tokens have no kid header — always use the configured key
-                IssuerSigningKeyResolver = (_, _, _, parameters) =>
-                    new[] { parameters.IssuerSigningKey },
-            };
-            principal = handler.ValidateToken(token, validationParams, out _);
+            principal = tokenHandler.ValidateToken(token, validationParams, out _);
         }
         catch (Exception ex)
         {
