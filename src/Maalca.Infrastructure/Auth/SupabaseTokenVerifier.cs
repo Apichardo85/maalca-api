@@ -45,6 +45,8 @@ public class SupabaseTokenVerifier
             return true;
 
         var client = _httpClientFactory.CreateClient();
+        client.DefaultRequestHeaders.Add("apikey",
+            Environment.GetEnvironmentVariable("SUPABASE_ANON_KEY") ?? "");
 
         _logger.LogInformation("TokenVerifier: calling {Url}", _userEndpoint);
 
