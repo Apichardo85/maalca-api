@@ -107,6 +107,7 @@ public class SupabaseAuthMiddleware
         }
         catch (Exception ex)
         {
+            Console.Error.WriteLine($"[AUTH-DIAG] JWT validation FAILED: {ex.GetType().Name}: {ex.Message}");
             _logger.LogWarning("Auth: JWT validation FAILED: {Reason}", ex.Message);
             context.Response.StatusCode = 401;
             return;
