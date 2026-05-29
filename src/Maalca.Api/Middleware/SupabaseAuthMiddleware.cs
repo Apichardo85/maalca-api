@@ -129,6 +129,20 @@ public class SupabaseAuthMiddleware
         _logger.LogInformation("Auth: affiliate map lookup for sub {Sub} returned {Count}", supabaseUserId, maps.Count);
         if (maps.Count == 0)
         {
+            // Allow new users to reach the onboarding endpoint (no affiliates yet)
+            if (context.Request.Path.StartsWithSegments("/api/onboarding", StringComparison.OrdinalIgnoreCase))
+            {
+                var partialIdentity = new ClaimsIdentity(
+                    new[]
+                    {
+                        new Claim("sub", supabaseUserId),
+                        new Claim("email", email ?? string.Empty),
+                    },
+                    authenticationType: "supabase");
+                context.User = new ClaimsPrincipal(partialIdentity);
+                await _next(context);
+                return;
+            }
             context.Response.Headers["X-Onboarding-Required"] = "true";
             context.Response.StatusCode = 401;
             return;

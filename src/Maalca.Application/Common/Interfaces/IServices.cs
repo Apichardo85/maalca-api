@@ -12,6 +12,7 @@ public interface IAuthService
 public interface IAffiliateService
 {
     Task<AffiliateDto?> GetAffiliateAsync(Guid affiliateId);
+    Task<UpdateProfileResult?> UpdateProfileAsync(Guid affiliateId, UpdateAffiliateProfileRequest request);
 }
 
 public interface ICustomerService

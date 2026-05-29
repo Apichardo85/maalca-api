@@ -20,5 +20,6 @@ public record UpdateCatalogItemRequest(
     int? SortOrder,
     bool? IsPubliclyVisible,
     int? DurationMinutes,
-    int? Stock
+    int? Stock,
+    string? Status           // "Active" | "Inactive"
 );

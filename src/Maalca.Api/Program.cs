@@ -3,6 +3,7 @@ using Maalca.Application.Common.Interfaces;
 using Maalca.Application.Services;
 using Maalca.Api.Middleware;
 using Maalca.Domain.Entities;
+using Maalca.Domain.Enums;
 using Maalca.Infrastructure.Auth;
 using Maalca.Infrastructure.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -62,6 +63,7 @@ builder.Services.AddScoped<IPublicCatalogService, PublicCatalogService>();
 builder.Services.AddScoped<IOnboardingService, OnboardingService>();
 builder.Services.AddScoped<IPlanLimitService, PlanLimitService>();
 builder.Services.AddScoped<ICatalogCrudService, CatalogCrudService>();
+builder.Services.AddScoped<IMilestoneService, MilestoneService>();
 
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
@@ -575,6 +577,58 @@ app.MapPost("/api/onboarding", async (HttpContext ctx, IOnboardingService onboar
     }
 });
 
+// ============ AFFILIATE PROFILE UPDATE ============
+app.MapMethods("/api/affiliates/{id}/profile", new[] { "PATCH" },
+    async (HttpContext ctx, IAffiliateService affiliateService, IMilestoneService milestones,
+           Guid id, UpdateAffiliateProfileRequest request) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    var role = ctx.User.FindFirst("role")?.Value;
+    if (role == "Staff")
+        return Results.Forbid();
+
+    try
+    {
+        var result = await affiliateService.UpdateProfileAsync(id, request);
+        if (result is null)
+            return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
+
+        if (result.WhatsAppWasJustConfigured)
+            await milestones.MarkAsync(id, MilestoneKeys.WhatsAppConfigured);
+
+        return Results.Ok(result.Profile);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+});
+
+// ============ AFFILIATE EVENTS ============
+app.MapPost("/api/affiliates/{id}/events", async (
+    HttpContext ctx, ILogger<Program> logger, IMilestoneService milestones,
+    Guid id, AffiliateEventRequest request) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    var allowed = new HashSet<string> { "link_shared" };
+    if (!allowed.Contains(request.Type))
+        return Results.BadRequest(new { error = new { code = "INVALID_EVENT_TYPE", message = "Unsupported event type." } });
+
+    logger.LogInformation("AffiliateEvent affiliate={AffiliateId} type={Type} metadata={@Metadata}",
+        id, request.Type, request.Metadata);
+
+    if (request.Type == MilestoneKeys.LinkShared)
+        await milestones.MarkAsync(id, MilestoneKeys.LinkShared);
+
+    return Results.NoContent();
+});
+
 // ============ CATALOG CRUD (dashboard) ============
 app.MapGet("/api/affiliates/{id}/catalog-items", async (HttpContext ctx, ICatalogCrudService catalogCrud, Guid id) =>
 {
@@ -596,7 +650,9 @@ app.MapGet("/api/affiliates/{id}/catalog-items/{itemId}", async (HttpContext ctx
     return item == null ? Results.NotFound() : Results.Ok(item);
 });
 
-app.MapPost("/api/affiliates/{id}/catalog-items", async (HttpContext ctx, ICatalogCrudService catalogCrud, Guid id, CreateCatalogItemRequest request) =>
+app.MapPost("/api/affiliates/{id}/catalog-items", async (
+    HttpContext ctx, ICatalogCrudService catalogCrud, IMilestoneService milestones,
+    Guid id, CreateCatalogItemRequest request) =>
 {
     var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
     if (activeAffiliate != id.ToString())
@@ -605,6 +661,8 @@ app.MapPost("/api/affiliates/{id}/catalog-items", async (HttpContext ctx, ICatal
     try
     {
         var item = await catalogCrud.CreateItemAsync(id, request);
+        await milestones.MarkAsync(id, MilestoneKeys.FirstProductAdded,
+            metadata: $$$"""{"itemId":"{{{item.Id}}}","source":"created"}""");
         return Results.Created($"/api/affiliates/{id}/catalog-items/{item.Id}", item);
     }
     catch (InvalidOperationException ex) when (ex.Message.StartsWith("Plan limit"))
@@ -619,21 +677,34 @@ app.MapPost("/api/affiliates/{id}/catalog-items", async (HttpContext ctx, ICatal
 });
 
 app.MapMethods("/api/affiliates/{id}/catalog-items/{itemId}", new[] { "PATCH" },
-    async (HttpContext ctx, ICatalogCrudService catalogCrud, Guid id, Guid itemId, UpdateCatalogItemRequest request) =>
+    async (HttpContext ctx, ICatalogCrudService catalogCrud, IMilestoneService milestones,
+           Guid id, Guid itemId, UpdateCatalogItemRequest request) =>
 {
-    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
-    if (activeAffiliate != id.ToString())
-        return Results.Forbid();
+    var sub = ctx.User.FindFirst("sub")?.Value;
+    if (string.IsNullOrEmpty(sub))
+        return Results.Unauthorized();
 
     try
     {
-        var item = await catalogCrud.UpdateItemAsync(id, itemId, request);
-        return item == null ? Results.NotFound() : Results.Ok(item);
+        var (item, wasDemo) = await catalogCrud.UpdateAsync(sub, id, itemId, request);
+
+        if (wasDemo)
+            await milestones.MarkAsync(id, MilestoneKeys.FirstProductAdded,
+                metadata: $$$"""{"itemId":"{{{itemId}}}","source":"demo_edited"}""");
+
+        return Results.Ok(item);
     }
-    catch (InvalidOperationException ex) when (ex.Message.StartsWith("Plan limit"))
+    catch (UnauthorizedAccessException)
     {
-        return Results.Problem(statusCode: 402, title: "Payment Required",
-            detail: ex.Message);
+        return Results.Forbid();
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
     }
 });
 
@@ -645,6 +716,94 @@ app.MapDelete("/api/affiliates/{id}/catalog-items/{itemId}", async (HttpContext 
 
     var deleted = await catalogCrud.DeleteItemAsync(id, itemId);
     return deleted ? Results.NoContent() : Results.NotFound();
+});
+
+// ============ SPACE DASHBOARD AGGREGATOR ============
+app.MapGet("/api/space/{slug}", async (
+    HttpContext ctx,
+    AppDbContext db,
+    IMilestoneService milestones,
+    string slug) =>
+{
+    var sub = ctx.User.FindFirst("sub")?.Value;
+    if (string.IsNullOrEmpty(sub))
+        return Results.Unauthorized();
+
+    var affiliate = await db.Affiliates
+        .FirstOrDefaultAsync(a => a.Slug == slug);
+    if (affiliate is null)
+        return Results.NotFound();
+
+    var hasAccess = await db.UserAffiliateMaps
+        .AnyAsync(m => m.SupabaseUserId == sub && m.AffiliateId == affiliate.Id);
+    if (!hasAccess)
+        return Results.Forbid();
+
+    var items = affiliate.BusinessType switch
+    {
+        BusinessType.Restaurant or BusinessType.Creator or BusinessType.Publisher =>
+            await db.Products
+                .Where(p => p.AffiliateId == affiliate.Id)
+                .OrderBy(p => p.SortOrder)
+                .Select(p => new SpaceItemDto(p.Id, p.Name, p.Category, p.IsDemo, p.Status == "Active"))
+                .ToListAsync(),
+
+        BusinessType.Barber or BusinessType.Service or BusinessType.Professional =>
+            await db.Services
+                .Where(s => s.AffiliateId == affiliate.Id)
+                .OrderBy(s => s.SortOrder)
+                .Select(s => new SpaceItemDto(s.Id, s.Name, s.Category, s.IsDemo, s.Status == "Active"))
+                .ToListAsync(),
+
+        BusinessType.Retail =>
+            await db.InventoryItems
+                .Where(i => i.AffiliateId == affiliate.Id)
+                .OrderBy(i => i.SortOrder)
+                .Select(i => new SpaceItemDto(i.Id, i.Name, i.Category, i.IsDemo, i.Status == "Active"))
+                .ToListAsync(),
+
+        _ => new List<SpaceItemDto>()
+    };
+
+    var realCount = items.Count(i => !i.IsDemo);
+
+    HashSet<string> completedKeys;
+    try { completedKeys = await milestones.GetCompletedKeysAsync(affiliate.Id); }
+    catch { completedKeys = new HashSet<string>(); }
+
+    return Results.Ok(new SpaceResponse(
+        new BusinessDto(
+            affiliate.Id, affiliate.Slug!, affiliate.Name,
+            affiliate.BusinessType.ToString(),
+            affiliate.Plan.ToString().ToLower(),
+            affiliate.WhatsApp, affiliate.PrimaryColor),
+        items, realCount,
+        new ProgressDto(
+            FirstProductAdded: completedKeys.Contains(MilestoneKeys.FirstProductAdded),
+            WhatsAppConfigured: completedKeys.Contains(MilestoneKeys.WhatsAppConfigured),
+            LinkShared: completedKeys.Contains(MilestoneKeys.LinkShared))));
+});
+
+// ============ AFFILIATE SLUG RESOLVER ============
+app.MapGet("/api/affiliates/by-slug/{slug}", async (HttpContext ctx, AppDbContext db, string slug) =>
+{
+    var sub = ctx.User.FindFirst("sub")?.Value;
+    if (string.IsNullOrEmpty(sub))
+        return Results.Unauthorized();
+
+    var affiliate = await db.Affiliates
+        .Where(a => a.Slug == slug)
+        .Select(a => new { a.Id, a.Slug, a.Name })
+        .FirstOrDefaultAsync();
+    if (affiliate is null)
+        return Results.NotFound();
+
+    var hasAccess = await db.UserAffiliateMaps
+        .AnyAsync(m => m.SupabaseUserId == sub && m.AffiliateId == affiliate.Id);
+    if (!hasAccess)
+        return Results.Forbid();
+
+    return Results.Ok(new AffiliateSlugLookupDto(affiliate.Id, affiliate.Slug!, affiliate.Name));
 });
 
 // ============ PUBLIC CATALOG ENDPOINTS (no auth) ============

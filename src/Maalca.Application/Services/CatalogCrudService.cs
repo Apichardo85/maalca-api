@@ -160,6 +160,105 @@ public class CatalogCrudService : ICatalogCrudService
         };
     }
 
+    public async Task<(CatalogItemDto Item, bool WasDemo)> UpdateAsync(
+        string supabaseUserId, Guid affiliateId, Guid itemId, UpdateCatalogItemRequest request)
+    {
+        var hasAccess = await _db.UserAffiliateMaps
+            .AnyAsync(m => m.SupabaseUserId == supabaseUserId && m.AffiliateId == affiliateId);
+        if (!hasAccess) throw new UnauthorizedAccessException();
+
+        if (request.Price.HasValue && request.Price.Value < 0)
+            throw new ArgumentException("Price cannot be negative.");
+
+        var affiliate = await _db.Affiliates.FindAsync(affiliateId)
+            ?? throw new KeyNotFoundException($"Affiliate {affiliateId} not found.");
+
+        return affiliate.BusinessType switch
+        {
+            BusinessType.Restaurant or BusinessType.Creator or BusinessType.Publisher =>
+                await PatchProductAsync(affiliateId, itemId, request),
+
+            BusinessType.Barber or BusinessType.Service or BusinessType.Professional =>
+                await PatchServiceAsync(affiliateId, itemId, request),
+
+            BusinessType.Retail =>
+                await PatchInventoryItemAsync(affiliateId, itemId, request),
+
+            _ => throw new KeyNotFoundException($"Item {itemId} not found.")
+        };
+    }
+
+    private async Task<(CatalogItemDto, bool)> PatchProductAsync(Guid affiliateId, Guid itemId, UpdateCatalogItemRequest request)
+    {
+        var product = await _db.Products
+            .FirstOrDefaultAsync(p => p.Id == itemId && p.AffiliateId == affiliateId)
+            ?? throw new KeyNotFoundException();
+
+        var wasDemo = product.IsDemo;
+        if (request.Name is not null) product.Name = request.Name;
+        if (request.Description is not null) product.Description = request.Description;
+        if (request.Category is not null) product.Category = request.Category;
+        if (request.Price.HasValue) product.Price = request.Price.Value;
+        if (request.ImageUrl is not null) product.ImageUrl = request.ImageUrl;
+        if (request.SortOrder.HasValue) product.SortOrder = request.SortOrder.Value;
+        if (request.IsPubliclyVisible.HasValue) product.IsPubliclyVisible = request.IsPubliclyVisible.Value;
+        if (request.Status is not null) product.Status = request.Status;
+        if (wasDemo) product.IsDemo = false;
+
+        await _db.SaveChangesAsync();
+        return (new CatalogItemDto(product.Id, product.Name, product.Description, product.Price,
+            product.Category, product.ImageUrl, product.SortOrder, product.IsDemo,
+            null, null, product.Status), wasDemo);
+    }
+
+    private async Task<(CatalogItemDto, bool)> PatchServiceAsync(Guid affiliateId, Guid itemId, UpdateCatalogItemRequest request)
+    {
+        var service = await _db.Services
+            .FirstOrDefaultAsync(s => s.Id == itemId && s.AffiliateId == affiliateId)
+            ?? throw new KeyNotFoundException();
+
+        var wasDemo = service.IsDemo;
+        if (request.Name is not null) service.Name = request.Name;
+        if (request.Description is not null) service.Description = request.Description;
+        if (request.Category is not null) service.Category = request.Category;
+        if (request.Price.HasValue) service.Price = request.Price.Value;
+        if (request.ImageUrl is not null) service.ImageUrl = request.ImageUrl;
+        if (request.SortOrder.HasValue) service.SortOrder = request.SortOrder.Value;
+        if (request.IsPubliclyVisible.HasValue) service.IsPubliclyVisible = request.IsPubliclyVisible.Value;
+        if (request.DurationMinutes.HasValue) service.DurationMinutes = request.DurationMinutes.Value;
+        if (request.Status is not null) service.Status = request.Status;
+        if (wasDemo) service.IsDemo = false;
+
+        await _db.SaveChangesAsync();
+        return (new CatalogItemDto(service.Id, service.Name, service.Description, service.Price,
+            service.Category, service.ImageUrl, service.SortOrder, service.IsDemo,
+            service.DurationMinutes, null, service.Status), wasDemo);
+    }
+
+    private async Task<(CatalogItemDto, bool)> PatchInventoryItemAsync(Guid affiliateId, Guid itemId, UpdateCatalogItemRequest request)
+    {
+        var item = await _db.InventoryItems
+            .FirstOrDefaultAsync(i => i.Id == itemId && i.AffiliateId == affiliateId)
+            ?? throw new KeyNotFoundException();
+
+        var wasDemo = item.IsDemo;
+        if (request.Name is not null) item.Name = request.Name;
+        if (request.Description is not null) item.Description = request.Description;
+        if (request.Category is not null) item.Category = request.Category;
+        if (request.Price.HasValue) item.UnitPrice = request.Price.Value;
+        if (request.ImageUrl is not null) item.ImageUrl = request.ImageUrl;
+        if (request.SortOrder.HasValue) item.SortOrder = request.SortOrder.Value;
+        if (request.IsPubliclyVisible.HasValue) item.IsPubliclyVisible = request.IsPubliclyVisible.Value;
+        if (request.Stock.HasValue) item.Quantity = request.Stock.Value;
+        if (request.Status is not null) item.Status = request.Status;
+        if (wasDemo) item.IsDemo = false;
+
+        await _db.SaveChangesAsync();
+        return (new CatalogItemDto(item.Id, item.Name, item.Description, item.UnitPrice,
+            item.Category, item.ImageUrl, item.SortOrder, item.IsDemo,
+            null, item.Quantity, item.Status), wasDemo);
+    }
+
     // ── Create helpers ────────────────────────────────────────────
 
     private async Task<CatalogItemDto> CreateProductAsync(Guid affiliateId, CreateCatalogItemRequest request)

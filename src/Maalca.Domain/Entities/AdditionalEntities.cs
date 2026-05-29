@@ -157,6 +157,15 @@ public class AgentExecution : BaseEntity
     public string? BranchName { get; set; }
 }
 
+public class AffiliateMilestone : BaseEntity
+{
+    public Guid AffiliateId { get; set; }
+    public string Key { get; set; } = null!;       // MilestoneKeys constant
+    public string? Metadata { get; set; }           // JSON, optional context
+
+    public Affiliate Affiliate { get; set; } = null!;
+}
+
 public class Lead : BaseEntity
 {
     public string Name { get; set; } = string.Empty;

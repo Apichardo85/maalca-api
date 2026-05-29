@@ -24,6 +24,7 @@ public class AppDbContext : DbContext
     public DbSet<Lead> Leads => Set<Lead>();
     public DbSet<AgentExecution> AgentExecutions => Set<AgentExecution>();
     public DbSet<UserAffiliateMap> UserAffiliateMaps => Set<UserAffiliateMap>();
+    public DbSet<AffiliateMilestone> AffiliateMilestones => Set<AffiliateMilestone>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -232,6 +233,18 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Email).IsRequired().HasMaxLength(256);
             entity.HasIndex(e => e.SupabaseUserId);
             entity.HasIndex(e => new { e.SupabaseUserId, e.AffiliateId }).IsUnique();
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // AffiliateMilestone
+        modelBuilder.Entity<AffiliateMilestone>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Key).IsRequired().HasMaxLength(100);
+            entity.HasIndex(e => new { e.AffiliateId, e.Key }).IsUnique();
             entity.HasOne(e => e.Affiliate)
                   .WithMany()
                   .HasForeignKey(e => e.AffiliateId)

@@ -8,5 +8,6 @@ public interface ICatalogCrudService
     Task<CatalogItemDto?> GetItemAsync(Guid affiliateId, Guid itemId);
     Task<CatalogItemDto> CreateItemAsync(Guid affiliateId, CreateCatalogItemRequest request);
     Task<CatalogItemDto?> UpdateItemAsync(Guid affiliateId, Guid itemId, UpdateCatalogItemRequest request);
+    Task<(CatalogItemDto Item, bool WasDemo)> UpdateAsync(string supabaseUserId, Guid affiliateId, Guid itemId, UpdateCatalogItemRequest request);
     Task<bool> DeleteItemAsync(Guid affiliateId, Guid itemId);
 }
