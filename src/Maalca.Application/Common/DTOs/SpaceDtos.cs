@@ -22,7 +22,8 @@ public record SpaceItemDto(
     string Name,
     string? Category,
     bool IsDemo,
-    bool Active
+    bool Active,
+    string? ImageUrl
 );
 
 public record ProgressDto(
