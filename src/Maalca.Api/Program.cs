@@ -838,12 +838,14 @@ using (var scope = app.Services.CreateScope())
     {
         var affiliates = new[]
         {
-            new Affiliate { Id = Guid.Parse("a1000000-0000-0000-0000-000000000001"), Name = "Pegote Barbershop", Description = "Barbería premium", Modules = "appointments,payments,inventory,queue,team,products,campaigns", IsActive = true },
-            new Affiliate { Id = Guid.Parse("a1000000-0000-0000-0000-000000000002"), Name = "BritoColor", Description = "Salón de belleza", Modules = "appointments,payments,inventory,team,products,campaigns", IsActive = true },
-            new Affiliate { Id = Guid.Parse("a1000000-0000-0000-0000-000000000003"), Name = "The Little Dominican", Description = "Restaurante dominicano", Modules = "appointments,payments,inventory,team,products,campaigns", IsActive = true },
-            new Affiliate { Id = Guid.Parse("a1000000-0000-0000-0000-000000000004"), Name = "Dr. Pichardo", Description = "Consulta médica", Modules = "appointments,payments,team,campaigns", IsActive = true },
-            new Affiliate { Id = Guid.Parse("a1000000-0000-0000-0000-000000000005"), Name = "Masa Tina", Description = "Restaurante", Modules = "appointments,payments,inventory,team,products,campaigns", IsActive = true },
-            new Affiliate { Id = Guid.Parse("a1000000-0000-0000-0000-000000000006"), Name = "MaalCa LLC", Description = "Ecosistema creativo", Modules = "appointments,payments,inventory,team,products,campaigns", IsActive = true },
+            // Pegote y Little Dominicana Restaurant son los dos casos reales mostrados en /casos y Home — Published=true.
+            // El resto quedan como cuentas internas/demo, no expuestas públicamente todavía.
+            new Affiliate { Id = Guid.Parse("a1000000-0000-0000-0000-000000000001"), Name = "Pegote Barbershop", Description = "Barbería premium", Modules = "appointments,payments,inventory,queue,team,products,campaigns", IsActive = true, Slug = "pegote-barber", BusinessType = BusinessType.Barber, Published = true, Address = "Elmira, NY" },
+            new Affiliate { Id = Guid.Parse("a1000000-0000-0000-0000-000000000002"), Name = "BritoColor", Description = "Salón de belleza", Modules = "appointments,payments,inventory,team,products,campaigns", IsActive = true, Slug = "britocolor" },
+            new Affiliate { Id = Guid.Parse("a1000000-0000-0000-0000-000000000003"), Name = "Little Dominicana Restaurant", Description = "Restaurante dominicano", Modules = "appointments,payments,inventory,team,products,campaigns", IsActive = true, Slug = "the-little-dominicana", BusinessType = BusinessType.Restaurant, Published = true, Address = "315 E Water St, Elmira NY 14901" },
+            new Affiliate { Id = Guid.Parse("a1000000-0000-0000-0000-000000000004"), Name = "Dr. Pichardo", Description = "Consulta médica", Modules = "appointments,payments,team,campaigns", IsActive = true, Slug = "dr-pichardo", BusinessType = BusinessType.Professional },
+            new Affiliate { Id = Guid.Parse("a1000000-0000-0000-0000-000000000005"), Name = "Masa Tina", Description = "Restaurante", Modules = "appointments,payments,inventory,team,products,campaigns", IsActive = true, Slug = "masa-tina", BusinessType = BusinessType.Restaurant },
+            new Affiliate { Id = Guid.Parse("a1000000-0000-0000-0000-000000000006"), Name = "MaalCa LLC", Description = "Ecosistema creativo", Modules = "appointments,payments,inventory,team,products,campaigns", IsActive = true, Slug = "maalca-llc", BusinessType = BusinessType.Creator },
         };
         db.Set<Affiliate>().AddRange(affiliates);
         db.SaveChanges();
