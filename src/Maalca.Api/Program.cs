@@ -842,6 +842,15 @@ app.MapGet("/api/space/{slug}", async (
     try { completedKeys = await milestones.GetCompletedKeysAsync(affiliate.Id); }
     catch { completedKeys = new HashSet<string>(); }
 
+    // Visitas/EscaneosQr/ClicsCanales: EventoInteraccion exists (Fase C) but nothing writes to it
+    // yet — confirmed 0 rows in both staging and production. Disponible=false until a real
+    // caller (public-page instrumentation) exists; that's a product decision, not made here.
+    var kpis = new KpisDto(
+        Visitas: new KpiValueDto(null, false),
+        ItemsPublicados: new KpiValueDto(realCount, true),
+        EscaneosQr: new KpiValueDto(null, false),
+        ClicsCanales: new KpiValueDto(null, false));
+
     return Results.Ok(new SpaceResponse(
         new BusinessDto(
             affiliate.Id, affiliate.Slug!, affiliate.Name,
@@ -853,7 +862,8 @@ app.MapGet("/api/space/{slug}", async (
         new ProgressDto(
             FirstProductAdded: completedKeys.Contains(MilestoneKeys.FirstProductAdded),
             WhatsAppConfigured: completedKeys.Contains(MilestoneKeys.WhatsAppConfigured),
-            LinkShared: completedKeys.Contains(MilestoneKeys.LinkShared))));
+            LinkShared: completedKeys.Contains(MilestoneKeys.LinkShared)),
+        kpis));
 });
 
 // ============ AFFILIATE SLUG RESOLVER ============

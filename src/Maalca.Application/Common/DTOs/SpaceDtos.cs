@@ -4,7 +4,8 @@ public record SpaceResponse(
     BusinessDto Business,
     IReadOnlyList<SpaceItemDto> Items,
     int ProductCount,
-    ProgressDto Progress
+    ProgressDto Progress,
+    KpisDto Kpis
 );
 
 public record BusinessDto(
