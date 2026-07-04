@@ -23,7 +23,7 @@ public class PublicCatalogService : IPublicCatalogService
 
         if (affiliate == null) return null;
 
-        return MapToAffiliatePublicDto(affiliate);
+        return await MapToAffiliatePublicDtoAsync(affiliate);
     }
 
     public async Task<PublicCatalogResponse?> GetCatalogAsync(string slug)
@@ -70,17 +70,28 @@ public class PublicCatalogService : IPublicCatalogService
         };
 
         return new PublicCatalogResponse(
-            MapToAffiliatePublicDto(affiliate),
+            await MapToAffiliatePublicDtoAsync(affiliate),
             items,
             BuildCapabilities(affiliate.Plan));
     }
 
-    private static AffiliatePublicDto MapToAffiliatePublicDto(Maalca.Domain.Entities.Affiliate a) =>
-        new(a.Id, a.Name, a.Slug!, a.BusinessType.ToString(),
+    private async Task<AffiliatePublicDto> MapToAffiliatePublicDtoAsync(Maalca.Domain.Entities.Affiliate a)
+    {
+        var canales = (await _db.Canales
+            .Where(c => c.AffiliateId == a.Id && c.Activo)
+            .OrderBy(c => c.Orden)
+            .ToListAsync())
+            .Select(c => new CanalDto(c.Id, c.Tipo.ToString(), c.Metodo.ToString(), c.ValorCrudo,
+                c.EnlaceGenerado, c.NombreVisible, c.Verificado, c.Orden, c.Activo))
+            .ToList();
+
+        return new(a.Id, a.Name, a.Slug!, a.BusinessType.ToString(),
             a.Description, a.PrimaryColor, a.LogoUrl, a.CoverImageUrl,
             a.WhatsApp, a.ContactEmail, a.Address,
             null,   // City — Affiliate entity does not have this field yet
-            a.Website);
+            a.Website,
+            canales);
+    }
 
     private static PlanCapabilitiesDto BuildCapabilities(Plan plan) =>
         plan == Plan.Entrepreneur

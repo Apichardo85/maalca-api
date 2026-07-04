@@ -12,11 +12,13 @@ public class OnboardingService : IOnboardingService
 {
     private readonly AppDbContext _db;
     private readonly IAffiliateMapService _mapService;
+    private readonly ICanalService _canalService;
 
-    public OnboardingService(AppDbContext db, IAffiliateMapService mapService)
+    public OnboardingService(AppDbContext db, IAffiliateMapService mapService, ICanalService canalService)
     {
         _db = db;
         _mapService = mapService;
+        _canalService = canalService;
     }
 
     public async Task<OnboardingResponse> OnboardAsync(string supabaseUserId, string email, OnboardingRequest request)
@@ -49,7 +51,9 @@ public class OnboardingService : IOnboardingService
                 Slug = slug,
                 Plan = Plan.Free,
                 PlanStatus = PlanStatus.Active,
-                Published = true
+                Published = true,
+                PrimaryColor = request.PrimaryColor?.Trim(),
+                LogoUrl = request.LogoUrl?.Trim()
             };
 
             _db.Affiliates.Add(affiliate);
@@ -58,6 +62,10 @@ public class OnboardingService : IOnboardingService
             SeedDemoCatalog(affiliate.Id, businessType);
             await _db.SaveChangesAsync();
 
+            if (!string.IsNullOrWhiteSpace(affiliate.WhatsApp))
+                await _canalService.CreateAsync(affiliate.Id,
+                    new CreateCanalRequest("WhatsApp", "Manual", affiliate.WhatsApp));
+
             await _mapService.CreateMapAsync(supabaseUserId, email, affiliate.Id, AffiliateRole.Owner);
 
             await tx.CommitAsync();
@@ -65,7 +73,8 @@ public class OnboardingService : IOnboardingService
             return new OnboardingResponse(
                 affiliate.Id, affiliate.Name, affiliate.Slug!,
                 affiliate.BusinessType.ToString(),
-                affiliate.Description, affiliate.WhatsApp);
+                affiliate.Description, affiliate.WhatsApp,
+                affiliate.PrimaryColor, affiliate.LogoUrl);
         }
         catch
         {

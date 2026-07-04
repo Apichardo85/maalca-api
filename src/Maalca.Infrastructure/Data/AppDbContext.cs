@@ -25,6 +25,8 @@ public class AppDbContext : DbContext
     public DbSet<AgentExecution> AgentExecutions => Set<AgentExecution>();
     public DbSet<UserAffiliateMap> UserAffiliateMaps => Set<UserAffiliateMap>();
     public DbSet<AffiliateMilestone> AffiliateMilestones => Set<AffiliateMilestone>();
+    public DbSet<Canal> Canales => Set<Canal>();
+    public DbSet<EventoInteraccion> EventosInteraccion => Set<EventoInteraccion>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -249,6 +251,34 @@ public class AppDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(e => e.AffiliateId)
                   .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Canal
+        modelBuilder.Entity<Canal>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ValorCrudo).IsRequired();
+            entity.Property(e => e.EnlaceGenerado).IsRequired();
+            entity.HasIndex(e => e.AffiliateId);
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // EventoInteraccion
+        modelBuilder.Entity<EventoInteraccion>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.AffiliateId, e.Tipo, e.CreatedAt });
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Canal)
+                  .WithMany()
+                  .HasForeignKey(e => e.CanalId)
+                  .OnDelete(DeleteBehavior.SetNull);
         });
 
         // AgentExecution

@@ -4,7 +4,9 @@ public record OnboardingRequest(
     string Name,
     string BusinessType,
     string? WhatsApp = null,
-    string? Description = null
+    string? Description = null,
+    string? PrimaryColor = null,
+    string? LogoUrl = null
 );
 
 public record OnboardingResponse(
@@ -13,5 +15,7 @@ public record OnboardingResponse(
     string Slug,
     string BusinessType,
     string? Description = null,
-    string? WhatsApp = null
+    string? WhatsApp = null,
+    string? PrimaryColor = null,
+    string? LogoUrl = null
 );

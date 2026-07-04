@@ -13,7 +13,8 @@ public record AffiliatePublicDto(
     string? ContactEmail,
     string? Address,
     string? City,       // not on Affiliate entity yet — always null until migration adds it
-    string? Website
+    string? Website,
+    List<CanalDto> Canales
 );
 
 public record CatalogItemDto(

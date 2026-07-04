@@ -14,7 +14,9 @@ public record BusinessDto(
     string BusinessType,
     string Plan,
     string? Whatsapp,
-    string? PrimaryColor
+    string? PrimaryColor,
+    IReadOnlyList<CanalDto> Canales,
+    IReadOnlyList<string> ModulosActivos
 );
 
 public record SpaceItemDto(

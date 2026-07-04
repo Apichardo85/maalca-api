@@ -3,6 +3,7 @@ using System;
 using Maalca.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Maalca.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260704141635_AddCanales")]
+    partial class AddCanales
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -442,36 +445,6 @@ namespace Maalca.Infrastructure.Migrations
                     b.HasIndex("AffiliateId");
 
                     b.ToTable("Customers");
-                });
-
-            modelBuilder.Entity("Maalca.Domain.Entities.EventoInteraccion", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("AffiliateId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("CanalId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Tipo")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CanalId");
-
-                    b.HasIndex("AffiliateId", "Tipo", "CreatedAt");
-
-                    b.ToTable("EventosInteraccion");
                 });
 
             modelBuilder.Entity("Maalca.Domain.Entities.GiftCard", b =>
@@ -1180,24 +1153,6 @@ namespace Maalca.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Affiliate");
-                });
-
-            modelBuilder.Entity("Maalca.Domain.Entities.EventoInteraccion", b =>
-                {
-                    b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
-                        .WithMany()
-                        .HasForeignKey("AffiliateId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Maalca.Domain.Entities.Canal", "Canal")
-                        .WithMany()
-                        .HasForeignKey("CanalId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("Affiliate");
-
-                    b.Navigation("Canal");
                 });
 
             modelBuilder.Entity("Maalca.Domain.Entities.GiftCard", b =>

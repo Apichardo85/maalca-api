@@ -1,3 +1,4 @@
+using Maalca.Application.Common;
 using Maalca.Application.Common.DTOs;
 using Maalca.Application.Common.Interfaces;
 using Maalca.Application.Services;
@@ -64,6 +65,8 @@ builder.Services.AddScoped<IOnboardingService, OnboardingService>();
 builder.Services.AddScoped<IPlanLimitService, PlanLimitService>();
 builder.Services.AddScoped<ICatalogCrudService, CatalogCrudService>();
 builder.Services.AddScoped<IMilestoneService, MilestoneService>();
+builder.Services.AddScoped<ICanalService, CanalService>();
+builder.Services.AddScoped<IInteractionEventService, InteractionEventService>();
 
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
@@ -718,6 +721,66 @@ app.MapDelete("/api/affiliates/{id}/catalog-items/{itemId}", async (HttpContext 
     return deleted ? Results.NoContent() : Results.NotFound();
 });
 
+// ============ CANALES CRUD (dashboard) ============
+app.MapGet("/api/affiliates/{id}/canales", async (HttpContext ctx, ICanalService canalService, Guid id) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    var canales = await canalService.GetCanalesAsync(id);
+    return Results.Ok(canales);
+});
+
+app.MapPost("/api/affiliates/{id}/canales", async (HttpContext ctx, ICanalService canalService, Guid id, CreateCanalRequest request) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    try
+    {
+        var canal = await canalService.CreateAsync(id, request);
+        return Results.Created($"/api/affiliates/{id}/canales/{canal.Id}", canal);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+    catch (KeyNotFoundException ex)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = ex.Message } });
+    }
+});
+
+app.MapMethods("/api/affiliates/{id}/canales/{canalId}", new[] { "PATCH" },
+    async (HttpContext ctx, ICanalService canalService, Guid id, Guid canalId, UpdateCanalRequest request) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    try
+    {
+        var canal = await canalService.UpdateAsync(id, canalId, request);
+        return canal == null ? Results.NotFound() : Results.Ok(canal);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+});
+
+app.MapDelete("/api/affiliates/{id}/canales/{canalId}", async (HttpContext ctx, ICanalService canalService, Guid id, Guid canalId) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    var deleted = await canalService.DeleteAsync(id, canalId);
+    return deleted ? Results.NoContent() : Results.NotFound();
+});
+
 // ============ SPACE DASHBOARD AGGREGATOR ============
 app.MapGet("/api/space/{slug}", async (
     HttpContext ctx,
@@ -767,6 +830,14 @@ app.MapGet("/api/space/{slug}", async (
 
     var realCount = items.Count(i => !i.IsDemo);
 
+    var canales = (await db.Canales
+        .Where(c => c.AffiliateId == affiliate.Id && c.Activo)
+        .OrderBy(c => c.Orden)
+        .ToListAsync())
+        .Select(c => new CanalDto(c.Id, c.Tipo.ToString(), c.Metodo.ToString(), c.ValorCrudo,
+            c.EnlaceGenerado, c.NombreVisible, c.Verificado, c.Orden, c.Activo))
+        .ToList();
+
     HashSet<string> completedKeys;
     try { completedKeys = await milestones.GetCompletedKeysAsync(affiliate.Id); }
     catch { completedKeys = new HashSet<string>(); }
@@ -776,7 +847,8 @@ app.MapGet("/api/space/{slug}", async (
             affiliate.Id, affiliate.Slug!, affiliate.Name,
             affiliate.BusinessType.ToString(),
             affiliate.Plan.ToString().ToLower(),
-            affiliate.WhatsApp, affiliate.PrimaryColor),
+            affiliate.WhatsApp, affiliate.PrimaryColor,
+            canales, ModuleCatalog.FilterActive(affiliate.Modules)),
         items, realCount,
         new ProgressDto(
             FirstProductAdded: completedKeys.Contains(MilestoneKeys.FirstProductAdded),
@@ -827,6 +899,30 @@ app.MapGet("/api/public/affiliates/{slug}/catalog", async (IPublicCatalogService
 })
 .AllowAnonymous();
 
+// QrScan/CanalClick/PageView are fired by anonymous visitors on the public page — they never
+// carry a Supabase JWT, so they cannot go through the authenticated /api/affiliates/{id}/events route.
+app.MapPost("/api/public/affiliates/{slug}/events", async (
+    AppDbContext db, IInteractionEventService events, string slug, PublicInteractionEventRequest request) =>
+{
+    var affiliate = await db.Affiliates
+        .Where(a => a.Slug == slug && a.Published)
+        .Select(a => new { a.Id })
+        .FirstOrDefaultAsync();
+    if (affiliate is null)
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
+
+    try
+    {
+        await events.RecordAsync(affiliate.Id, request.Type, request.CanalId);
+        return Results.NoContent();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+})
+.AllowAnonymous();
+
 // Apply migrations + seed on startup
 using (var scope = app.Services.CreateScope())
 {
@@ -840,9 +936,9 @@ using (var scope = app.Services.CreateScope())
         {
             // Pegote y Little Dominicana Restaurant son los dos casos reales mostrados en /casos y Home — Published=true.
             // El resto quedan como cuentas internas/demo, no expuestas públicamente todavía.
-            new Affiliate { Id = Guid.Parse("a1000000-0000-0000-0000-000000000001"), Name = "Pegote Barbershop", Description = "Barbería premium", Modules = "appointments,payments,inventory,queue,team,products,campaigns", IsActive = true, Slug = "pegote-barber", BusinessType = BusinessType.Barber, Published = true, Address = "Elmira, NY" },
-            new Affiliate { Id = Guid.Parse("a1000000-0000-0000-0000-000000000002"), Name = "BritoColor", Description = "Salón de belleza", Modules = "appointments,payments,inventory,team,products,campaigns", IsActive = true, Slug = "britocolor" },
-            new Affiliate { Id = Guid.Parse("a1000000-0000-0000-0000-000000000003"), Name = "Little Dominicana Restaurant", Description = "Restaurante dominicano", Modules = "appointments,payments,inventory,team,products,campaigns", IsActive = true, Slug = "the-little-dominicana", BusinessType = BusinessType.Restaurant, Published = true, Address = "315 E Water St, Elmira NY 14901" },
+            new Affiliate { Id = Guid.Parse("a1000000-0000-0000-0000-000000000001"), Name = "Pegote Barbershop", Description = "Barbería premium", Modules = "appointments,payments,inventory,queue,team,products,campaigns", IsActive = true, Slug = "pegote-barber", BusinessType = BusinessType.Barber, Published = true, Address = "Elmira, NY", Plan = Plan.Entrepreneur, PlanStatus = PlanStatus.Active, PlanStartedAt = DateTime.UtcNow },
+            new Affiliate { Id = Guid.Parse("a1000000-0000-0000-0000-000000000002"), Name = "BritoColor", Description = "Salón de belleza", Modules = "appointments,payments,inventory,team,products,campaigns", IsActive = true, Slug = "britocolor", Plan = Plan.Entrepreneur, PlanStatus = PlanStatus.Active, PlanStartedAt = DateTime.UtcNow },
+            new Affiliate { Id = Guid.Parse("a1000000-0000-0000-0000-000000000003"), Name = "Little Dominicana Restaurant", Description = "Restaurante dominicano", Modules = "appointments,payments,inventory,team,products,campaigns", IsActive = true, Slug = "the-little-dominicana", BusinessType = BusinessType.Restaurant, Published = true, Address = "315 E Water St, Elmira NY 14901", Plan = Plan.Entrepreneur, PlanStatus = PlanStatus.Active, PlanStartedAt = DateTime.UtcNow },
             new Affiliate { Id = Guid.Parse("a1000000-0000-0000-0000-000000000004"), Name = "Dr. Pichardo", Description = "Consulta médica", Modules = "appointments,payments,team,campaigns", IsActive = true, Slug = "dr-pichardo", BusinessType = BusinessType.Professional },
             new Affiliate { Id = Guid.Parse("a1000000-0000-0000-0000-000000000005"), Name = "Masa Tina", Description = "Restaurante", Modules = "appointments,payments,inventory,team,products,campaigns", IsActive = true, Slug = "masa-tina", BusinessType = BusinessType.Restaurant },
             new Affiliate { Id = Guid.Parse("a1000000-0000-0000-0000-000000000006"), Name = "MaalCa LLC", Description = "Ecosistema creativo", Modules = "appointments,payments,inventory,team,products,campaigns", IsActive = true, Slug = "maalca-llc", BusinessType = BusinessType.Creator },
