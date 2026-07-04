@@ -2,11 +2,11 @@ namespace Maalca.Application.Common;
 
 /// <summary>
 /// Whitelist of module tokens backed by a real, working endpoint today.
-/// Affiliate.Modules is a free-form comma-separated string set at onboarding/admin time —
-/// this filters it down so the frontend never renders a module card for data the API can't serve.
-/// No legacy token (products, appointments, payments, inventory, queue, team, campaigns) is inferred
-/// to mean "catalog"/"page"/"metrics" — that mapping isn't confirmed by the frontend spec, so until
-/// onboarding/admin start writing these exact tokens, FilterActive legitimately returns empty.
+/// Reads from Affiliate.ModulosActivos (not the legacy Affiliate.Modules field, which still
+/// drives the old /dashboard/[affiliateId] UI and must not be repurposed). This filters it down
+/// so the frontend never renders a module card for data the API can't serve. New code (onboarding,
+/// future admin panel) must write these exact canonical tokens directly — no legacy→canonical
+/// translation layer.
 /// </summary>
 public static class ModuleCatalog
 {

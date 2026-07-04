@@ -25,10 +25,16 @@ public class Affiliate : BaseEntity
     public string? PrimaryColor { get; set; }
     public string? SecondaryColor { get; set; }
     public string? HeroImage { get; set; }
-    public string Modules { get; set; } = ""; // Comma-separated list
+    public string Modules { get; set; } = ""; // Legacy comma-separated list — still read by GET /api/affiliates/{id} for the pre-Espacio-v2 dashboard. Do not repurpose or overwrite.
     public string Features { get; set; } = "{}"; // JSON string
     public string Settings { get; set; } = "{}"; // JSON string
     public bool IsActive { get; set; } = true;
+
+    // ── Fase B/Paso 2: canonical whitelist tokens for the Espacio v2 dashboard (catalog/page/metrics).
+    // Coexists with the legacy Modules field above instead of replacing it, since Modules still
+    // drives the old /dashboard/[affiliateId] UI. New code (onboarding, future admin panel) must
+    // write canonical tokens directly here — no legacy→canonical translation layer.
+    public string? ModulosActivos { get; set; }
 
     // ── Fase B: SaaS public fields ──────────────────────────────
     public string? Slug { get; set; }

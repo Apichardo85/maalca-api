@@ -54,6 +54,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.PrimaryColor).HasMaxLength(7);
             entity.Property(e => e.Slug).HasMaxLength(100);
             entity.HasIndex(e => e.Slug).IsUnique().HasFilter("\"Slug\" IS NOT NULL");
+            entity.Property(e => e.ModulosActivos).HasMaxLength(200);
             entity.Property(e => e.StripeCustomerId).HasMaxLength(255);
             entity.Property(e => e.StripeSubscriptionId).HasMaxLength(255);
         });

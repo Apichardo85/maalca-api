@@ -848,7 +848,7 @@ app.MapGet("/api/space/{slug}", async (
             affiliate.BusinessType.ToString(),
             affiliate.Plan.ToString().ToLower(),
             affiliate.WhatsApp, affiliate.PrimaryColor,
-            canales, ModuleCatalog.FilterActive(affiliate.Modules)),
+            canales, ModuleCatalog.FilterActive(affiliate.ModulosActivos)),
         items, realCount,
         new ProgressDto(
             FirstProductAdded: completedKeys.Contains(MilestoneKeys.FirstProductAdded),
