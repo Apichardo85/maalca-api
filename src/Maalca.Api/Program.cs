@@ -677,6 +677,10 @@ app.MapPost("/api/affiliates/{id}/catalog-items", async (
     {
         return Results.NotFound(new { error = new { code = "NOT_FOUND", message = ex.Message } });
     }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
 });
 
 app.MapMethods("/api/affiliates/{id}/catalog-items/{itemId}", new[] { "PATCH" },

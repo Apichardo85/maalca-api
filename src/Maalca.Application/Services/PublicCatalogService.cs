@@ -1,3 +1,4 @@
+using Maalca.Application.Common;
 using Maalca.Application.Common.DTOs;
 using Maalca.Application.Common.Interfaces;
 using Maalca.Domain.Enums;
@@ -34,40 +35,44 @@ public class PublicCatalogService : IPublicCatalogService
 
         if (affiliate == null) return null;
 
-        var items = affiliate.BusinessType switch
+        List<CatalogItemDto> items;
+        if (affiliate.BusinessType is BusinessType.Restaurant or BusinessType.Creator or BusinessType.Publisher)
         {
-            BusinessType.Restaurant or BusinessType.Creator or BusinessType.Publisher =>
-                await _db.Products
-                    .Where(p => p.AffiliateId == affiliate.Id && p.IsPubliclyVisible)
-                    .OrderBy(p => p.SortOrder).ThenBy(p => p.Name)
-                    .Select(p => new CatalogItemDto(
-                        p.Id, p.Name, p.Description, p.Price,
-                        p.Category, p.ImageUrl, p.SortOrder, p.IsDemo,
-                        null, null, p.Status))
-                    .ToListAsync(),
+            var products = await _db.Products
+                .Where(p => p.AffiliateId == affiliate.Id && p.IsPubliclyVisible)
+                .OrderBy(p => p.SortOrder).ThenBy(p => p.Name)
+                .ToListAsync();
+            items = products.Select(CatalogItemMapper.FromProduct).ToList();
+        }
+        else
+        {
+            items = affiliate.BusinessType switch
+            {
+                BusinessType.Barber or BusinessType.Service or BusinessType.Professional =>
+                    await _db.Services
+                        .Where(s => s.AffiliateId == affiliate.Id && s.IsPubliclyVisible)
+                        .OrderBy(s => s.SortOrder).ThenBy(s => s.Name)
+                        .Select(s => new CatalogItemDto(
+                            s.Id, s.Name, s.Description, s.Price,
+                            s.Category, s.ImageUrl, s.SortOrder, s.IsDemo,
+                            s.DurationMinutes, null, s.Status,
+                            null, null, null, null, null, null))
+                        .ToListAsync(),
 
-            BusinessType.Barber or BusinessType.Service or BusinessType.Professional =>
-                await _db.Services
-                    .Where(s => s.AffiliateId == affiliate.Id && s.IsPubliclyVisible)
-                    .OrderBy(s => s.SortOrder).ThenBy(s => s.Name)
-                    .Select(s => new CatalogItemDto(
-                        s.Id, s.Name, s.Description, s.Price,
-                        s.Category, s.ImageUrl, s.SortOrder, s.IsDemo,
-                        s.DurationMinutes, null, s.Status))
-                    .ToListAsync(),
+                BusinessType.Retail =>
+                    await _db.InventoryItems
+                        .Where(i => i.AffiliateId == affiliate.Id && i.IsPubliclyVisible)
+                        .OrderBy(i => i.SortOrder).ThenBy(i => i.Name)
+                        .Select(i => new CatalogItemDto(
+                            i.Id, i.Name, i.Description, i.UnitPrice,
+                            i.Category, i.ImageUrl, i.SortOrder, i.IsDemo,
+                            null, i.Quantity, i.Status,
+                            null, null, null, null, null, null))
+                        .ToListAsync(),
 
-            BusinessType.Retail =>
-                await _db.InventoryItems
-                    .Where(i => i.AffiliateId == affiliate.Id && i.IsPubliclyVisible)
-                    .OrderBy(i => i.SortOrder).ThenBy(i => i.Name)
-                    .Select(i => new CatalogItemDto(
-                        i.Id, i.Name, i.Description, i.UnitPrice,
-                        i.Category, i.ImageUrl, i.SortOrder, i.IsDemo,
-                        null, i.Quantity, i.Status))
-                    .ToListAsync(),
-
-            _ => new List<CatalogItemDto>()
-        };
+                _ => new List<CatalogItemDto>()
+            };
+        }
 
         return new PublicCatalogResponse(
             await MapToAffiliatePublicDtoAsync(affiliate),

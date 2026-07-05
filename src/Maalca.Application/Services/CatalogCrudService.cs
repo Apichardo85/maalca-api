@@ -1,3 +1,4 @@
+using Maalca.Application.Common;
 using Maalca.Application.Common.DTOs;
 using Maalca.Application.Common.Interfaces;
 using Maalca.Domain.Entities;
@@ -23,18 +24,17 @@ public class CatalogCrudService : ICatalogCrudService
         var affiliate = await _db.Affiliates.FindAsync(affiliateId);
         if (affiliate == null) return new List<CatalogItemDto>();
 
+        if (affiliate.BusinessType is BusinessType.Restaurant or BusinessType.Creator or BusinessType.Publisher)
+        {
+            var products = await _db.Products
+                .Where(p => p.AffiliateId == affiliateId)
+                .OrderBy(p => p.SortOrder).ThenBy(p => p.Name)
+                .ToListAsync();
+            return products.Select(CatalogItemMapper.FromProduct).ToList();
+        }
+
         return affiliate.BusinessType switch
         {
-            BusinessType.Restaurant or BusinessType.Creator or BusinessType.Publisher =>
-                await _db.Products
-                    .Where(p => p.AffiliateId == affiliateId)
-                    .OrderBy(p => p.SortOrder).ThenBy(p => p.Name)
-                    .Select(p => new CatalogItemDto(
-                        p.Id, p.Name, p.Description, p.Price,
-                        p.Category, p.ImageUrl, p.SortOrder, p.IsDemo,
-                        null, null, p.Status))
-                    .ToListAsync(),
-
             BusinessType.Barber or BusinessType.Service or BusinessType.Professional =>
                 await _db.Services
                     .Where(s => s.AffiliateId == affiliateId)
@@ -42,7 +42,8 @@ public class CatalogCrudService : ICatalogCrudService
                     .Select(s => new CatalogItemDto(
                         s.Id, s.Name, s.Description, s.Price,
                         s.Category, s.ImageUrl, s.SortOrder, s.IsDemo,
-                        s.DurationMinutes, null, s.Status))
+                        s.DurationMinutes, null, s.Status,
+                        null, null, null, null, null, null))
                     .ToListAsync(),
 
             BusinessType.Retail =>
@@ -52,7 +53,8 @@ public class CatalogCrudService : ICatalogCrudService
                     .Select(i => new CatalogItemDto(
                         i.Id, i.Name, i.Description, i.UnitPrice,
                         i.Category, i.ImageUrl, i.SortOrder, i.IsDemo,
-                        null, i.Quantity, i.Status))
+                        null, i.Quantity, i.Status,
+                        null, null, null, null, null, null))
                     .ToListAsync(),
 
             _ => new List<CatalogItemDto>()
@@ -64,24 +66,23 @@ public class CatalogCrudService : ICatalogCrudService
         var affiliate = await _db.Affiliates.FindAsync(affiliateId);
         if (affiliate == null) return null;
 
+        if (affiliate.BusinessType is BusinessType.Restaurant or BusinessType.Creator or BusinessType.Publisher)
+        {
+            var product = await _db.Products
+                .FirstOrDefaultAsync(p => p.AffiliateId == affiliateId && p.Id == itemId);
+            return product == null ? null : CatalogItemMapper.FromProduct(product);
+        }
+
         return affiliate.BusinessType switch
         {
-            BusinessType.Restaurant or BusinessType.Creator or BusinessType.Publisher =>
-                await _db.Products
-                    .Where(p => p.AffiliateId == affiliateId && p.Id == itemId)
-                    .Select(p => new CatalogItemDto(
-                        p.Id, p.Name, p.Description, p.Price,
-                        p.Category, p.ImageUrl, p.SortOrder, p.IsDemo,
-                        null, null, p.Status))
-                    .FirstOrDefaultAsync(),
-
             BusinessType.Barber or BusinessType.Service or BusinessType.Professional =>
                 await _db.Services
                     .Where(s => s.AffiliateId == affiliateId && s.Id == itemId)
                     .Select(s => new CatalogItemDto(
                         s.Id, s.Name, s.Description, s.Price,
                         s.Category, s.ImageUrl, s.SortOrder, s.IsDemo,
-                        s.DurationMinutes, null, s.Status))
+                        s.DurationMinutes, null, s.Status,
+                        null, null, null, null, null, null))
                     .FirstOrDefaultAsync(),
 
             BusinessType.Retail =>
@@ -90,7 +91,8 @@ public class CatalogCrudService : ICatalogCrudService
                     .Select(i => new CatalogItemDto(
                         i.Id, i.Name, i.Description, i.UnitPrice,
                         i.Category, i.ImageUrl, i.SortOrder, i.IsDemo,
-                        null, i.Quantity, i.Status))
+                        null, i.Quantity, i.Status,
+                        null, null, null, null, null, null))
                     .FirstOrDefaultAsync(),
 
             _ => null
@@ -194,6 +196,8 @@ public class CatalogCrudService : ICatalogCrudService
             .FirstOrDefaultAsync(p => p.Id == itemId && p.AffiliateId == affiliateId)
             ?? throw new KeyNotFoundException();
 
+        ValidateProductTokens(request.Periods, request.WeekDays);
+
         var wasDemo = product.IsDemo;
         if (request.Name is not null) product.Name = request.Name;
         if (request.Description is not null) product.Description = request.Description;
@@ -203,12 +207,16 @@ public class CatalogCrudService : ICatalogCrudService
         if (request.SortOrder.HasValue) product.SortOrder = request.SortOrder.Value;
         if (request.IsPubliclyVisible.HasValue) product.IsPubliclyVisible = request.IsPubliclyVisible.Value;
         if (request.Status is not null) product.Status = request.Status;
+        if (request.DescriptionEn is not null) product.DescriptionEn = request.DescriptionEn;
+        if (request.Periods is not null) product.Periods = TokenList.Join(request.Periods);
+        if (request.WeekDays is not null) product.WeekDays = TokenList.Join(request.WeekDays);
+        if (request.Flags is not null) product.Flags = TokenList.Join(request.Flags);
+        if (request.Featured.HasValue) product.Featured = request.Featured.Value;
+        if (request.Popular.HasValue) product.Popular = request.Popular.Value;
         if (wasDemo) product.IsDemo = false;
 
         await _db.SaveChangesAsync();
-        return (new CatalogItemDto(product.Id, product.Name, product.Description, product.Price,
-            product.Category, product.ImageUrl, product.SortOrder, product.IsDemo,
-            null, null, product.Status), wasDemo);
+        return (CatalogItemMapper.FromProduct(product), wasDemo);
     }
 
     private async Task<(CatalogItemDto, bool)> PatchServiceAsync(Guid affiliateId, Guid itemId, UpdateCatalogItemRequest request)
@@ -263,6 +271,8 @@ public class CatalogCrudService : ICatalogCrudService
 
     private async Task<CatalogItemDto> CreateProductAsync(Guid affiliateId, CreateCatalogItemRequest request)
     {
+        ValidateProductTokens(request.Periods, request.WeekDays);
+
         var product = new Product
         {
             AffiliateId = affiliateId,
@@ -274,13 +284,17 @@ public class CatalogCrudService : ICatalogCrudService
             SortOrder = request.SortOrder,
             IsPubliclyVisible = true,
             IsDemo = false,
-            Status = "Active"
+            Status = "Active",
+            DescriptionEn = request.DescriptionEn,
+            Periods = TokenList.Join(request.Periods),
+            WeekDays = TokenList.Join(request.WeekDays),
+            Flags = TokenList.Join(request.Flags),
+            Featured = request.Featured ?? false,
+            Popular = request.Popular ?? false
         };
         _db.Products.Add(product);
         await _db.SaveChangesAsync();
-        return new CatalogItemDto(product.Id, product.Name, product.Description, product.Price,
-            product.Category, product.ImageUrl, product.SortOrder, product.IsDemo,
-            null, null, product.Status);
+        return CatalogItemMapper.FromProduct(product);
     }
 
     private async Task<CatalogItemDto> CreateServiceAsync(Guid affiliateId, CreateCatalogItemRequest request)
@@ -412,6 +426,21 @@ public class CatalogCrudService : ICatalogCrudService
         return new CatalogItemDto(item.Id, item.Name, item.Description, item.UnitPrice,
             item.Category, item.ImageUrl, item.SortOrder, item.IsDemo,
             null, item.Quantity, item.Status);
+    }
+
+    // ── Validation ──────────────────────────────────────────────────
+
+    private static void ValidateProductTokens(IReadOnlyList<string>? periods, IReadOnlyList<string>? weekDays)
+    {
+        if (periods != null)
+            foreach (var p in periods)
+                if (!MealPeriodTokens.Whitelist.Contains(p))
+                    throw new ArgumentException($"Unsupported period: {p}");
+
+        if (weekDays != null)
+            foreach (var d in weekDays)
+                if (!WeekDayTokens.Whitelist.Contains(d))
+                    throw new ArgumentException($"Unsupported week day: {d}");
     }
 
     // ── Delete helpers ────────────────────────────────────────────

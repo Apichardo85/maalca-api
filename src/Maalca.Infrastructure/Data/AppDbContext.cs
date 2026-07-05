@@ -162,6 +162,10 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired();
             entity.Property(e => e.Price).HasPrecision(18, 2);
+            entity.Property(e => e.DescriptionEn).HasMaxLength(1000);
+            entity.Property(e => e.Periods).HasMaxLength(100);
+            entity.Property(e => e.WeekDays).HasMaxLength(100);
+            entity.Property(e => e.Flags).HasMaxLength(200);
             entity.HasOne(e => e.Affiliate)
                   .WithMany(a => a.Products)
                   .HasForeignKey(e => e.AffiliateId)

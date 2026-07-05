@@ -28,7 +28,13 @@ public record CatalogItemDto(
     bool IsDemo,
     int? DurationMinutes,   // Service/Barber only
     int? Stock,             // InventoryItem only (null = no tracking)
-    string? Status
+    string? Status,
+    string? DescriptionEn = null,               // Product only
+    IReadOnlyList<string>? Periods = null,      // Product only — breakfast/lunch/dinner/late_night/all_day
+    IReadOnlyList<string>? WeekDays = null,     // Product only — monday..sunday
+    IReadOnlyList<string>? Flags = null,        // Product only — free tokens, e.g. vegetarian/spicy/glutenFree
+    bool? Featured = null,                      // Product only
+    bool? Popular = null                        // Product only
 );
 
 public record PlanCapabilitiesDto(

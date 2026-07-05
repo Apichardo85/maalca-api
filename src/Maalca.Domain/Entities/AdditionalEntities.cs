@@ -78,6 +78,17 @@ public class Product : AuditableEntity
     public int SortOrder { get; set; } = 0;
     public bool IsDemo { get; set; } = false;
 
+    // ── Menu-style fields (migrated from the legacy Supabase `dishes` table) ──
+    // Periods/WeekDays/Flags are comma-separated token lists, same convention as
+    // Affiliate.ModulosActivos — not a persisted enum, so the wire tokens stay
+    // snake_case-compatible with the legacy data (breakfast, late_night, ...).
+    public string? DescriptionEn { get; set; }
+    public string? Periods { get; set; }
+    public string? WeekDays { get; set; }
+    public string? Flags { get; set; }
+    public bool Featured { get; set; } = false;
+    public bool Popular { get; set; } = false;
+
     public Affiliate? Affiliate { get; set; }
 }
 
