@@ -736,7 +736,7 @@ app.MapGet("/api/affiliates/{id}/canales", async (HttpContext ctx, ICanalService
     return Results.Ok(canales);
 });
 
-app.MapPost("/api/affiliates/{id}/canales", async (HttpContext ctx, ICanalService canalService, Guid id, CreateCanalRequest request) =>
+app.MapPost("/api/affiliates/{id}/canales", async (HttpContext ctx, ICanalService canalService, IMilestoneService milestones, Guid id, CreateCanalRequest request) =>
 {
     var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
     if (activeAffiliate != id.ToString())
@@ -745,6 +745,10 @@ app.MapPost("/api/affiliates/{id}/canales", async (HttpContext ctx, ICanalServic
     try
     {
         var canal = await canalService.CreateAsync(id, request);
+
+        if (canal.Tipo == CanalTipo.WhatsApp.ToString() && canal.Activo)
+            await milestones.MarkAsync(id, MilestoneKeys.WhatsAppConfigured);
+
         return Results.Created($"/api/affiliates/{id}/canales/{canal.Id}", canal);
     }
     catch (ArgumentException ex)
