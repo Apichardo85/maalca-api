@@ -14,7 +14,9 @@ public record AffiliatePublicDto(
     string? Address,
     string? City,       // not on Affiliate entity yet — always null until migration adds it
     string? Website,
-    List<CanalDto> Canales
+    List<CanalDto> Canales,
+    List<ProcessStepDto> ProcessSteps,
+    List<FaqItemDto> Faq
 );
 
 public record CatalogItemDto(

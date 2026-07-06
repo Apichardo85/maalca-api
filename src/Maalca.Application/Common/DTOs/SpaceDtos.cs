@@ -17,8 +17,14 @@ public record BusinessDto(
     string? Whatsapp,
     string? PrimaryColor,
     IReadOnlyList<CanalDto> Canales,
-    IReadOnlyList<string> ModulosActivos
+    IReadOnlyList<string> ModulosActivos,
+    IReadOnlyList<ProcessStepDto> ProcessSteps,
+    IReadOnlyList<FaqItemDto> Faq
 );
+
+public record ProcessStepDto(string Title, string Description);
+
+public record FaqItemDto(string Question, string Answer);
 
 public record SpaceItemDto(
     Guid Id,

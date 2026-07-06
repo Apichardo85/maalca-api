@@ -36,6 +36,13 @@ public class Affiliate : BaseEntity
     // write canonical tokens directly here — no legacy→canonical translation layer.
     public string? ModulosActivos { get; set; }
 
+    // ── Espacio v2: contenido editorial de la página pública ──────
+    // JSON string, sin shape forzado a nivel de DB. ProcessSteps: array de
+    // {title, description}. Faq: array de {question, answer}. Parseados a DTOs
+    // tipados en el borde (ver JsonArrayField) — nunca expuestos como string crudo.
+    public string? ProcessSteps { get; set; }
+    public string? Faq { get; set; }
+
     // ── Fase B: SaaS public fields ──────────────────────────────
     public string? Slug { get; set; }
     public BusinessType BusinessType { get; set; } = BusinessType.Service;

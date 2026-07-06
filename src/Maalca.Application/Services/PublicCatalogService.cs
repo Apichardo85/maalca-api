@@ -95,7 +95,9 @@ public class PublicCatalogService : IPublicCatalogService
             a.WhatsApp, a.ContactEmail, a.Address,
             null,   // City — Affiliate entity does not have this field yet
             a.Website,
-            canales);
+            canales,
+            JsonArrayField.Parse<ProcessStepDto>(a.ProcessSteps),
+            JsonArrayField.Parse<FaqItemDto>(a.Faq));
     }
 
     private static PlanCapabilitiesDto BuildCapabilities(Plan plan) =>
