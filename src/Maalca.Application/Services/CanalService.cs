@@ -136,8 +136,8 @@ public class CanalService : ICanalService
     private static string BuildWhatsAppLink(string raw)
     {
         var digits = new string(raw.Where(char.IsDigit).ToArray());
-        if (digits.Length < 7)
-            throw new ArgumentException("WhatsApp number must have at least 7 digits.");
+        if (digits.Length < 11)
+            throw new ArgumentException("El número de WhatsApp debe incluir el código de país (ej. 1 para RD/USA): 18095551234");
         return $"https://wa.me/{digits}";
     }
 

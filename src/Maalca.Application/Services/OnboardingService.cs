@@ -34,8 +34,8 @@ public class OnboardingService : IOnboardingService
         if (!Enum.TryParse<BusinessType>(request.BusinessType, ignoreCase: true, out var businessType))
             throw new ArgumentException($"Invalid BusinessType: {request.BusinessType}");
 
-        if (request.WhatsApp != null && !IsValidPhone(request.WhatsApp))
-            throw new ArgumentException("WhatsApp must be a valid phone number (7–15 digits).");
+        if (request.WhatsApp != null && !IsValidWhatsApp(request.WhatsApp))
+            throw new ArgumentException("El número de WhatsApp debe incluir el código de país (ej. 1 para RD/USA): 18095551234");
 
         var slug = await GenerateUniqueSlugAsync(request.Name);
 
@@ -206,10 +206,10 @@ public class OnboardingService : IOnboardingService
         }
     }
 
-    internal static bool IsValidPhone(string phone)
+    internal static bool IsValidWhatsApp(string phone)
     {
         var digits = Regex.Replace(phone, @"[^\d]", "");
-        return digits.Length >= 7 && digits.Length <= 15;
+        return digits.Length >= 11 && digits.Length <= 15;
     }
 
     private async Task<string> GenerateUniqueSlugAsync(string name)
