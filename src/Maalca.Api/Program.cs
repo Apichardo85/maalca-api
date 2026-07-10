@@ -582,7 +582,7 @@ app.MapPost("/api/onboarding", async (HttpContext ctx, IOnboardingService onboar
 
 // ============ AFFILIATE PROFILE UPDATE ============
 app.MapMethods("/api/affiliates/{id}/profile", new[] { "PATCH" },
-    async (HttpContext ctx, IAffiliateService affiliateService, IMilestoneService milestones,
+    async (HttpContext ctx, IAffiliateService affiliateService,
            Guid id, UpdateAffiliateProfileRequest request) =>
 {
     var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
@@ -595,14 +595,11 @@ app.MapMethods("/api/affiliates/{id}/profile", new[] { "PATCH" },
 
     try
     {
-        var result = await affiliateService.UpdateProfileAsync(id, request);
-        if (result is null)
+        var profile = await affiliateService.UpdateProfileAsync(id, request);
+        if (profile is null)
             return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
 
-        if (result.WhatsAppWasJustConfigured)
-            await milestones.MarkAsync(id, MilestoneKeys.WhatsAppConfigured);
-
-        return Results.Ok(result.Profile);
+        return Results.Ok(profile);
     }
     catch (ArgumentException ex)
     {
@@ -850,14 +847,21 @@ app.MapGet("/api/space/{slug}", async (
     try { completedKeys = await milestones.GetCompletedKeysAsync(affiliate.Id); }
     catch { completedKeys = new HashSet<string>(); }
 
-    // Visitas/EscaneosQr/ClicsCanales: EventoInteraccion exists (Fase C) but nothing writes to it
-    // yet — confirmed 0 rows in both staging and production. Disponible=false until a real
-    // caller (public-page instrumentation) exists; that's a product decision, not made here.
+    var eventCounts = await db.EventosInteraccion
+        .Where(e => e.AffiliateId == affiliate.Id)
+        .GroupBy(e => e.Tipo)
+        .Select(g => new { Tipo = g.Key, Count = g.Count() })
+        .ToDictionaryAsync(g => g.Tipo, g => g.Count);
+
+    var visitasCount = eventCounts.GetValueOrDefault(EventoTipo.PageView);
+    var escaneosQrCount = eventCounts.GetValueOrDefault(EventoTipo.QrScan);
+    var clicsCanalesCount = eventCounts.GetValueOrDefault(EventoTipo.CanalClick);
+
     var kpis = new KpisDto(
-        Visitas: new KpiValueDto(null, false),
+        Visitas: new KpiValueDto(visitasCount > 0 ? visitasCount : null, visitasCount > 0),
         ItemsPublicados: new KpiValueDto(realCount, true),
-        EscaneosQr: new KpiValueDto(null, false),
-        ClicsCanales: new KpiValueDto(null, false));
+        EscaneosQr: new KpiValueDto(escaneosQrCount > 0 ? escaneosQrCount : null, escaneosQrCount > 0),
+        ClicsCanales: new KpiValueDto(clicsCanalesCount > 0 ? clicsCanalesCount : null, clicsCanalesCount > 0));
 
     return Results.Ok(new SpaceResponse(
         new BusinessDto(
@@ -871,7 +875,7 @@ app.MapGet("/api/space/{slug}", async (
         items, realCount,
         new ProgressDto(
             FirstProductAdded: completedKeys.Contains(MilestoneKeys.FirstProductAdded),
-            WhatsAppConfigured: completedKeys.Contains(MilestoneKeys.WhatsAppConfigured),
+            CanalesConfigured: canales.Count > 0,
             LinkShared: completedKeys.Contains(MilestoneKeys.LinkShared)),
         kpis));
 });

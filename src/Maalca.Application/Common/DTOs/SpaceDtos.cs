@@ -37,6 +37,6 @@ public record SpaceItemDto(
 
 public record ProgressDto(
     bool FirstProductAdded,
-    bool WhatsAppConfigured,
+    bool CanalesConfigured,
     bool LinkShared
 );

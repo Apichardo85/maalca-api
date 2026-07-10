@@ -12,7 +12,6 @@ public record AffiliateSummaryDto(
 public record UpdateAffiliateProfileRequest(
     string? Name,
     string? Description,
-    string? WhatsApp,
     string? LogoUrl,
     string? CoverImageUrl,
     string? ContactEmail,
@@ -31,7 +30,6 @@ public record AffiliatePublicProfileDto(
     string? PrimaryColor,
     string? LogoUrl,
     string? CoverImageUrl,
-    string? WhatsApp,
     string? ContactEmail,
     string? Address,
     string? Website
@@ -43,8 +41,3 @@ public record AffiliateEventRequest(
 );
 
 public record AffiliateSlugLookupDto(Guid Id, string Slug, string Name);
-
-public record UpdateProfileResult(
-    AffiliatePublicProfileDto Profile,
-    bool WhatsAppWasJustConfigured
-);

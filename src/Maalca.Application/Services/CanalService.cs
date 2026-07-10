@@ -10,12 +10,29 @@ namespace Maalca.Application.Services;
 
 public class CanalService : ICanalService
 {
-    private static readonly HashSet<CanalTipo> AllowedTipos = new()
+    private static readonly HashSet<CanalTipo> ManualTipos = new()
     {
         CanalTipo.WhatsApp, CanalTipo.Email, CanalTipo.Telefono
     };
 
+    private static readonly HashSet<CanalTipo> EnlaceTipos = new()
+    {
+        CanalTipo.Facebook, CanalTipo.Instagram, CanalTipo.TikTok
+    };
+
     private static readonly Regex EmailRegex = new(@"^[^@\s]+@[^@\s]+\.[^@\s]+$", RegexOptions.Compiled);
+
+    private static readonly Regex FacebookRegex = new(
+        @"^(?:https?:\/\/)?(?:www\.)?facebook\.com\/([A-Za-z0-9_.\-]+)\/?(?:\?.*)?$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex InstagramRegex = new(
+        @"^(?:https?:\/\/)?(?:www\.)?instagram\.com\/([A-Za-z0-9_.]+)\/?(?:\?.*)?$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex TikTokRegex = new(
+        @"^(?:https?:\/\/)?(?:www\.)?tiktok\.com\/@([A-Za-z0-9_.]+)\/?(?:\?.*)?$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private readonly AppDbContext _db;
 
@@ -39,11 +56,18 @@ public class CanalService : ICanalService
         var affiliate = await _db.Affiliates.FindAsync(affiliateId)
             ?? throw new KeyNotFoundException($"Affiliate {affiliateId} not found.");
 
-        if (!Enum.TryParse<CanalTipo>(request.Tipo, ignoreCase: true, out var tipo) || !AllowedTipos.Contains(tipo))
-            throw new ArgumentException($"Unsupported Tipo: {request.Tipo}. Only WhatsApp, Email, Telefono are supported in this phase.");
+        if (!Enum.TryParse<CanalTipo>(request.Tipo, ignoreCase: true, out var tipo) ||
+            (!ManualTipos.Contains(tipo) && !EnlaceTipos.Contains(tipo)))
+            throw new ArgumentException($"Unsupported Tipo: {request.Tipo}. Only WhatsApp, Email, Telefono, Facebook, Instagram, TikTok are supported in this phase.");
 
-        if (!Enum.TryParse<CanalMetodo>(request.Metodo, ignoreCase: true, out var metodo) || metodo != CanalMetodo.Manual)
-            throw new ArgumentException($"Unsupported Metodo: {request.Metodo}. Only Manual is supported in this phase.");
+        if (!Enum.TryParse<CanalMetodo>(request.Metodo, ignoreCase: true, out var metodo))
+            throw new ArgumentException($"Unsupported Metodo: {request.Metodo}.");
+
+        if (ManualTipos.Contains(tipo) && metodo != CanalMetodo.Manual)
+            throw new ArgumentException($"Unsupported Metodo: {request.Metodo}. Only Manual is supported for {tipo} in this phase.");
+
+        if (EnlaceTipos.Contains(tipo) && metodo != CanalMetodo.Enlace)
+            throw new ArgumentException($"Unsupported Metodo: {request.Metodo}. Only Enlace is supported for {tipo} in this phase.");
 
         if (string.IsNullOrWhiteSpace(request.ValorCrudo))
             throw new ArgumentException("ValorCrudo is required.");
@@ -103,6 +127,9 @@ public class CanalService : ICanalService
         CanalTipo.WhatsApp => BuildWhatsAppLink(valorCrudo),
         CanalTipo.Email => BuildEmailLink(valorCrudo),
         CanalTipo.Telefono => BuildPhoneLink(valorCrudo),
+        CanalTipo.Facebook => BuildFacebookLink(valorCrudo),
+        CanalTipo.Instagram => BuildInstagramLink(valorCrudo),
+        CanalTipo.TikTok => BuildTikTokLink(valorCrudo),
         _ => throw new ArgumentException($"Cannot generate link for Tipo {tipo} in this phase.")
     };
 
@@ -128,6 +155,30 @@ public class CanalService : ICanalService
             throw new ArgumentException("Phone number must have at least 7 digits.");
         var prefix = raw.TrimStart().StartsWith("+") ? "+" : "";
         return $"tel:{prefix}{digits}";
+    }
+
+    private static string BuildFacebookLink(string raw)
+    {
+        var match = FacebookRegex.Match(raw.Trim());
+        if (!match.Success)
+            throw new ArgumentException("Ese no parece un link de Facebook válido.");
+        return $"https://facebook.com/{match.Groups[1].Value}";
+    }
+
+    private static string BuildInstagramLink(string raw)
+    {
+        var match = InstagramRegex.Match(raw.Trim());
+        if (!match.Success)
+            throw new ArgumentException("Ese no parece un link de Instagram válido.");
+        return $"https://instagram.com/{match.Groups[1].Value}";
+    }
+
+    private static string BuildTikTokLink(string raw)
+    {
+        var match = TikTokRegex.Match(raw.Trim());
+        if (!match.Success)
+            throw new ArgumentException("Ese no parece un link de TikTok válido.");
+        return $"https://tiktok.com/@{match.Groups[1].Value}";
     }
 
     private static CanalDto Map(Canal c) => new(
