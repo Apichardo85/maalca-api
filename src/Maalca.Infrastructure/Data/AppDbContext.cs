@@ -76,6 +76,7 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired();
             entity.Property(e => e.Price).HasPrecision(18, 2);
+            entity.Property(e => e.DescriptionEn).HasMaxLength(1000);
             entity.HasOne(e => e.Affiliate)
                   .WithMany(a => a.Services)
                   .HasForeignKey(e => e.AffiliateId)
@@ -121,6 +122,7 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired();
             entity.Property(e => e.UnitPrice).HasPrecision(18, 2);
+            entity.Property(e => e.DescriptionEn).HasMaxLength(1000);
             entity.HasOne(e => e.Affiliate)
                   .WithMany(a => a.InventoryItems)
                   .HasForeignKey(e => e.AffiliateId)

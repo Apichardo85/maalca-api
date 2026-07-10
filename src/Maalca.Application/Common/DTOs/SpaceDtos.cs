@@ -19,12 +19,15 @@ public record BusinessDto(
     IReadOnlyList<CanalDto> Canales,
     IReadOnlyList<string> ModulosActivos,
     IReadOnlyList<ProcessStepDto> ProcessSteps,
-    IReadOnlyList<FaqItemDto> Faq
+    IReadOnlyList<FaqItemDto> Faq,
+    IReadOnlyList<HorarioEntryDto> Horario
 );
 
 public record ProcessStepDto(string Title, string Description);
 
 public record FaqItemDto(string Question, string Answer);
+
+public record HorarioEntryDto(string Dia, string Abre, string Cierra, bool Cerrado);
 
 public record SpaceItemDto(
     Guid Id,

@@ -16,7 +16,8 @@ public record AffiliatePublicDto(
     string? Website,
     List<CanalDto> Canales,
     List<ProcessStepDto> ProcessSteps,
-    List<FaqItemDto> Faq
+    List<FaqItemDto> Faq,
+    List<HorarioEntryDto> Horario
 );
 
 public record CatalogItemDto(
@@ -31,7 +32,7 @@ public record CatalogItemDto(
     int? DurationMinutes,   // Service/Barber only
     int? Stock,             // InventoryItem only (null = no tracking)
     string? Status,
-    string? DescriptionEn = null,               // Product only
+    string? DescriptionEn = null,               // Product/Service/InventoryItem
     IReadOnlyList<string>? Periods = null,      // Product only — breakfast/lunch/dinner/late_night/all_day
     IReadOnlyList<string>? WeekDays = null,     // Product only — monday..sunday
     IReadOnlyList<string>? Flags = null,        // Product only — free tokens, e.g. vegetarian/spicy/glutenFree

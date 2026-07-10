@@ -56,7 +56,7 @@ public class PublicCatalogService : IPublicCatalogService
                             s.Id, s.Name, s.Description, s.Price,
                             s.Category, s.ImageUrl, s.SortOrder, s.IsDemo,
                             s.DurationMinutes, null, s.Status,
-                            null, null, null, null, null, null))
+                            s.DescriptionEn, null, null, null, null, null))
                         .ToListAsync(),
 
                 BusinessType.Retail =>
@@ -67,7 +67,7 @@ public class PublicCatalogService : IPublicCatalogService
                             i.Id, i.Name, i.Description, i.UnitPrice,
                             i.Category, i.ImageUrl, i.SortOrder, i.IsDemo,
                             null, i.Quantity, i.Status,
-                            null, null, null, null, null, null))
+                            i.DescriptionEn, null, null, null, null, null))
                         .ToListAsync(),
 
                 _ => new List<CatalogItemDto>()
@@ -97,7 +97,8 @@ public class PublicCatalogService : IPublicCatalogService
             a.Website,
             canales,
             JsonArrayField.Parse<ProcessStepDto>(a.ProcessSteps),
-            JsonArrayField.Parse<FaqItemDto>(a.Faq));
+            JsonArrayField.Parse<FaqItemDto>(a.Faq),
+            JsonArrayField.Parse<HorarioEntryDto>(a.Horario));
     }
 
     private static PlanCapabilitiesDto BuildCapabilities(Plan plan) =>

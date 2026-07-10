@@ -38,10 +38,12 @@ public class Affiliate : BaseEntity
 
     // ── Espacio v2: contenido editorial de la página pública ──────
     // JSON string, sin shape forzado a nivel de DB. ProcessSteps: array de
-    // {title, description}. Faq: array de {question, answer}. Parseados a DTOs
+    // {title, description}. Faq: array de {question, answer}. Horario: array de
+    // {dia, abre, cierra, cerrado}, uno por día de la semana. Parseados a DTOs
     // tipados en el borde (ver JsonArrayField) — nunca expuestos como string crudo.
     public string? ProcessSteps { get; set; }
     public string? Faq { get; set; }
+    public string? Horario { get; set; }
 
     // ── Fase B: SaaS public fields ──────────────────────────────
     public string? Slug { get; set; }

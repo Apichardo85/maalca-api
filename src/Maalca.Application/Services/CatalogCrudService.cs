@@ -43,7 +43,7 @@ public class CatalogCrudService : ICatalogCrudService
                         s.Id, s.Name, s.Description, s.Price,
                         s.Category, s.ImageUrl, s.SortOrder, s.IsDemo,
                         s.DurationMinutes, null, s.Status,
-                        null, null, null, null, null, null))
+                        s.DescriptionEn, null, null, null, null, null))
                     .ToListAsync(),
 
             BusinessType.Retail =>
@@ -54,7 +54,7 @@ public class CatalogCrudService : ICatalogCrudService
                         i.Id, i.Name, i.Description, i.UnitPrice,
                         i.Category, i.ImageUrl, i.SortOrder, i.IsDemo,
                         null, i.Quantity, i.Status,
-                        null, null, null, null, null, null))
+                        i.DescriptionEn, null, null, null, null, null))
                     .ToListAsync(),
 
             _ => new List<CatalogItemDto>()
@@ -82,7 +82,7 @@ public class CatalogCrudService : ICatalogCrudService
                         s.Id, s.Name, s.Description, s.Price,
                         s.Category, s.ImageUrl, s.SortOrder, s.IsDemo,
                         s.DurationMinutes, null, s.Status,
-                        null, null, null, null, null, null))
+                        s.DescriptionEn, null, null, null, null, null))
                     .FirstOrDefaultAsync(),
 
             BusinessType.Retail =>
@@ -92,7 +92,7 @@ public class CatalogCrudService : ICatalogCrudService
                         i.Id, i.Name, i.Description, i.UnitPrice,
                         i.Category, i.ImageUrl, i.SortOrder, i.IsDemo,
                         null, i.Quantity, i.Status,
-                        null, null, null, null, null, null))
+                        i.DescriptionEn, null, null, null, null, null))
                     .FirstOrDefaultAsync(),
 
             _ => null
@@ -235,12 +235,14 @@ public class CatalogCrudService : ICatalogCrudService
         if (request.IsPubliclyVisible.HasValue) service.IsPubliclyVisible = request.IsPubliclyVisible.Value;
         if (request.DurationMinutes.HasValue) service.DurationMinutes = request.DurationMinutes.Value;
         if (request.Status is not null) service.Status = request.Status;
+        if (request.DescriptionEn is not null) service.DescriptionEn = request.DescriptionEn;
         if (wasDemo) service.IsDemo = false;
 
         await _db.SaveChangesAsync();
         return (new CatalogItemDto(service.Id, service.Name, service.Description, service.Price,
             service.Category, service.ImageUrl, service.SortOrder, service.IsDemo,
-            service.DurationMinutes, null, service.Status), wasDemo);
+            service.DurationMinutes, null, service.Status,
+            service.DescriptionEn), wasDemo);
     }
 
     private async Task<(CatalogItemDto, bool)> PatchInventoryItemAsync(Guid affiliateId, Guid itemId, UpdateCatalogItemRequest request)
@@ -259,12 +261,14 @@ public class CatalogCrudService : ICatalogCrudService
         if (request.IsPubliclyVisible.HasValue) item.IsPubliclyVisible = request.IsPubliclyVisible.Value;
         if (request.Stock.HasValue) item.Quantity = request.Stock.Value;
         if (request.Status is not null) item.Status = request.Status;
+        if (request.DescriptionEn is not null) item.DescriptionEn = request.DescriptionEn;
         if (wasDemo) item.IsDemo = false;
 
         await _db.SaveChangesAsync();
         return (new CatalogItemDto(item.Id, item.Name, item.Description, item.UnitPrice,
             item.Category, item.ImageUrl, item.SortOrder, item.IsDemo,
-            null, item.Quantity, item.Status), wasDemo);
+            null, item.Quantity, item.Status,
+            item.DescriptionEn), wasDemo);
     }
 
     // ── Create helpers ────────────────────────────────────────────
@@ -304,6 +308,7 @@ public class CatalogCrudService : ICatalogCrudService
             AffiliateId = affiliateId,
             Name = request.Name,
             Description = request.Description,
+            DescriptionEn = request.DescriptionEn,
             Price = request.Price,
             Category = request.Category,
             ImageUrl = request.ImageUrl,
@@ -317,7 +322,8 @@ public class CatalogCrudService : ICatalogCrudService
         await _db.SaveChangesAsync();
         return new CatalogItemDto(service.Id, service.Name, service.Description, service.Price,
             service.Category, service.ImageUrl, service.SortOrder, service.IsDemo,
-            service.DurationMinutes, null, service.Status);
+            service.DurationMinutes, null, service.Status,
+            service.DescriptionEn);
     }
 
     private async Task<CatalogItemDto> CreateInventoryItemAsync(Guid affiliateId, CreateCatalogItemRequest request)
@@ -327,6 +333,7 @@ public class CatalogCrudService : ICatalogCrudService
             AffiliateId = affiliateId,
             Name = request.Name,
             Description = request.Description,
+            DescriptionEn = request.DescriptionEn,
             UnitPrice = request.Price,
             Category = request.Category,
             ImageUrl = request.ImageUrl,
@@ -340,7 +347,8 @@ public class CatalogCrudService : ICatalogCrudService
         await _db.SaveChangesAsync();
         return new CatalogItemDto(item.Id, item.Name, item.Description, item.UnitPrice,
             item.Category, item.ImageUrl, item.SortOrder, item.IsDemo,
-            null, item.Quantity, item.Status);
+            null, item.Quantity, item.Status,
+            item.DescriptionEn);
     }
 
     // ── Update helpers ────────────────────────────────────────────
