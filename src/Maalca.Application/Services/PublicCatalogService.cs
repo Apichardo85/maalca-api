@@ -98,7 +98,8 @@ public class PublicCatalogService : IPublicCatalogService
             canales,
             JsonArrayField.Parse<ProcessStepDto>(a.ProcessSteps),
             JsonArrayField.Parse<FaqItemDto>(a.Faq),
-            JsonArrayField.Parse<HorarioEntryDto>(a.Horario));
+            JsonArrayField.Parse<HorarioEntryDto>(a.Horario),
+            a.Timezone);
     }
 
     private static PlanCapabilitiesDto BuildCapabilities(Plan plan) =>

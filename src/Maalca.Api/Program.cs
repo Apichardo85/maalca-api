@@ -872,7 +872,8 @@ app.MapGet("/api/space/{slug}", async (
             canales, ModuleCatalog.FilterActive(affiliate.ModulosActivos),
             JsonArrayField.Parse<ProcessStepDto>(affiliate.ProcessSteps),
             JsonArrayField.Parse<FaqItemDto>(affiliate.Faq),
-            JsonArrayField.Parse<HorarioEntryDto>(affiliate.Horario)),
+            JsonArrayField.Parse<HorarioEntryDto>(affiliate.Horario),
+            affiliate.Timezone),
         items, realCount,
         new ProgressDto(
             FirstProductAdded: completedKeys.Contains(MilestoneKeys.FirstProductAdded),

@@ -45,6 +45,9 @@ public class Affiliate : BaseEntity
     public string? Faq { get; set; }
     public string? Horario { get; set; }
 
+    // IANA timezone id (e.g. "America/New_York"), set explicitly per affiliate — never inferred.
+    public string? Timezone { get; set; }
+
     // ── Fase B: SaaS public fields ──────────────────────────────
     public string? Slug { get; set; }
     public BusinessType BusinessType { get; set; } = BusinessType.Service;

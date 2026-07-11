@@ -20,7 +20,8 @@ public record BusinessDto(
     IReadOnlyList<string> ModulosActivos,
     IReadOnlyList<ProcessStepDto> ProcessSteps,
     IReadOnlyList<FaqItemDto> Faq,
-    IReadOnlyList<HorarioEntryDto> Horario
+    IReadOnlyList<HorarioEntryDto> Horario,
+    string? Timezone
 );
 
 public record ProcessStepDto(string Title, string Description);

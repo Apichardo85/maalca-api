@@ -17,7 +17,8 @@ public record AffiliatePublicDto(
     List<CanalDto> Canales,
     List<ProcessStepDto> ProcessSteps,
     List<FaqItemDto> Faq,
-    List<HorarioEntryDto> Horario
+    List<HorarioEntryDto> Horario,
+    string? Timezone
 );
 
 public record CatalogItemDto(
