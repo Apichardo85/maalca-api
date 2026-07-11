@@ -607,6 +607,33 @@ app.MapMethods("/api/affiliates/{id}/profile", new[] { "PATCH" },
     }
 });
 
+// ============ AFFILIATE CONTENT UPDATE (ProcessSteps/Faq/Horario) ============
+app.MapMethods("/api/affiliates/{id}/content", new[] { "PATCH" },
+    async (HttpContext ctx, IAffiliateService affiliateService,
+           Guid id, UpdateAffiliateContentRequest request) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    var role = ctx.User.FindFirst("role")?.Value;
+    if (role == "Staff")
+        return Results.Forbid();
+
+    try
+    {
+        var content = await affiliateService.UpdateContentAsync(id, request);
+        if (content is null)
+            return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
+
+        return Results.Ok(content);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+});
+
 // ============ AFFILIATE EVENTS ============
 app.MapPost("/api/affiliates/{id}/events", async (
     HttpContext ctx, ILogger<Program> logger, IMilestoneService milestones,

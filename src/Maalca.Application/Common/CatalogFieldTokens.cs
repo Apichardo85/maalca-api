@@ -19,3 +19,13 @@ public static class WeekDayTokens
         "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"
     };
 }
+
+// Whitelist for Affiliate.Horario entries — Spanish day names (no accents), matching the
+// "dia"/"abre"/"cierra"/"cerrado" field naming already used for that column.
+public static class DiaSemanaTokens
+{
+    public static readonly HashSet<string> Whitelist = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"
+    };
+}

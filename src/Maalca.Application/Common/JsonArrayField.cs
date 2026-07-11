@@ -21,4 +21,6 @@ public static class JsonArrayField
             return new List<T>();
         }
     }
+
+    public static string Serialize<T>(IEnumerable<T> items) => JsonSerializer.Serialize(items, Options);
 }

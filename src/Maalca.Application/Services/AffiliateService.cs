@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
+using Maalca.Application.Common;
 using Maalca.Application.Common.DTOs;
 using Maalca.Application.Common.Interfaces;
 using Maalca.Domain.Entities;
@@ -9,6 +11,8 @@ namespace Maalca.Application.Services;
 
 public class AffiliateService : IAffiliateService
 {
+    private static readonly Regex TimeFormat = new(@"^([01]\d|2[0-3]):[0-5]\d$", RegexOptions.Compiled);
+
     private readonly AppDbContext _context;
 
     public AffiliateService(AppDbContext context)
@@ -68,5 +72,58 @@ public class AffiliateService : IAffiliateService
             affiliate.LogoUrl, affiliate.CoverImageUrl,
             affiliate.ContactEmail,
             affiliate.Address, affiliate.Website);
+    }
+
+    public async Task<AffiliateContentDto?> UpdateContentAsync(Guid affiliateId, UpdateAffiliateContentRequest request)
+    {
+        var affiliate = await _context.Affiliates.FindAsync(affiliateId);
+        if (affiliate == null) return null;
+
+        if (request.ProcessSteps != null)
+        {
+            foreach (var step in request.ProcessSteps)
+            {
+                if (string.IsNullOrWhiteSpace(step.Title))
+                    throw new ArgumentException("ProcessSteps: title is required.");
+                if (step.Title.Length > 200)
+                    throw new ArgumentException("ProcessSteps: title must be at most 200 characters.");
+                if (step.Description?.Length > 1000)
+                    throw new ArgumentException("ProcessSteps: description must be at most 1000 characters.");
+            }
+            affiliate.ProcessSteps = JsonArrayField.Serialize(request.ProcessSteps);
+        }
+
+        if (request.Faq != null)
+        {
+            foreach (var item in request.Faq)
+            {
+                if (string.IsNullOrWhiteSpace(item.Question))
+                    throw new ArgumentException("Faq: question is required.");
+                if (item.Question.Length > 200)
+                    throw new ArgumentException("Faq: question must be at most 200 characters.");
+                if (item.Answer?.Length > 1000)
+                    throw new ArgumentException("Faq: answer must be at most 1000 characters.");
+            }
+            affiliate.Faq = JsonArrayField.Serialize(request.Faq);
+        }
+
+        if (request.Horario != null)
+        {
+            foreach (var entry in request.Horario)
+            {
+                if (string.IsNullOrWhiteSpace(entry.Dia) || !DiaSemanaTokens.Whitelist.Contains(entry.Dia))
+                    throw new ArgumentException($"Horario: '{entry.Dia}' is not a valid day.");
+                if (!entry.Cerrado && (!TimeFormat.IsMatch(entry.Abre ?? "") || !TimeFormat.IsMatch(entry.Cierra ?? "")))
+                    throw new ArgumentException($"Horario: Abre/Cierra must be in HH:mm format for '{entry.Dia}' when Cerrado is false.");
+            }
+            affiliate.Horario = JsonArrayField.Serialize(request.Horario);
+        }
+
+        await _context.SaveChangesAsync();
+
+        return new AffiliateContentDto(
+            JsonArrayField.Parse<ProcessStepDto>(affiliate.ProcessSteps),
+            JsonArrayField.Parse<FaqItemDto>(affiliate.Faq),
+            JsonArrayField.Parse<HorarioEntryDto>(affiliate.Horario));
     }
 }

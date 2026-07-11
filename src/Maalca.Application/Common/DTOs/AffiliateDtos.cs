@@ -35,6 +35,18 @@ public record AffiliatePublicProfileDto(
     string? Website
 );
 
+public record UpdateAffiliateContentRequest(
+    List<ProcessStepDto>? ProcessSteps,
+    List<FaqItemDto>? Faq,
+    List<HorarioEntryDto>? Horario
+);
+
+public record AffiliateContentDto(
+    IReadOnlyList<ProcessStepDto> ProcessSteps,
+    IReadOnlyList<FaqItemDto> Faq,
+    IReadOnlyList<HorarioEntryDto> Horario
+);
+
 public record AffiliateEventRequest(
     string Type,
     Dictionary<string, string>? Metadata = null

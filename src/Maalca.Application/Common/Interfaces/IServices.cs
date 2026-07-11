@@ -13,6 +13,7 @@ public interface IAffiliateService
 {
     Task<AffiliateDto?> GetAffiliateAsync(Guid affiliateId);
     Task<AffiliatePublicProfileDto?> UpdateProfileAsync(Guid affiliateId, UpdateAffiliateProfileRequest request);
+    Task<AffiliateContentDto?> UpdateContentAsync(Guid affiliateId, UpdateAffiliateContentRequest request);
 }
 
 public interface ICustomerService
