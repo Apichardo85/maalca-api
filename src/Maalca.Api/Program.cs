@@ -694,8 +694,8 @@ app.MapPost("/api/affiliates/{id}/catalog-items", async (
     }
     catch (InvalidOperationException ex) when (ex.Message.StartsWith("Plan limit"))
     {
-        return Results.Problem(statusCode: 402, title: "Payment Required",
-            detail: ex.Message);
+        return Results.Json(new { error = new { code = "PLAN_LIMIT_REACHED", message = ex.Message } },
+            statusCode: 402);
     }
     catch (KeyNotFoundException ex)
     {
@@ -732,6 +732,11 @@ app.MapMethods("/api/affiliates/{id}/catalog-items/{itemId}", new[] { "PATCH" },
     catch (KeyNotFoundException)
     {
         return Results.NotFound();
+    }
+    catch (InvalidOperationException ex) when (ex.Message.StartsWith("Plan limit"))
+    {
+        return Results.Json(new { error = new { code = "PLAN_LIMIT_REACHED", message = ex.Message } },
+            statusCode: 402);
     }
     catch (ArgumentException ex)
     {
