@@ -91,7 +91,7 @@ public class PublicCatalogService : IPublicCatalogService
             .ToList();
 
         return new(a.Id, a.Name, a.Slug!, a.BusinessType.ToString(),
-            a.Description, a.PrimaryColor, a.LogoUrl, a.CoverImageUrl,
+            a.Description, a.DescriptionEn, a.PrimaryColor, a.LogoUrl, a.CoverImageUrl,
             a.WhatsApp, a.ContactEmail, a.Address,
             null,   // City — Affiliate entity does not have this field yet
             a.Website,

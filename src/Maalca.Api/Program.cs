@@ -842,24 +842,28 @@ app.MapGet("/api/space/{slug}", async (
     var items = affiliate.BusinessType switch
     {
         BusinessType.Restaurant or BusinessType.Creator or BusinessType.Publisher =>
-            await db.Products
+            (await db.Products
                 .Where(p => p.AffiliateId == affiliate.Id)
                 .OrderBy(p => p.SortOrder)
-                .Select(p => new SpaceItemDto(p.Id, p.Name, p.Category, p.IsDemo, p.Status == "Active", p.ImageUrl))
-                .ToListAsync(),
+                .ToListAsync())
+                .Select(p => new SpaceItemDto(p.Id, p.Name, p.Category, p.IsDemo, p.Status == "Active", p.ImageUrl,
+                    TokenList.Parse(p.Periods), TokenList.Parse(p.Flags), p.Featured, p.Popular))
+                .ToList(),
 
         BusinessType.Barber or BusinessType.Service or BusinessType.Professional =>
             await db.Services
                 .Where(s => s.AffiliateId == affiliate.Id)
                 .OrderBy(s => s.SortOrder)
-                .Select(s => new SpaceItemDto(s.Id, s.Name, s.Category, s.IsDemo, s.Status == "Active", s.ImageUrl))
+                .Select(s => new SpaceItemDto(s.Id, s.Name, s.Category, s.IsDemo, s.Status == "Active", s.ImageUrl,
+                    new List<string>(), null, null, null))
                 .ToListAsync(),
 
         BusinessType.Retail =>
             await db.InventoryItems
                 .Where(i => i.AffiliateId == affiliate.Id)
                 .OrderBy(i => i.SortOrder)
-                .Select(i => new SpaceItemDto(i.Id, i.Name, i.Category, i.IsDemo, i.Status == "Active", i.ImageUrl))
+                .Select(i => new SpaceItemDto(i.Id, i.Name, i.Category, i.IsDemo, i.Status == "Active", i.ImageUrl,
+                    new List<string>(), null, null, null))
                 .ToListAsync(),
 
         _ => new List<SpaceItemDto>()
@@ -901,6 +905,7 @@ app.MapGet("/api/space/{slug}", async (
             affiliate.BusinessType.ToString(),
             affiliate.Plan.ToString().ToLower(),
             affiliate.WhatsApp, affiliate.PrimaryColor,
+            affiliate.DescriptionEn,
             canales, ModuleCatalog.FilterActive(affiliate.ModulosActivos),
             JsonArrayField.Parse<ProcessStepDto>(affiliate.ProcessSteps),
             JsonArrayField.Parse<FaqItemDto>(affiliate.Faq),

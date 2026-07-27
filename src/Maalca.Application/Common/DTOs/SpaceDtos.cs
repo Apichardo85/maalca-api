@@ -16,6 +16,7 @@ public record BusinessDto(
     string Plan,
     string? Whatsapp,
     string? PrimaryColor,
+    string? DescriptionEn,
     IReadOnlyList<CanalDto> Canales,
     IReadOnlyList<string> ModulosActivos,
     IReadOnlyList<ProcessStepDto> ProcessSteps,
@@ -36,7 +37,11 @@ public record SpaceItemDto(
     string? Category,
     bool IsDemo,
     bool Active,
-    string? ImageUrl
+    string? ImageUrl,
+    IReadOnlyList<string>? Periods = null,      // Product only
+    IReadOnlyList<string>? Flags = null,        // Product only
+    bool? Featured = null,                      // Product only
+    bool? Popular = null                        // Product only
 );
 
 public record ProgressDto(

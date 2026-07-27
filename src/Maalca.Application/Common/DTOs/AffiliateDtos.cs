@@ -12,6 +12,7 @@ public record AffiliateSummaryDto(
 public record UpdateAffiliateProfileRequest(
     string? Name,
     string? Description,
+    string? DescriptionEn,
     string? LogoUrl,
     string? CoverImageUrl,
     string? ContactEmail,
@@ -27,6 +28,7 @@ public record AffiliatePublicProfileDto(
     string BusinessType,
     string Plan,
     string? Description,
+    string? DescriptionEn,
     string? PrimaryColor,
     string? LogoUrl,
     string? CoverImageUrl,

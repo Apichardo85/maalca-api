@@ -6,6 +6,7 @@ public record AffiliatePublicDto(
     string Slug,
     string BusinessType,
     string? Description,
+    string? DescriptionEn,
     string? PrimaryColor,
     string? LogoUrl,
     string? CoverImageUrl,

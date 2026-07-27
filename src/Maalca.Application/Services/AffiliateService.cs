@@ -56,6 +56,7 @@ public class AffiliateService : IAffiliateService
             affiliate.Name = request.Name.Trim();
         }
         if (request.Description != null) affiliate.Description = request.Description.Trim();
+        if (request.DescriptionEn != null) affiliate.DescriptionEn = request.DescriptionEn.Trim();
         if (request.LogoUrl != null) affiliate.LogoUrl = request.LogoUrl.Trim();
         if (request.CoverImageUrl != null) affiliate.CoverImageUrl = request.CoverImageUrl.Trim();
         if (request.ContactEmail != null) affiliate.ContactEmail = request.ContactEmail.Trim();
@@ -68,7 +69,7 @@ public class AffiliateService : IAffiliateService
         return new AffiliatePublicProfileDto(
             affiliate.Id, affiliate.Name, affiliate.Slug!,
             affiliate.BusinessType.ToString(), affiliate.Plan.ToString(),
-            affiliate.Description, affiliate.PrimaryColor,
+            affiliate.Description, affiliate.DescriptionEn, affiliate.PrimaryColor,
             affiliate.LogoUrl, affiliate.CoverImageUrl,
             affiliate.ContactEmail,
             affiliate.Address, affiliate.Website);

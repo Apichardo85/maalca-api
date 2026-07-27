@@ -1,0 +1,37 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: maalcadb
+      POSTGRES_USER: maalca
+      POSTGRES_PASSWORD: maalcapass
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U maalca -d maalcadb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  maalca-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=maalcadb;Username=maalca;Password=maalcapass"
+      Jwt__Key: "MaalcaSecretKey12345678901234567890"
+      Jwt__Issuer: "maalca-api"
+      Jwt__Audience: "maalca-web"
+      Supabase__ProjectUrl: "https://nyiocxrrbrphfczsbqpf.supabase.co"
+      Supabase__JwksPath: "/auth/v1/keys"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:

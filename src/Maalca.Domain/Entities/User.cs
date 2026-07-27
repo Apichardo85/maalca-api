@@ -21,6 +21,7 @@ public class Affiliate : BaseEntity
 {
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
+    public string? DescriptionEn { get; set; }
     public string? Logo { get; set; }
     public string? PrimaryColor { get; set; }
     public string? SecondaryColor { get; set; }
