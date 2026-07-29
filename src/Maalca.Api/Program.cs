@@ -847,6 +847,7 @@ app.MapGet("/api/space/{slug}", async (
                 .OrderBy(p => p.SortOrder)
                 .ToListAsync())
                 .Select(p => new SpaceItemDto(p.Id, p.Name, p.Category, p.IsDemo, p.Status == "Active", p.ImageUrl,
+                    p.Description,
                     TokenList.Parse(p.Periods), TokenList.Parse(p.Flags), p.Featured, p.Popular))
                 .ToList(),
 
@@ -855,6 +856,7 @@ app.MapGet("/api/space/{slug}", async (
                 .Where(s => s.AffiliateId == affiliate.Id)
                 .OrderBy(s => s.SortOrder)
                 .Select(s => new SpaceItemDto(s.Id, s.Name, s.Category, s.IsDemo, s.Status == "Active", s.ImageUrl,
+                    s.Description,
                     new List<string>(), null, null, null))
                 .ToListAsync(),
 
@@ -863,6 +865,7 @@ app.MapGet("/api/space/{slug}", async (
                 .Where(i => i.AffiliateId == affiliate.Id)
                 .OrderBy(i => i.SortOrder)
                 .Select(i => new SpaceItemDto(i.Id, i.Name, i.Category, i.IsDemo, i.Status == "Active", i.ImageUrl,
+                    i.Description,
                     new List<string>(), null, null, null))
                 .ToListAsync(),
 

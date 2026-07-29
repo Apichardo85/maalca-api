@@ -38,6 +38,7 @@ public record SpaceItemDto(
     bool IsDemo,
     bool Active,
     string? ImageUrl,
+    string? Description = null,
     IReadOnlyList<string>? Periods = null,      // Product only
     IReadOnlyList<string>? Flags = null,        // Product only
     bool? Featured = null,                      // Product only
