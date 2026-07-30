@@ -818,6 +818,58 @@ app.MapDelete("/api/affiliates/{id}/canales/{canalId}", async (HttpContext ctx, 
     return deleted ? Results.NoContent() : Results.NotFound();
 });
 
+// ============ METRICS (dashboard) ============
+app.MapGet("/api/affiliates/{id}/metrics/detailed", async (HttpContext ctx, AppDbContext db, Guid id, int days = 30) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    var effectiveDays = days > 0 ? days : 30;
+    var startDate = DateTime.UtcNow.Date.AddDays(-(effectiveDays - 1));
+
+    // Materialize raw events first — GroupBy with per-Tipo conditional counts on a
+    // date-truncated key doesn't translate reliably to SQL, so aggregate in-memory instead.
+    var rawEvents = await db.EventosInteraccion
+        .Where(e => e.AffiliateId == id && e.CreatedAt >= startDate)
+        .Select(e => new { e.CreatedAt, e.Tipo })
+        .ToListAsync();
+
+    var countsByDay = rawEvents
+        .GroupBy(e => e.CreatedAt.Date)
+        .ToDictionary(g => g.Key, g => (
+            PageViews: g.Count(x => x.Tipo == EventoTipo.PageView),
+            QrScans: g.Count(x => x.Tipo == EventoTipo.QrScan),
+            CanalClicks: g.Count(x => x.Tipo == EventoTipo.CanalClick)));
+
+    var dailyCounts = new List<DailyCountDto>();
+    for (var day = startDate; day <= DateTime.UtcNow.Date; day = day.AddDays(1))
+    {
+        countsByDay.TryGetValue(day, out var counts);
+        dailyCounts.Add(new DailyCountDto(day.ToString("yyyy-MM-dd"),
+            counts.PageViews, counts.QrScans, counts.CanalClicks));
+    }
+
+    var canalClickCounts = await db.EventosInteraccion
+        .Where(e => e.AffiliateId == id && e.Tipo == EventoTipo.CanalClick && e.CanalId != null && e.CreatedAt >= startDate)
+        .GroupBy(e => e.CanalId!.Value)
+        .Select(g => new { CanalId = g.Key, Clicks = g.Count() })
+        .ToListAsync();
+
+    var canales = await db.Canales
+        .Where(c => c.AffiliateId == id)
+        .ToDictionaryAsync(c => c.Id);
+
+    var byCanal = canalClickCounts
+        .Where(cc => canales.ContainsKey(cc.CanalId))
+        .Select(cc => new CanalBreakdownDto(
+            cc.CanalId, canales[cc.CanalId].Tipo.ToString(), canales[cc.CanalId].NombreVisible, cc.Clicks))
+        .OrderByDescending(c => c.Clicks)
+        .ToList();
+
+    return Results.Ok(new DetailedMetricsResponse(dailyCounts, byCanal));
+});
+
 // ============ SPACE DASHBOARD AGGREGATOR ============
 app.MapGet("/api/space/{slug}", async (
     HttpContext ctx,
