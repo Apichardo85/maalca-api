@@ -14,7 +14,7 @@ public class AffiliateMapService : IAffiliateMapService
     public async Task<List<UserAffiliateMap>> GetMapsForUserAsync(string supabaseUserId)
         => await _context.UserAffiliateMaps
             .Where(m => m.SupabaseUserId == supabaseUserId)
-            .OrderBy(m => m.CreatedAt)
+            .OrderByDescending(m => m.CreatedAt)
             .ToListAsync();
 
     public async Task<UserAffiliateMap?> GetMapAsync(string supabaseUserId, Guid affiliateId)
