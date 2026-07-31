@@ -998,6 +998,14 @@ app.MapGet("/api/affiliates/by-slug/{slug}", async (HttpContext ctx, AppDbContex
 });
 
 // ============ PUBLIC CATALOG ENDPOINTS (no auth) ============
+app.MapGet("/api/public/affiliates/featured", async (IPublicCatalogService catalogService, HttpResponse response) =>
+{
+    var result = await catalogService.GetFeaturedAffiliatesAsync();
+    response.Headers.CacheControl = "public, max-age=60";
+    return Results.Ok(result);
+})
+.AllowAnonymous();
+
 app.MapGet("/api/public/affiliates/{slug}", async (IPublicCatalogService catalogService, string slug, HttpResponse response) =>
 {
     var result = await catalogService.GetAffiliateBySlugAsync(slug);

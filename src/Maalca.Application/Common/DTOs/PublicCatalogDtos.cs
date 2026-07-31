@@ -22,6 +22,13 @@ public record AffiliatePublicDto(
     string? Timezone
 );
 
+public record FeaturedAffiliateDto(
+    string Slug,
+    string Name,
+    string? Description,
+    string? LogoUrl
+);
+
 public record CatalogItemDto(
     Guid Id,
     string Name,

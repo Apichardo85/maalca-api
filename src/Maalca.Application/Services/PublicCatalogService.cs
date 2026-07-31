@@ -80,6 +80,13 @@ public class PublicCatalogService : IPublicCatalogService
             BuildCapabilities(affiliate.Plan));
     }
 
+    public async Task<List<FeaturedAffiliateDto>> GetFeaturedAffiliatesAsync()
+        => await _db.Affiliates
+            .Where(a => a.IsFeatured && a.Published)
+            .OrderBy(a => a.Name)
+            .Select(a => new FeaturedAffiliateDto(a.Slug!, a.Name, a.Description, a.LogoUrl))
+            .ToListAsync();
+
     private async Task<AffiliatePublicDto> MapToAffiliatePublicDtoAsync(Maalca.Domain.Entities.Affiliate a)
     {
         var canales = (await _db.Canales

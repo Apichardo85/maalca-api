@@ -55,6 +55,9 @@ public class Affiliate : BaseEntity
     public Plan Plan { get; set; } = Plan.Free;
     public PlanStatus PlanStatus { get; set; } = PlanStatus.Active;
     public bool Published { get; set; } = false;
+
+    // Curación manual (por SQL) de qué afiliados aparecen en la home de MaalCa.
+    public bool IsFeatured { get; set; } = false;
     public string? StripeCustomerId { get; set; }
     public string? StripeSubscriptionId { get; set; }
     public DateTime? PlanStartedAt { get; set; }
