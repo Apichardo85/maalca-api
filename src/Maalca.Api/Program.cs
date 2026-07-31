@@ -886,9 +886,9 @@ app.MapGet("/api/space/{slug}", async (
     if (affiliate is null)
         return Results.NotFound();
 
-    var hasAccess = await db.UserAffiliateMaps
-        .AnyAsync(m => m.SupabaseUserId == sub && m.AffiliateId == affiliate.Id);
-    if (!hasAccess)
+    var userMap = await db.UserAffiliateMaps
+        .FirstOrDefaultAsync(m => m.SupabaseUserId == sub && m.AffiliateId == affiliate.Id);
+    if (userMap is null)
         return Results.Forbid();
 
     var items = affiliate.BusinessType switch
@@ -971,7 +971,8 @@ app.MapGet("/api/space/{slug}", async (
             FirstProductAdded: completedKeys.Contains(MilestoneKeys.FirstProductAdded),
             CanalesConfigured: canales.Count > 0,
             LinkShared: completedKeys.Contains(MilestoneKeys.LinkShared)),
-        kpis));
+        kpis,
+        userMap.Role.ToString()));
 });
 
 // ============ AFFILIATE SLUG RESOLVER ============
