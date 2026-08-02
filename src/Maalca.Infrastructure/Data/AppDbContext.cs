@@ -27,6 +27,7 @@ public class AppDbContext : DbContext
     public DbSet<AffiliateMilestone> AffiliateMilestones => Set<AffiliateMilestone>();
     public DbSet<Canal> Canales => Set<Canal>();
     public DbSet<EventoInteraccion> EventosInteraccion => Set<EventoInteraccion>();
+    public DbSet<StripeProcessedEvent> StripeProcessedEvents => Set<StripeProcessedEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -57,6 +58,14 @@ public class AppDbContext : DbContext
             entity.Property(e => e.ModulosActivos).HasMaxLength(200);
             entity.Property(e => e.StripeCustomerId).HasMaxLength(255);
             entity.Property(e => e.StripeSubscriptionId).HasMaxLength(255);
+            entity.HasIndex(e => e.StripeCustomerId);
+        });
+
+        // StripeProcessedEvent
+        modelBuilder.Entity<StripeProcessedEvent>(entity =>
+        {
+            entity.HasKey(e => e.EventId);
+            entity.Property(e => e.EventId).HasMaxLength(255);
         });
 
         // Customer

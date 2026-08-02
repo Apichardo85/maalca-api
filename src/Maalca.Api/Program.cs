@@ -67,6 +67,7 @@ builder.Services.AddScoped<ICatalogCrudService, CatalogCrudService>();
 builder.Services.AddScoped<IMilestoneService, MilestoneService>();
 builder.Services.AddScoped<ICanalService, CanalService>();
 builder.Services.AddScoped<IInteractionEventService, InteractionEventService>();
+builder.Services.AddScoped<IStripeBillingService, StripeBillingService>();
 
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
@@ -634,6 +635,30 @@ app.MapMethods("/api/affiliates/{id}/content", new[] { "PATCH" },
     }
 });
 
+// ============ BILLING (Stripe checkout) ============
+app.MapPost("/api/affiliates/{id}/billing/checkout-session", async (
+    HttpContext ctx, IStripeBillingService billingService,
+    Guid id, CreateCheckoutSessionRequest request) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    var role = ctx.User.FindFirst("role")?.Value;
+    if (role == "Staff")
+        return Results.Forbid();
+
+    try
+    {
+        var session = await billingService.CreateCheckoutSessionAsync(id, request);
+        return Results.Ok(session);
+    }
+    catch (KeyNotFoundException ex)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = ex.Message } });
+    }
+});
+
 // ============ AFFILIATE EVENTS ============
 app.MapPost("/api/affiliates/{id}/events", async (
     HttpContext ctx, ILogger<Program> logger, IMilestoneService milestones,
@@ -1046,6 +1071,27 @@ app.MapPost("/api/public/affiliates/{slug}/events", async (
     catch (ArgumentException ex)
     {
         return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+})
+.AllowAnonymous();
+
+// ============ STRIPE WEBHOOK ============
+// Bound to HttpContext only (no DTO parameter) so minimal-API does not attempt JSON
+// model binding — Stripe's signature check requires the exact raw request body bytes.
+app.MapPost("/api/webhooks/stripe", async (HttpContext ctx, IStripeBillingService billingService) =>
+{
+    using var reader = new StreamReader(ctx.Request.Body);
+    var json = await reader.ReadToEndAsync();
+    var signature = ctx.Request.Headers["Stripe-Signature"].ToString();
+
+    try
+    {
+        await billingService.HandleWebhookEventAsync(json, signature);
+        return Results.Ok();
+    }
+    catch (Stripe.StripeException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_SIGNATURE", message = ex.Message } });
     }
 })
 .AllowAnonymous();
