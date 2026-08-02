@@ -104,6 +104,9 @@ public class CatalogCrudService : ICatalogCrudService
         var affiliate = await _db.Affiliates.FindAsync(affiliateId)
             ?? throw new KeyNotFoundException($"Affiliate {affiliateId} not found.");
 
+        if (_planLimit.IsTrialExpired(affiliate))
+            throw new InvalidOperationException(PlanLimitService.TrialExpiredMessage);
+
         if (!await _planLimit.CanAddItemAsync(affiliateId))
             throw new InvalidOperationException("Plan limit reached. Max 10 items on Free plan.");
 
@@ -174,6 +177,9 @@ public class CatalogCrudService : ICatalogCrudService
 
         var affiliate = await _db.Affiliates.FindAsync(affiliateId)
             ?? throw new KeyNotFoundException($"Affiliate {affiliateId} not found.");
+
+        if (_planLimit.IsTrialExpired(affiliate))
+            throw new InvalidOperationException(PlanLimitService.TrialExpiredMessage);
 
         return affiliate.BusinessType switch
         {

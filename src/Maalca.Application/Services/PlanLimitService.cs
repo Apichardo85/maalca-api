@@ -1,4 +1,5 @@
 using Maalca.Application.Common.Interfaces;
+using Maalca.Domain.Entities;
 using Maalca.Domain.Enums;
 using Maalca.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -7,12 +8,18 @@ namespace Maalca.Application.Services;
 
 public class PlanLimitService : IPlanLimitService
 {
+    public const string TrialExpiredMessage = "Tu período gratuito terminó — mejora a Emprendedor para seguir editando.";
+    private const int TrialDays = 30;
+
     private readonly AppDbContext _db;
 
     public PlanLimitService(AppDbContext db)
     {
         _db = db;
     }
+
+    public bool IsTrialExpired(Affiliate affiliate) =>
+        affiliate.Plan == Plan.Free && affiliate.CreatedAt.AddDays(TrialDays) < DateTime.UtcNow;
 
     public int GetMaxItems(Plan plan) => plan switch
     {

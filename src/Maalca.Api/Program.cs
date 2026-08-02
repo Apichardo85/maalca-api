@@ -602,6 +602,11 @@ app.MapMethods("/api/affiliates/{id}/profile", new[] { "PATCH" },
 
         return Results.Ok(profile);
     }
+    catch (InvalidOperationException ex) when (ex.Message == PlanLimitService.TrialExpiredMessage)
+    {
+        return Results.Json(new { error = new { code = "TRIAL_EXPIRED", message = ex.Message } },
+            statusCode: 402);
+    }
     catch (ArgumentException ex)
     {
         return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
@@ -628,6 +633,11 @@ app.MapMethods("/api/affiliates/{id}/content", new[] { "PATCH" },
             return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
 
         return Results.Ok(content);
+    }
+    catch (InvalidOperationException ex) when (ex.Message == PlanLimitService.TrialExpiredMessage)
+    {
+        return Results.Json(new { error = new { code = "TRIAL_EXPIRED", message = ex.Message } },
+            statusCode: 402);
     }
     catch (ArgumentException ex)
     {
@@ -717,6 +727,11 @@ app.MapPost("/api/affiliates/{id}/catalog-items", async (
             metadata: $$$"""{"itemId":"{{{item.Id}}}","source":"created"}""");
         return Results.Created($"/api/affiliates/{id}/catalog-items/{item.Id}", item);
     }
+    catch (InvalidOperationException ex) when (ex.Message == PlanLimitService.TrialExpiredMessage)
+    {
+        return Results.Json(new { error = new { code = "TRIAL_EXPIRED", message = ex.Message } },
+            statusCode: 402);
+    }
     catch (InvalidOperationException ex) when (ex.Message.StartsWith("Plan limit"))
     {
         return Results.Json(new { error = new { code = "PLAN_LIMIT_REACHED", message = ex.Message } },
@@ -757,6 +772,11 @@ app.MapMethods("/api/affiliates/{id}/catalog-items/{itemId}", new[] { "PATCH" },
     catch (KeyNotFoundException)
     {
         return Results.NotFound();
+    }
+    catch (InvalidOperationException ex) when (ex.Message == PlanLimitService.TrialExpiredMessage)
+    {
+        return Results.Json(new { error = new { code = "TRIAL_EXPIRED", message = ex.Message } },
+            statusCode: 402);
     }
     catch (InvalidOperationException ex) when (ex.Message.StartsWith("Plan limit"))
     {
@@ -805,6 +825,11 @@ app.MapPost("/api/affiliates/{id}/canales", async (HttpContext ctx, ICanalServic
 
         return Results.Created($"/api/affiliates/{id}/canales/{canal.Id}", canal);
     }
+    catch (InvalidOperationException ex) when (ex.Message == PlanLimitService.TrialExpiredMessage)
+    {
+        return Results.Json(new { error = new { code = "TRIAL_EXPIRED", message = ex.Message } },
+            statusCode: 402);
+    }
     catch (ArgumentException ex)
     {
         return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
@@ -826,6 +851,15 @@ app.MapMethods("/api/affiliates/{id}/canales/{canalId}", new[] { "PATCH" },
     {
         var canal = await canalService.UpdateAsync(id, canalId, request);
         return canal == null ? Results.NotFound() : Results.Ok(canal);
+    }
+    catch (InvalidOperationException ex) when (ex.Message == PlanLimitService.TrialExpiredMessage)
+    {
+        return Results.Json(new { error = new { code = "TRIAL_EXPIRED", message = ex.Message } },
+            statusCode: 402);
+    }
+    catch (KeyNotFoundException ex)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = ex.Message } });
     }
     catch (ArgumentException ex)
     {
@@ -979,6 +1013,11 @@ app.MapGet("/api/space/{slug}", async (
         EscaneosQr: new KpiValueDto(escaneosQrCount > 0 ? escaneosQrCount : null, escaneosQrCount > 0),
         ClicsCanales: new KpiValueDto(clicsCanalesCount > 0 ? clicsCanalesCount : null, clicsCanalesCount > 0));
 
+    DateTime? trialEndsAt = affiliate.Plan == Plan.Free ? affiliate.CreatedAt.AddDays(30) : null;
+    int? trialDaysRemaining = trialEndsAt is null
+        ? null
+        : Math.Max(0, (int)Math.Ceiling((trialEndsAt.Value - DateTime.UtcNow).TotalDays));
+
     return Results.Ok(new SpaceResponse(
         new BusinessDto(
             affiliate.Id, affiliate.Slug!, affiliate.Name,
@@ -990,7 +1029,8 @@ app.MapGet("/api/space/{slug}", async (
             JsonArrayField.Parse<ProcessStepDto>(affiliate.ProcessSteps),
             JsonArrayField.Parse<FaqItemDto>(affiliate.Faq),
             JsonArrayField.Parse<HorarioEntryDto>(affiliate.Horario),
-            affiliate.Timezone),
+            affiliate.Timezone,
+            trialDaysRemaining, trialEndsAt),
         items, realCount,
         new ProgressDto(
             FirstProductAdded: completedKeys.Contains(MilestoneKeys.FirstProductAdded),

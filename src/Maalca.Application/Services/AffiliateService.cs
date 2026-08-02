@@ -14,10 +14,12 @@ public class AffiliateService : IAffiliateService
     private static readonly Regex TimeFormat = new(@"^([01]\d|2[0-3]):[0-5]\d$", RegexOptions.Compiled);
 
     private readonly AppDbContext _context;
+    private readonly IPlanLimitService _planLimit;
 
-    public AffiliateService(AppDbContext context)
+    public AffiliateService(AppDbContext context, IPlanLimitService planLimit)
     {
         _context = context;
+        _planLimit = planLimit;
     }
 
     public async Task<AffiliateDto?> GetAffiliateAsync(Guid affiliateId)
@@ -49,6 +51,9 @@ public class AffiliateService : IAffiliateService
         var affiliate = await _context.Affiliates.FindAsync(affiliateId);
         if (affiliate == null) return null;
 
+        if (_planLimit.IsTrialExpired(affiliate))
+            throw new InvalidOperationException(PlanLimitService.TrialExpiredMessage);
+
         if (request.Name != null)
         {
             if (request.Name.Length < 2 || request.Name.Length > 100)
@@ -79,6 +84,9 @@ public class AffiliateService : IAffiliateService
     {
         var affiliate = await _context.Affiliates.FindAsync(affiliateId);
         if (affiliate == null) return null;
+
+        if (_planLimit.IsTrialExpired(affiliate))
+            throw new InvalidOperationException(PlanLimitService.TrialExpiredMessage);
 
         if (request.ProcessSteps != null)
         {

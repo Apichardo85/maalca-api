@@ -23,7 +23,9 @@ public record BusinessDto(
     IReadOnlyList<ProcessStepDto> ProcessSteps,
     IReadOnlyList<FaqItemDto> Faq,
     IReadOnlyList<HorarioEntryDto> Horario,
-    string? Timezone
+    string? Timezone,
+    int? TrialDaysRemaining,
+    DateTime? TrialEndsAt
 );
 
 public record ProcessStepDto(string Title, string Description);

@@ -35,10 +35,12 @@ public class CanalService : ICanalService
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private readonly AppDbContext _db;
+    private readonly IPlanLimitService _planLimit;
 
-    public CanalService(AppDbContext db)
+    public CanalService(AppDbContext db, IPlanLimitService planLimit)
     {
         _db = db;
+        _planLimit = planLimit;
     }
 
     public async Task<List<CanalDto>> GetCanalesAsync(Guid affiliateId)
@@ -55,6 +57,9 @@ public class CanalService : ICanalService
     {
         var affiliate = await _db.Affiliates.FindAsync(affiliateId)
             ?? throw new KeyNotFoundException($"Affiliate {affiliateId} not found.");
+
+        if (_planLimit.IsTrialExpired(affiliate))
+            throw new InvalidOperationException(PlanLimitService.TrialExpiredMessage);
 
         if (!Enum.TryParse<CanalTipo>(request.Tipo, ignoreCase: true, out var tipo) ||
             (!ManualTipos.Contains(tipo) && !EnlaceTipos.Contains(tipo)))
@@ -95,6 +100,11 @@ public class CanalService : ICanalService
         var canal = await _db.Canales
             .FirstOrDefaultAsync(c => c.Id == canalId && c.AffiliateId == affiliateId);
         if (canal == null) return null;
+
+        var affiliate = await _db.Affiliates.FindAsync(affiliateId)
+            ?? throw new KeyNotFoundException($"Affiliate {affiliateId} not found.");
+        if (_planLimit.IsTrialExpired(affiliate))
+            throw new InvalidOperationException(PlanLimitService.TrialExpiredMessage);
 
         if (request.ValorCrudo != null)
         {
