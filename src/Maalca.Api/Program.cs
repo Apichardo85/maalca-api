@@ -1007,11 +1007,17 @@ app.MapGet("/api/space/{slug}", async (
     var escaneosQrCount = eventCounts.GetValueOrDefault(EventoTipo.QrScan);
     var clicsCanalesCount = eventCounts.GetValueOrDefault(EventoTipo.CanalClick);
 
+    // Disponible = "this metric is tracked", not "count > 0" — all four are live and
+    // tracked today, so 0 is a real, valid value (a brand-new affiliate with no
+    // traffic yet) and must render as "0", not as "Próximamente" (which the frontend
+    // reserves for genuinely unbuilt features). Was previously gating disponible on
+    // count > 0, which made every one of these show "Próximamente" for any affiliate
+    // with zero activity — indistinguishable from the feature not existing at all.
     var kpis = new KpisDto(
-        Visitas: new KpiValueDto(visitasCount > 0 ? visitasCount : null, visitasCount > 0),
+        Visitas: new KpiValueDto(visitasCount, true),
         ItemsPublicados: new KpiValueDto(realCount, true),
-        EscaneosQr: new KpiValueDto(escaneosQrCount > 0 ? escaneosQrCount : null, escaneosQrCount > 0),
-        ClicsCanales: new KpiValueDto(clicsCanalesCount > 0 ? clicsCanalesCount : null, clicsCanalesCount > 0));
+        EscaneosQr: new KpiValueDto(escaneosQrCount, true),
+        ClicsCanales: new KpiValueDto(clicsCanalesCount, true));
 
     DateTime? trialEndsAt = affiliate.Plan == Plan.Free ? affiliate.CreatedAt.AddDays(30) : null;
     int? trialDaysRemaining = trialEndsAt is null
