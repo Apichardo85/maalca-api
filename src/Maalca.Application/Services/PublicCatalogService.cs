@@ -109,8 +109,11 @@ public class PublicCatalogService : IPublicCatalogService
             a.Timezone);
     }
 
+    // Single source of truth for what each plan unlocks — flip a value here to change it
+    // everywhere it's checked (dashboard teasers, the public /board route gate, etc.),
+    // instead of hardcoding a plan check at each call site.
     private static PlanCapabilitiesDto BuildCapabilities(Plan plan) =>
         plan == Plan.Entrepreneur
-            ? new PlanCapabilitiesDto(true, true, true, true, true, true, true)
-            : new PlanCapabilitiesDto(false, false, false, false, false, false, false);
+            ? new PlanCapabilitiesDto(true, true, true, true, true, true, true, MenuBoard: true)
+            : new PlanCapabilitiesDto(false, false, false, false, false, false, false, MenuBoard: false);
 }

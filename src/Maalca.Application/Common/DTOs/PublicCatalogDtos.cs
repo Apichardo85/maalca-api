@@ -56,7 +56,8 @@ public record PlanCapabilitiesDto(
     bool RealtimeStock,
     bool BrandingFull,
     bool HidePoweredBy,
-    bool CustomDomain
+    bool CustomDomain,
+    bool MenuBoard
 );
 
 public record PublicCatalogResponse(
