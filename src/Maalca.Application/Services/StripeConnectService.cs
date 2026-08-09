@@ -52,6 +52,18 @@ public class StripeConnectService : IStripeConnectService
                 {
                     Country = string.IsNullOrEmpty(affiliate.Country) ? "US" : affiliate.Country,
                 },
+                // Equivalente v2 de "negative balance liability" en v1 — quién responde por
+                // pérdidas y a quién le cobra Stripe sus fees. "stripe" en ambos = mismo
+                // comportamiento que Standard en v1 (recomendado para plataformas nuevas con
+                // direct charges, ver docs.stripe.com/connect/integration-recommendations).
+                Defaults = new Stripe.V2.Core.AccountCreateDefaultsOptions
+                {
+                    Responsibilities = new Stripe.V2.Core.AccountCreateDefaultsResponsibilitiesOptions
+                    {
+                        FeesCollector = "stripe",
+                        LossesCollector = "stripe",
+                    },
+                },
                 Configuration = new Stripe.V2.Core.AccountCreateConfigurationOptions
                 {
                     Merchant = new Stripe.V2.Core.AccountCreateConfigurationMerchantOptions
