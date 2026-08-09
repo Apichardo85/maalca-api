@@ -17,5 +17,6 @@ public record ConnectAccountStatusDto(
     bool Connected,
     bool ChargesEnabled,
     bool PayoutsEnabled,
-    bool DetailsSubmitted
+    bool DetailsSubmitted,
+    string? Country = null
 );

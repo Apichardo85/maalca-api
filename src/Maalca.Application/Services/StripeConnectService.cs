@@ -28,13 +28,15 @@ public class StripeConnectService : IStripeConnectService
 
         if (string.IsNullOrEmpty(affiliate.StripeConnectAccountId))
         {
-            // NOTA: Country hardcodeado a "US" — el modelo Affiliate no tiene un campo de país
-            // hoy. Si en el futuro se agrega, leerlo de ahí en vez de asumir. Ver
-            // plans/spec-maalca-api-espacio-v2.md.
+            // Country viene de Affiliate.Country (ISO alpha-2, configurado por el afiliado en
+            // Configuración). "US" es solo el último recurso si nunca lo configuró — Stripe no
+            // permite cambiar el país de una cuenta conectada después de creada, así que este
+            // fallback puede dejar mal configurado a un afiliado que no sea de EE.UU. y nunca
+            // tocó ese campo. El fix real es forzar a completarlo en el onboarding, no aquí.
             var accountOptions = new AccountCreateOptions
             {
                 Type = "standard",
-                Country = "US",
+                Country = string.IsNullOrEmpty(affiliate.Country) ? "US" : affiliate.Country,
                 Email = string.IsNullOrEmpty(affiliate.ContactEmail) ? null : affiliate.ContactEmail,
             };
             var account = await new AccountService().CreateAsync(accountOptions);
@@ -60,7 +62,7 @@ public class StripeConnectService : IStripeConnectService
             ?? throw new KeyNotFoundException("Affiliate not found");
 
         if (string.IsNullOrEmpty(affiliate.StripeConnectAccountId))
-            return new ConnectAccountStatusDto(Connected: false, ChargesEnabled: false, PayoutsEnabled: false, DetailsSubmitted: false);
+            return new ConnectAccountStatusDto(Connected: false, ChargesEnabled: false, PayoutsEnabled: false, DetailsSubmitted: false, Country: affiliate.Country);
 
         StripeConfiguration.ApiKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY") ?? "";
         var account = await new AccountService().GetAsync(affiliate.StripeConnectAccountId);
@@ -72,7 +74,8 @@ public class StripeConnectService : IStripeConnectService
             Connected: true,
             ChargesEnabled: affiliate.StripeConnectChargesEnabled,
             PayoutsEnabled: affiliate.StripeConnectPayoutsEnabled,
-            DetailsSubmitted: affiliate.StripeConnectDetailsSubmitted
+            DetailsSubmitted: affiliate.StripeConnectDetailsSubmitted,
+            Country: affiliate.Country
         );
     }
 

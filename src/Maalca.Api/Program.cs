@@ -69,6 +69,7 @@ builder.Services.AddScoped<ICanalService, CanalService>();
 builder.Services.AddScoped<IInteractionEventService, InteractionEventService>();
 builder.Services.AddScoped<IStripeBillingService, StripeBillingService>();
 builder.Services.AddScoped<IStripeConnectService, StripeConnectService>();
+builder.Services.AddScoped<IOrderService, OrderService>();
 
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
@@ -718,6 +719,42 @@ app.MapGet("/api/affiliates/{id}/connect/status", async (
     }
 });
 
+// ============ ORDERS (panel admin del afiliado) ============
+app.MapGet("/api/affiliates/{id}/orders", async (
+    HttpContext ctx, IOrderService orderService, Guid id) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    var orders = await orderService.GetOrdersAsync(id);
+    return Results.Ok(orders);
+});
+
+app.MapPatch("/api/affiliates/{id}/orders/{orderId}/status", async (
+    HttpContext ctx, IOrderService orderService, Guid id, Guid orderId, UpdateOrderStatusRequest request) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    var role = ctx.User.FindFirst("role")?.Value;
+    if (role == "Staff")
+        return Results.Forbid();
+
+    try
+    {
+        var result = await orderService.UpdateStatusAsync(id, orderId, request.Status);
+        if (result is null)
+            return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Order not found" } });
+        return Results.Ok(result);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+});
+
 // ============ AFFILIATE EVENTS ============
 app.MapPost("/api/affiliates/{id}/events", async (
     HttpContext ctx, ILogger<Program> logger, IMilestoneService milestones,
@@ -1142,6 +1179,40 @@ app.MapGet("/api/public/affiliates/{slug}/catalog", async (IPublicCatalogService
     if (result == null)
         return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
     response.Headers.CacheControl = "public, max-age=60";
+    return Results.Ok(result);
+})
+.AllowAnonymous();
+
+// ============ PUBLIC ORDERS (storefront checkout) ============
+app.MapPost("/api/public/affiliates/{slug}/orders", async (
+    IOrderService orderService, string slug, CreateOrderRequest request) =>
+{
+    try
+    {
+        var result = await orderService.CreateOrderAsync(slug, request);
+        if (result is null)
+            return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
+        return Results.Ok(result);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+    catch (Stripe.StripeException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "STRIPE_ERROR", message = ex.Message } });
+    }
+})
+.AllowAnonymous();
+
+// Confirmación al volver del Checkout hospedado — ver nota en OrderService sobre por qué no
+// hay webhook dedicado a esto todavía.
+app.MapPost("/api/public/orders/{orderId}/confirm", async (
+    IOrderService orderService, Guid orderId, ConfirmOrderRequest request) =>
+{
+    var result = await orderService.ConfirmCheckoutAsync(orderId, request.CheckoutSessionId);
+    if (result is null)
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Order not found" } });
     return Results.Ok(result);
 })
 .AllowAnonymous();

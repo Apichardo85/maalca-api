@@ -84,6 +84,12 @@ public class Affiliate : BaseEntity
     public string? Address { get; set; }
     public string? Website { get; set; }
 
+    // ISO 3166-1 alpha-2 (e.g. "US", "DO"). Usado por StripeConnectService al crear la cuenta
+    // conectada del afiliado — Stripe la exige y no se puede cambiar después de creada. Null
+    // hasta que el afiliado la configure; StripeConnectService cae a "US" solo como último
+    // recurso si sigue sin setearse.
+    public string? Country { get; set; }
+
     public ICollection<User> Users { get; set; } = new List<User>();
     public ICollection<Customer> Customers { get; set; } = new List<Customer>();
     public ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();

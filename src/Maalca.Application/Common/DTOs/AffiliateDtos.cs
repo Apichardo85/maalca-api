@@ -18,7 +18,8 @@ public record UpdateAffiliateProfileRequest(
     string? ContactEmail,
     string? Address,
     string? Website,
-    string? PrimaryColor
+    string? PrimaryColor,
+    string? Country = null
 );
 
 public record AffiliatePublicProfileDto(
@@ -34,7 +35,8 @@ public record AffiliatePublicProfileDto(
     string? CoverImageUrl,
     string? ContactEmail,
     string? Address,
-    string? Website
+    string? Website,
+    string? Country = null
 );
 
 public record UpdateAffiliateContentRequest(

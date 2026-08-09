@@ -28,6 +28,7 @@ public class AppDbContext : DbContext
     public DbSet<Canal> Canales => Set<Canal>();
     public DbSet<EventoInteraccion> EventosInteraccion => Set<EventoInteraccion>();
     public DbSet<StripeProcessedEvent> StripeProcessedEvents => Set<StripeProcessedEvent>();
+    public DbSet<Order> Orders => Set<Order>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -58,7 +59,10 @@ public class AppDbContext : DbContext
             entity.Property(e => e.ModulosActivos).HasMaxLength(200);
             entity.Property(e => e.StripeCustomerId).HasMaxLength(255);
             entity.Property(e => e.StripeSubscriptionId).HasMaxLength(255);
+            entity.Property(e => e.StripeConnectAccountId).HasMaxLength(255);
+            entity.Property(e => e.Country).HasMaxLength(2);
             entity.HasIndex(e => e.StripeCustomerId);
+            entity.HasIndex(e => e.StripeConnectAccountId);
         });
 
         // StripeProcessedEvent
@@ -66,6 +70,24 @@ public class AppDbContext : DbContext
         {
             entity.HasKey(e => e.EventId);
             entity.Property(e => e.EventId).HasMaxLength(255);
+        });
+
+        // Order
+        modelBuilder.Entity<Order>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ItemsJson).IsRequired();
+            entity.Property(e => e.Currency).HasMaxLength(3).IsRequired();
+            entity.Property(e => e.Subtotal).HasPrecision(18, 2);
+            entity.Property(e => e.Tax).HasPrecision(18, 2);
+            entity.Property(e => e.Total).HasPrecision(18, 2);
+            entity.Property(e => e.StripeCheckoutSessionId).HasMaxLength(255);
+            entity.Property(e => e.StripePaymentIntentId).HasMaxLength(255);
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.AffiliateId, e.CreatedAt });
         });
 
         // Customer
