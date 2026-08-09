@@ -4,6 +4,7 @@ using Maalca.Domain.Entities;
 using Maalca.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Stripe;
+using Stripe.Checkout;
 
 namespace Maalca.Application.Services;
 
@@ -25,8 +26,13 @@ namespace Maalca.Application.Services;
 public class StripeConnectService : IStripeConnectService
 {
     private readonly AppDbContext _db;
+    private readonly IOrderService _orderService;
 
-    public StripeConnectService(AppDbContext db) => _db = db;
+    public StripeConnectService(AppDbContext db, IOrderService orderService)
+    {
+        _db = db;
+        _orderService = orderService;
+    }
 
     public async Task<ConnectOnboardingLinkResponseDto> CreateOnboardingLinkAsync(Guid affiliateId, CreateConnectOnboardingLinkRequest request)
     {
@@ -118,7 +124,9 @@ public class StripeConnectService : IStripeConnectService
     public async Task HandleWebhookEventAsync(string json, string signatureHeader)
     {
         // Webhook separado del de facturación (distinto secret) — Connect envía eventos de
-        // account.* a este endpoint, configurado aparte en el Dashboard de Stripe.
+        // account.* (a nivel plataforma) y ahora también checkout.session.completed (a nivel de
+        // cada cuenta conectada, porque el endpoint está suscrito a "eventos en cuentas
+        // conectadas" en el Dashboard) a este mismo endpoint.
         var webhookSecret = Environment.GetEnvironmentVariable("STRIPE_CONNECT_WEBHOOK_SECRET") ?? "";
         var stripeEvent = EventUtility.ConstructEvent(json, signatureHeader, webhookSecret);
 
@@ -130,6 +138,17 @@ public class StripeConnectService : IStripeConnectService
             var affiliate = await _db.Affiliates.FirstOrDefaultAsync(a => a.StripeConnectAccountId == account.Id);
             if (affiliate is not null)
                 ApplyAccountStatus(affiliate, account);
+        }
+
+        // Red de seguridad para pedidos huérfanos (ver comentario en OrderService): si el cliente
+        // paga y nunca vuelve al Success/Cancel URL, esto igual marca el pedido Paid. Solo actúa
+        // si el pago ya se completó de verdad — checkout.session.completed puede dispararse con
+        // payment_status "unpaid" para métodos de pago asíncronos (ej. transferencias), que no
+        // aplican aquí porque el Checkout solo se creó con tarjeta.
+        if (stripeEvent.Type == "checkout.session.completed" && stripeEvent.Data.Object is Session session
+            && session.PaymentStatus == "paid")
+        {
+            await _orderService.ConfirmFromWebhookAsync(session.Id, session.PaymentIntentId);
         }
 
         _db.StripeProcessedEvents.Add(new StripeProcessedEvent

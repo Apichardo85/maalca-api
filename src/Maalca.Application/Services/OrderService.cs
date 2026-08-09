@@ -16,13 +16,11 @@ namespace Maalca.Application.Services;
 /// conectada del afiliado (RequestOptions.StripeAccount) — eso la convierte en un direct
 /// charge: el dinero entra directo a la cuenta del afiliado, MaalCa nunca la toca.
 ///
-/// NOTA v1 — sin webhook dedicado a esto: confirmamos el pago cuando el cliente vuelve del
-/// Checkout (ConfirmCheckoutAsync), re-consultando la Session contra Stripe antes de marcar
-/// Paid. Es menos robusto que un webhook (si el cliente cierra la pestaña antes de volver, el
-/// pedido queda Pending aunque el cobro haya salido bien) pero evita tener que suscribir
-/// eventos de TODAS las cuentas conectadas en el webhook de Connect ya existente, que hoy solo
-/// escucha account.updated a nivel plataforma. Si esto causa pedidos huérfanos en la práctica,
-/// el siguiente paso es agregar checkout.session.completed como evento de cuenta conectada.
+/// Dos caminos confirman el pago, y ambos convergen en MarkPaidAsync: (1) ConfirmCheckoutAsync,
+/// síncrono, cuando el cliente vuelve del Checkout — feedback inmediato en el navegador; (2)
+/// ConfirmFromWebhookAsync, vía el evento checkout.session.completed suscrito en el webhook de
+/// Connect (StripeConnectService) — la red de seguridad si el cliente cierra la pestaña antes
+/// de volver. El webhook es la fuente de verdad real; el síncrono es solo UX más rápida.
 /// </summary>
 public class OrderService : IOrderService
 {
@@ -151,17 +149,31 @@ public class OrderService : IOrderService
             var session = await new SessionService().GetAsync(checkoutSessionId, requestOptions: requestOptions);
 
             if (session.PaymentStatus == "paid")
-            {
-                order.Status = OrderStatus.Paid;
-                order.StripePaymentIntentId = session.PaymentIntentId;
-                order.UpdatedAt = DateTime.UtcNow;
-                await _db.SaveChangesAsync();
-
-                await _notifications.NotifyOrderConfirmedAsync(order);
-            }
+                await MarkPaidAsync(order, session.PaymentIntentId);
         }
 
         return ToDto(order);
+    }
+
+    public async Task ConfirmFromWebhookAsync(string checkoutSessionId, string? paymentIntentId)
+    {
+        // Busca por StripeCheckoutSessionId, no por Id de pedido — el webhook solo trae el id de
+        // la Session de Stripe, no el nuestro (nunca lo mandamos en la URL del webhook).
+        var order = await _db.Orders.Include(o => o.Affiliate)
+            .FirstOrDefaultAsync(o => o.StripeCheckoutSessionId == checkoutSessionId);
+        if (order is null || order.Status != OrderStatus.Pending) return; // ya confirmado por el camino síncrono, o no es nuestro
+
+        await MarkPaidAsync(order, paymentIntentId);
+    }
+
+    private async Task MarkPaidAsync(Order order, string? paymentIntentId)
+    {
+        order.Status = OrderStatus.Paid;
+        order.StripePaymentIntentId = paymentIntentId;
+        order.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        await _notifications.NotifyOrderConfirmedAsync(order);
     }
 
     private static OrderDto ToDto(Order o) => new(

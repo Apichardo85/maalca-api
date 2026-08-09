@@ -988,13 +988,35 @@ app.MapGet("/api/affiliates/{id}/metrics/detailed", async (HttpContext ctx, AppD
             QrScans: g.Count(x => x.Tipo == EventoTipo.QrScan),
             CanalClicks: g.Count(x => x.Tipo == EventoTipo.CanalClick)));
 
+    // Pedidos pagados en el mismo rango — mismo patrón que rawEvents arriba: se trae solo lo
+    // necesario y se agrupa en memoria por fecha (evita repetir el problema de GroupBy+Date en SQL).
+    var paidOrders = await db.Orders
+        .Where(o => o.AffiliateId == id && o.Status == OrderStatus.Paid && o.CreatedAt >= startDate)
+        .Select(o => new { o.CreatedAt, o.Total, o.Currency })
+        .ToListAsync();
+
+    var ordersByDay = paidOrders
+        .GroupBy(o => o.CreatedAt.Date)
+        .ToDictionary(g => g.Key, g => g.Count());
+
     var dailyCounts = new List<DailyCountDto>();
     for (var day = startDate; day <= DateTime.UtcNow.Date; day = day.AddDays(1))
     {
         countsByDay.TryGetValue(day, out var counts);
+        ordersByDay.TryGetValue(day, out var ordersThatDay);
         dailyCounts.Add(new DailyCountDto(day.ToString("yyyy-MM-dd"),
-            counts.PageViews, counts.QrScans, counts.CanalClicks));
+            counts.PageViews, counts.QrScans, counts.CanalClicks, ordersThatDay));
     }
+
+    var totalVisits = dailyCounts.Sum(d => d.PageViews);
+    var totalRevenue = paidOrders.Sum(o => o.Total);
+    var conversion = new ConversionSummaryDto(
+        Visits: totalVisits,
+        PaidOrders: paidOrders.Count,
+        ConversionRatePct: totalVisits > 0 ? Math.Round(paidOrders.Count * 100m / totalVisits, 1) : 0,
+        Revenue: totalRevenue,
+        Currency: paidOrders.FirstOrDefault()?.Currency ?? "USD"
+    );
 
     var canalClickCounts = await db.EventosInteraccion
         .Where(e => e.AffiliateId == id && e.Tipo == EventoTipo.CanalClick && e.CanalId != null && e.CreatedAt >= startDate)
@@ -1013,7 +1035,7 @@ app.MapGet("/api/affiliates/{id}/metrics/detailed", async (HttpContext ctx, AppD
         .OrderByDescending(c => c.Clicks)
         .ToList();
 
-    return Results.Ok(new DetailedMetricsResponse(dailyCounts, byCanal));
+    return Results.Ok(new DetailedMetricsResponse(dailyCounts, byCanal, conversion));
 });
 
 // ============ SPACE DASHBOARD AGGREGATOR ============

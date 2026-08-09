@@ -16,9 +16,19 @@ public interface IOrderService
     Task<OrderDto?> UpdateStatusAsync(Guid affiliateId, Guid orderId, string status);
 
     /// <summary>
-    /// Confirmación síncrona al volver del Checkout hospedado de Stripe (v1: sin webhook
-    /// dedicado a pagos de Connect — ver comentario en OrderService). Verifica el estado real
-    /// contra Stripe antes de marcar Paid, nunca confía en el query param de la URL solo.
+    /// Confirmación síncrona al volver del Checkout hospedado de Stripe. Verifica el estado real
+    /// contra Stripe antes de marcar Paid, nunca confía en el query param de la URL solo. Sigue
+    /// existiendo como respaldo inmediato (UX más rápida) aunque ya no sea la única vía —
+    /// ConfirmFromWebhookAsync cubre el caso de que el cliente nunca vuelva.
     /// </summary>
     Task<OrderDto?> ConfirmCheckoutAsync(Guid orderId, string checkoutSessionId);
+
+    /// <summary>
+    /// Confirmación desde el webhook de Stripe Connect (checkout.session.completed en la cuenta
+    /// conectada) — cierra el hueco de pedidos huérfanos: si el cliente paga y cierra la pestaña
+    /// antes de volver, esto igual marca el pedido Paid y dispara el email de confirmación.
+    /// Idempotente por diseño (solo transiciona si sigue Pending) — puede correr después de
+    /// ConfirmCheckoutAsync sin duplicar nada, en cualquier orden.
+    /// </summary>
+    Task ConfirmFromWebhookAsync(string checkoutSessionId, string? paymentIntentId);
 }
