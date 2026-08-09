@@ -69,6 +69,7 @@ builder.Services.AddScoped<ICanalService, CanalService>();
 builder.Services.AddScoped<IInteractionEventService, InteractionEventService>();
 builder.Services.AddScoped<IStripeBillingService, StripeBillingService>();
 builder.Services.AddScoped<IStripeConnectService, StripeConnectService>();
+builder.Services.AddScoped<IOrderNotificationService, OrderNotificationService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 
 builder.Services.AddHttpClient();

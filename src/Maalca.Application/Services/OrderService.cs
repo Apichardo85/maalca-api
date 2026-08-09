@@ -27,8 +27,13 @@ namespace Maalca.Application.Services;
 public class OrderService : IOrderService
 {
     private readonly AppDbContext _db;
+    private readonly IOrderNotificationService _notifications;
 
-    public OrderService(AppDbContext db) => _db = db;
+    public OrderService(AppDbContext db, IOrderNotificationService notifications)
+    {
+        _db = db;
+        _notifications = notifications;
+    }
 
     public async Task<CreateOrderResponseDto?> CreateOrderAsync(string affiliateSlug, CreateOrderRequest request)
     {
@@ -117,7 +122,8 @@ public class OrderService : IOrderService
 
     public async Task<OrderDto?> UpdateStatusAsync(Guid affiliateId, Guid orderId, string status)
     {
-        var order = await _db.Orders.FirstOrDefaultAsync(o => o.Id == orderId && o.AffiliateId == affiliateId);
+        var order = await _db.Orders.Include(o => o.Affiliate)
+            .FirstOrDefaultAsync(o => o.Id == orderId && o.AffiliateId == affiliateId);
         if (order is null) return null;
         if (!Enum.TryParse<OrderStatus>(status, ignoreCase: true, out var parsed))
             throw new ArgumentException($"Invalid status '{status}'.");
@@ -125,6 +131,10 @@ public class OrderService : IOrderService
         order.Status = parsed;
         order.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
+
+        if (parsed == OrderStatus.Fulfilled)
+            await _notifications.NotifyOrderFulfilledAsync(order);
+
         return ToDto(order);
     }
 
@@ -146,6 +156,8 @@ public class OrderService : IOrderService
                 order.StripePaymentIntentId = session.PaymentIntentId;
                 order.UpdatedAt = DateTime.UtcNow;
                 await _db.SaveChangesAsync();
+
+                await _notifications.NotifyOrderConfirmedAsync(order);
             }
         }
 
