@@ -8,10 +8,19 @@ using Stripe;
 namespace Maalca.Application.Services;
 
 /// <summary>
-/// Cuenta conectada Standard + direct charges. El afiliado es el merchant of record de sus
-/// propias ventas (Stripe lo trata como "SaaS platform", no "marketplace" — ver
-/// docs.stripe.com/connect/saas-platforms-and-marketplaces). MaalCa nunca toca el dinero del
-/// afiliado: no hay transferencias ni application fee en esta primera versión.
+/// Cuenta conectada vía Accounts v2 (configuración "merchant", dashboard "full" — el
+/// equivalente v2 de lo que era Standard en v1: menor responsabilidad para MaalCa, el
+/// afiliado es el merchant of record de sus propias ventas). Se migró de v1 a v2 el
+/// 2026-08-09 porque esta cuenta de Stripe ya no permite crear cuentas conectadas con la API
+/// v1 ("Stripe no longer recommends Accounts v1 for new Connect integrations").
+///
+/// El resto del flujo NO cambió: Account Links (onboarding hospedado) y AccountService.GetAsync
+/// (status) siguen siendo v1 — Stripe permite pasar el id de una cuenta v2 a esos endpoints v1
+/// sin problema (la respuesta viene con forma v1). Solo la CREACIÓN pasó a v2. Ver
+/// docs.stripe.com/connect/accounts-v2/migrate-integration.
+///
+/// MaalCa nunca toca el dinero del afiliado: no hay transferencias ni application fee en esta
+/// primera versión.
 /// </summary>
 public class StripeConnectService : IStripeConnectService
 {
@@ -24,7 +33,8 @@ public class StripeConnectService : IStripeConnectService
         var affiliate = await _db.Affiliates.FindAsync(affiliateId)
             ?? throw new KeyNotFoundException("Affiliate not found");
 
-        StripeConfiguration.ApiKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY") ?? "";
+        var apiKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY") ?? "";
+        StripeConfiguration.ApiKey = apiKey;
 
         if (string.IsNullOrEmpty(affiliate.StripeConnectAccountId))
         {
@@ -33,13 +43,27 @@ public class StripeConnectService : IStripeConnectService
             // permite cambiar el país de una cuenta conectada después de creada, así que este
             // fallback puede dejar mal configurado a un afiliado que no sea de EE.UU. y nunca
             // tocó ese campo. El fix real es forzar a completarlo en el onboarding, no aquí.
-            var accountOptions = new AccountCreateOptions
+            var client = new StripeClient(apiKey);
+            var v2Options = new Stripe.V2.Core.AccountCreateOptions
             {
-                Type = "standard",
-                Country = string.IsNullOrEmpty(affiliate.Country) ? "US" : affiliate.Country,
-                Email = string.IsNullOrEmpty(affiliate.ContactEmail) ? null : affiliate.ContactEmail,
+                ContactEmail = string.IsNullOrEmpty(affiliate.ContactEmail) ? null : affiliate.ContactEmail,
+                Dashboard = "full",
+                Identity = new Stripe.V2.Core.AccountCreateIdentityOptions
+                {
+                    Country = string.IsNullOrEmpty(affiliate.Country) ? "US" : affiliate.Country,
+                },
+                Configuration = new Stripe.V2.Core.AccountCreateConfigurationOptions
+                {
+                    Merchant = new Stripe.V2.Core.AccountCreateConfigurationMerchantOptions
+                    {
+                        Capabilities = new Stripe.V2.Core.AccountCreateConfigurationMerchantCapabilitiesOptions
+                        {
+                            CardPayments = new Stripe.V2.Core.AccountCreateConfigurationMerchantCapabilitiesCardPaymentsOptions { Requested = true },
+                        },
+                    },
+                },
             };
-            var account = await new AccountService().CreateAsync(accountOptions);
+            var account = await client.V2.Core.Accounts.CreateAsync(v2Options);
             affiliate.StripeConnectAccountId = account.Id;
             await _db.SaveChangesAsync();
         }
