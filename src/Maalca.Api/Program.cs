@@ -68,6 +68,7 @@ builder.Services.AddScoped<IMilestoneService, MilestoneService>();
 builder.Services.AddScoped<ICanalService, CanalService>();
 builder.Services.AddScoped<IInteractionEventService, InteractionEventService>();
 builder.Services.AddScoped<IStripeBillingService, StripeBillingService>();
+builder.Services.AddScoped<IStripeConnectService, StripeConnectService>();
 
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
@@ -669,6 +670,54 @@ app.MapPost("/api/affiliates/{id}/billing/checkout-session", async (
     }
 });
 
+// ============ STRIPE CONNECT (afiliado recibe pagos de SUS clientes) ============
+// Distinto de /billing arriba: eso es la suscripción MaalCa→afiliado. Esto es la cuenta
+// donde el afiliado cobra a sus propios clientes (tarjeta/Apple Pay/Google Pay).
+app.MapPost("/api/affiliates/{id}/connect/onboarding-link", async (
+    HttpContext ctx, IStripeConnectService connectService,
+    Guid id, CreateConnectOnboardingLinkRequest request) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    var role = ctx.User.FindFirst("role")?.Value;
+    if (role == "Staff")
+        return Results.Forbid();
+
+    try
+    {
+        var link = await connectService.CreateOnboardingLinkAsync(id, request);
+        return Results.Ok(link);
+    }
+    catch (KeyNotFoundException ex)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = ex.Message } });
+    }
+    catch (Stripe.StripeException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "STRIPE_ERROR", message = ex.Message } });
+    }
+});
+
+app.MapGet("/api/affiliates/{id}/connect/status", async (
+    HttpContext ctx, IStripeConnectService connectService, Guid id) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    try
+    {
+        var status = await connectService.GetStatusAsync(id);
+        return Results.Ok(status);
+    }
+    catch (KeyNotFoundException ex)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = ex.Message } });
+    }
+});
+
 // ============ AFFILIATE EVENTS ============
 app.MapPost("/api/affiliates/{id}/events", async (
     HttpContext ctx, ILogger<Program> logger, IMilestoneService milestones,
@@ -1133,6 +1182,28 @@ app.MapPost("/api/webhooks/stripe", async (HttpContext ctx, IStripeBillingServic
     try
     {
         await billingService.HandleWebhookEventAsync(json, signature);
+        return Results.Ok();
+    }
+    catch (Stripe.StripeException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_SIGNATURE", message = ex.Message } });
+    }
+})
+.AllowAnonymous();
+
+// ============ STRIPE CONNECT WEBHOOK ============
+// Endpoint separado del de facturación de arriba — Stripe Connect envía eventos de cuenta
+// (account.updated, etc.) a una URL propia, configurada aparte en el Dashboard, con su
+// propio signing secret (STRIPE_CONNECT_WEBHOOK_SECRET).
+app.MapPost("/api/webhooks/stripe-connect", async (HttpContext ctx, IStripeConnectService connectService) =>
+{
+    using var reader = new StreamReader(ctx.Request.Body);
+    var json = await reader.ReadToEndAsync();
+    var signature = ctx.Request.Headers["Stripe-Signature"].ToString();
+
+    try
+    {
+        await connectService.HandleWebhookEventAsync(json, signature);
         return Results.Ok();
     }
     catch (Stripe.StripeException ex)

@@ -62,6 +62,18 @@ public class Affiliate : BaseEntity
     public string? StripeSubscriptionId { get; set; }
     public DateTime? PlanStartedAt { get; set; }
 
+    // ── Stripe Connect: destino de pago del afiliado (distinto de StripeCustomerId,
+    // que es al afiliado como CLIENTE de MaalCa). Esta cuenta conectada es donde
+    // el afiliado recibe el dinero de SUS PROPIOS clientes. Cuenta tipo Standard,
+    // charges directos — ver StripeConnectService. Los tres booleanos son un cache
+    // local de las capabilities de la cuenta en Stripe; se refrescan por webhook
+    // (account.updated) y por consulta explícita, nunca se infieren localmente.
+    public string? StripeConnectAccountId { get; set; }
+    public bool StripeConnectChargesEnabled { get; set; } = false;
+    public bool StripeConnectPayoutsEnabled { get; set; } = false;
+    public bool StripeConnectDetailsSubmitted { get; set; } = false;
+    public DateTime? StripeConnectUpdatedAt { get; set; }
+
     // ── Fase B: Branding (Description, PrimaryColor, Logo, HeroImage preexisten) ──
     public string? LogoUrl { get; set; }
     public string? CoverImageUrl { get; set; }
