@@ -71,6 +71,7 @@ builder.Services.AddScoped<IStripeBillingService, StripeBillingService>();
 builder.Services.AddScoped<IStripeConnectService, StripeConnectService>();
 builder.Services.AddScoped<IOrderNotificationService, OrderNotificationService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
+builder.Services.AddScoped<IScreenAdService, ScreenAdService>();
 
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
@@ -754,6 +755,67 @@ app.MapPatch("/api/affiliates/{id}/orders/{orderId}/status", async (
     {
         return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
     }
+});
+
+// ============ SCREEN ADS (comerciales del Menu Board — Fase 9 Etapa A) ============
+app.MapGet("/api/affiliates/{id}/screen-ads", async (
+    HttpContext ctx, IScreenAdService screenAdService, Guid id) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    var ads = await screenAdService.GetAllAsync(id);
+    return Results.Ok(ads);
+});
+
+app.MapPost("/api/affiliates/{id}/screen-ads", async (
+    HttpContext ctx, IScreenAdService screenAdService, Guid id, CreateScreenAdRequest request) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    try
+    {
+        var ad = await screenAdService.CreateAsync(id, request);
+        return Results.Created($"/api/affiliates/{id}/screen-ads/{ad.Id}", ad);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+});
+
+app.MapPatch("/api/affiliates/{id}/screen-ads/{adId}", async (
+    HttpContext ctx, IScreenAdService screenAdService, Guid id, Guid adId, UpdateScreenAdRequest request) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    try
+    {
+        var result = await screenAdService.UpdateAsync(id, adId, request);
+        if (result is null)
+            return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Ad not found" } });
+        return Results.Ok(result);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+});
+
+app.MapDelete("/api/affiliates/{id}/screen-ads/{adId}", async (
+    HttpContext ctx, IScreenAdService screenAdService, Guid id, Guid adId) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    var deleted = await screenAdService.DeleteAsync(id, adId);
+    return deleted ? Results.NoContent() : Results.NotFound();
 });
 
 // ============ AFFILIATE EVENTS ============

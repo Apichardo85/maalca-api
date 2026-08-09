@@ -46,7 +46,8 @@ public record CatalogItemDto(
     IReadOnlyList<string>? WeekDays = null,     // Product only — monday..sunday
     IReadOnlyList<string>? Flags = null,        // Product only — free tokens, e.g. vegetarian/spicy/glutenFree
     bool? Featured = null,                      // Product only
-    bool? Popular = null                        // Product only
+    bool? Popular = null,                       // Product only
+    string? VideoUrl = null                     // Product only — Menu Board Fase 9 Etapa A
 );
 
 public record PlanCapabilitiesDto(
@@ -63,5 +64,7 @@ public record PlanCapabilitiesDto(
 public record PublicCatalogResponse(
     AffiliatePublicDto Affiliate,
     List<CatalogItemDto> Items,
-    PlanCapabilitiesDto Capabilities
+    PlanCapabilitiesDto Capabilities,
+    List<ScreenAdDto>? ScreenAds = null,   // Fase 9 Etapa A — solo tiene contenido si hay comerciales activos vigentes
+    int? AdFrequency = null                // cada cuántos slides de categoría se inserta un comercial (null/0 = ninguno)
 );

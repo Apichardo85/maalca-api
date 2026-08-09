@@ -56,7 +56,7 @@ public class PublicCatalogService : IPublicCatalogService
                             s.Id, s.Name, s.Description, s.Price,
                             s.Category, s.ImageUrl, s.SortOrder, s.IsDemo,
                             s.DurationMinutes, null, s.Status,
-                            s.DescriptionEn, null, null, null, null, null))
+                            s.DescriptionEn, null, null, null, null, null, null))
                         .ToListAsync(),
 
                 BusinessType.Retail =>
@@ -67,17 +67,30 @@ public class PublicCatalogService : IPublicCatalogService
                             i.Id, i.Name, i.Description, i.UnitPrice,
                             i.Category, i.ImageUrl, i.SortOrder, i.IsDemo,
                             null, i.Quantity, i.Status,
-                            i.DescriptionEn, null, null, null, null, null))
+                            i.DescriptionEn, null, null, null, null, null, null))
                         .ToListAsync(),
 
                 _ => new List<CatalogItemDto>()
             };
         }
 
+        // Comerciales vigentes ahora mismo (activos, dentro de su ventana de fechas si tiene) —
+        // el Menu Board no necesita saber de vigencia, solo recibe lo que ya aplica hoy.
+        var now = DateTime.UtcNow;
+        var screenAds = await _db.ScreenAds
+            .Where(a => a.AffiliateId == affiliate.Id && a.Active
+                && (a.StartsAt == null || a.StartsAt <= now)
+                && (a.EndsAt == null || a.EndsAt >= now))
+            .OrderBy(a => a.SortOrder)
+            .Select(a => new ScreenAdDto(a.Id, a.MediaUrl, a.MediaType.ToString(), a.DurationSeconds, a.SortOrder, a.Active, a.StartsAt, a.EndsAt))
+            .ToListAsync();
+
         return new PublicCatalogResponse(
             await MapToAffiliatePublicDtoAsync(affiliate),
             items,
-            BuildCapabilities(affiliate.Plan));
+            BuildCapabilities(affiliate.Plan),
+            screenAds,
+            affiliate.AdFrequency);
     }
 
     public async Task<List<FeaturedAffiliateDto>> GetFeaturedAffiliatesAsync()

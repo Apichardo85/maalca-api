@@ -29,6 +29,7 @@ public class AppDbContext : DbContext
     public DbSet<EventoInteraccion> EventosInteraccion => Set<EventoInteraccion>();
     public DbSet<StripeProcessedEvent> StripeProcessedEvents => Set<StripeProcessedEvent>();
     public DbSet<Order> Orders => Set<Order>();
+    public DbSet<ScreenAd> ScreenAds => Set<ScreenAd>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -88,6 +89,18 @@ public class AppDbContext : DbContext
                   .HasForeignKey(e => e.AffiliateId)
                   .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.AffiliateId, e.CreatedAt });
+        });
+
+        // ScreenAd
+        modelBuilder.Entity<ScreenAd>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.MediaUrl).HasMaxLength(500).IsRequired();
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.AffiliateId, e.SortOrder });
         });
 
         // Customer
@@ -199,6 +212,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Periods).HasMaxLength(100);
             entity.Property(e => e.WeekDays).HasMaxLength(100);
             entity.Property(e => e.Flags).HasMaxLength(200);
+            entity.Property(e => e.VideoUrl).HasMaxLength(500);
             entity.HasOne(e => e.Affiliate)
                   .WithMany(a => a.Products)
                   .HasForeignKey(e => e.AffiliateId)

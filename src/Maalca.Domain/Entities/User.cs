@@ -90,6 +90,11 @@ public class Affiliate : BaseEntity
     // recurso si sigue sin setearse.
     public string? Country { get; set; }
 
+    // Fase 9 Etapa A — cada cuántos slides de menú se inserta un comercial en el Menu Board
+    // público. Null/0 = sin comerciales intercalados (comportamiento actual, sin cambios para
+    // quien no configure esto). Simple a propósito — nada de listas de orden explícito todavía.
+    public int? AdFrequency { get; set; }
+
     public ICollection<User> Users { get; set; } = new List<User>();
     public ICollection<Customer> Customers { get; set; } = new List<Customer>();
     public ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();

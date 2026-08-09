@@ -19,7 +19,8 @@ public record UpdateAffiliateProfileRequest(
     string? Address,
     string? Website,
     string? PrimaryColor,
-    string? Country = null
+    string? Country = null,
+    int? AdFrequency = null   // Fase 9 Etapa A — cada cuántos slides de menú se inserta un comercial en el board
 );
 
 public record AffiliatePublicProfileDto(

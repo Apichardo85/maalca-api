@@ -90,6 +90,12 @@ public class Product : AuditableEntity
     public bool Featured { get; set; } = false;
     public bool Popular { get; set; } = false;
 
+    // Fase 9 Etapa A (Pantallas — Menu Board con video): solo en Product, no en
+    // Service/InventoryItem — el caso real es "clip corto de un platillo" para un
+    // restaurante, no una foto de servicio o de inventario. Si hace falta ampliar a los
+    // otros tipos más adelante, se agrega igual (campo nullable, no rompe nada existente).
+    public string? VideoUrl { get; set; }
+
     public Affiliate? Affiliate { get; set; }
 }
 

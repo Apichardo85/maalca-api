@@ -72,6 +72,7 @@ public class AffiliateService : IAffiliateService
         // de una cuenta conectada ya creada, así que una vez fijado no debería sobreescribirse
         // silenciosamente. Si el afiliado necesita corregirlo, es un caso manual.
         if (request.Country != null && affiliate.Country == null) affiliate.Country = request.Country.Trim().ToUpperInvariant();
+        if (request.AdFrequency.HasValue) affiliate.AdFrequency = request.AdFrequency.Value > 0 ? request.AdFrequency.Value : null;
 
         await _context.SaveChangesAsync();
 

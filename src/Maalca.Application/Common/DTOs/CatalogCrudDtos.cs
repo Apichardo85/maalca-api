@@ -14,7 +14,8 @@ public record CreateCatalogItemRequest(
     IReadOnlyList<string>? WeekDays = null,     // Product only
     IReadOnlyList<string>? Flags = null,        // Product only
     bool? Featured = null,                      // Product only
-    bool? Popular = null                        // Product only
+    bool? Popular = null,                       // Product only
+    string? VideoUrl = null                     // Product only — Menu Board Fase 9 Etapa A
 );
 
 public record UpdateCatalogItemRequest(
@@ -33,5 +34,6 @@ public record UpdateCatalogItemRequest(
     IReadOnlyList<string>? WeekDays = null,     // Product only
     IReadOnlyList<string>? Flags = null,        // Product only
     bool? Featured = null,                      // Product only
-    bool? Popular = null                        // Product only
+    bool? Popular = null,                       // Product only
+    string? VideoUrl = null                     // Product only — Menu Board Fase 9 Etapa A
 );

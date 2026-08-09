@@ -43,7 +43,7 @@ public class CatalogCrudService : ICatalogCrudService
                         s.Id, s.Name, s.Description, s.Price,
                         s.Category, s.ImageUrl, s.SortOrder, s.IsDemo,
                         s.DurationMinutes, null, s.Status,
-                        s.DescriptionEn, null, null, null, null, null))
+                        s.DescriptionEn, null, null, null, null, null, null))
                     .ToListAsync(),
 
             BusinessType.Retail =>
@@ -54,7 +54,7 @@ public class CatalogCrudService : ICatalogCrudService
                         i.Id, i.Name, i.Description, i.UnitPrice,
                         i.Category, i.ImageUrl, i.SortOrder, i.IsDemo,
                         null, i.Quantity, i.Status,
-                        i.DescriptionEn, null, null, null, null, null))
+                        i.DescriptionEn, null, null, null, null, null, null))
                     .ToListAsync(),
 
             _ => new List<CatalogItemDto>()
@@ -82,7 +82,7 @@ public class CatalogCrudService : ICatalogCrudService
                         s.Id, s.Name, s.Description, s.Price,
                         s.Category, s.ImageUrl, s.SortOrder, s.IsDemo,
                         s.DurationMinutes, null, s.Status,
-                        s.DescriptionEn, null, null, null, null, null))
+                        s.DescriptionEn, null, null, null, null, null, null))
                     .FirstOrDefaultAsync(),
 
             BusinessType.Retail =>
@@ -92,7 +92,7 @@ public class CatalogCrudService : ICatalogCrudService
                         i.Id, i.Name, i.Description, i.UnitPrice,
                         i.Category, i.ImageUrl, i.SortOrder, i.IsDemo,
                         null, i.Quantity, i.Status,
-                        i.DescriptionEn, null, null, null, null, null))
+                        i.DescriptionEn, null, null, null, null, null, null))
                     .FirstOrDefaultAsync(),
 
             _ => null
@@ -219,6 +219,7 @@ public class CatalogCrudService : ICatalogCrudService
         if (request.Flags is not null) product.Flags = TokenList.Join(request.Flags);
         if (request.Featured.HasValue) product.Featured = request.Featured.Value;
         if (request.Popular.HasValue) product.Popular = request.Popular.Value;
+        if (request.VideoUrl is not null) product.VideoUrl = request.VideoUrl;
         if (wasDemo) product.IsDemo = false;
 
         await _db.SaveChangesAsync();
@@ -300,7 +301,8 @@ public class CatalogCrudService : ICatalogCrudService
             WeekDays = TokenList.Join(request.WeekDays),
             Flags = TokenList.Join(request.Flags),
             Featured = request.Featured ?? false,
-            Popular = request.Popular ?? false
+            Popular = request.Popular ?? false,
+            VideoUrl = request.VideoUrl
         };
         _db.Products.Add(product);
         await _db.SaveChangesAsync();
