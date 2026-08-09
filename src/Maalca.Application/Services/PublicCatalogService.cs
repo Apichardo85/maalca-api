@@ -90,7 +90,9 @@ public class PublicCatalogService : IPublicCatalogService
             items,
             BuildCapabilities(affiliate.Plan),
             screenAds,
-            affiliate.AdFrequency);
+            affiliate.AdFrequency,
+            affiliate.Language,
+            affiliate.BoardTheme.ToString());
     }
 
     public async Task<List<FeaturedAffiliateDto>> GetFeaturedAffiliatesAsync()

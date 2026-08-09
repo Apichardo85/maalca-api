@@ -62,6 +62,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.StripeSubscriptionId).HasMaxLength(255);
             entity.Property(e => e.StripeConnectAccountId).HasMaxLength(255);
             entity.Property(e => e.Country).HasMaxLength(2);
+            entity.Property(e => e.Language).HasMaxLength(2);
             entity.HasIndex(e => e.StripeCustomerId);
             entity.HasIndex(e => e.StripeConnectAccountId);
         });

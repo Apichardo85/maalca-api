@@ -4,6 +4,7 @@ using Maalca.Application.Common;
 using Maalca.Application.Common.DTOs;
 using Maalca.Application.Common.Interfaces;
 using Maalca.Domain.Entities;
+using Maalca.Domain.Enums;
 using Maalca.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -73,6 +74,13 @@ public class AffiliateService : IAffiliateService
         // silenciosamente. Si el afiliado necesita corregirlo, es un caso manual.
         if (request.Country != null && affiliate.Country == null) affiliate.Country = request.Country.Trim().ToUpperInvariant();
         if (request.AdFrequency.HasValue) affiliate.AdFrequency = request.AdFrequency.Value > 0 ? request.AdFrequency.Value : null;
+        if (request.Language != null) affiliate.Language = request.Language.Trim().ToLowerInvariant();
+        if (request.BoardTheme != null)
+        {
+            if (!Enum.TryParse<BoardTheme>(request.BoardTheme, ignoreCase: true, out var theme))
+                throw new ArgumentException($"Invalid boardTheme '{request.BoardTheme}'.");
+            affiliate.BoardTheme = theme;
+        }
 
         await _context.SaveChangesAsync();
 
