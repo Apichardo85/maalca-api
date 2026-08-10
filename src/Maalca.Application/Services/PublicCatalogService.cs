@@ -27,13 +27,23 @@ public class PublicCatalogService : IPublicCatalogService
         return await MapToAffiliatePublicDtoAsync(affiliate);
     }
 
-    public async Task<PublicCatalogResponse?> GetCatalogAsync(string slug)
+    public async Task<PublicCatalogResponse?> GetCatalogAsync(string slug, Guid? screenId = null)
     {
         var affiliate = await _db.Affiliates
             .Where(a => a.Slug == slug && a.Published)
             .FirstOrDefaultAsync();
 
         if (affiliate == null) return null;
+
+        // Fase 9 Etapa B — pantalla adicional (no la base /{slug}/board, que sigue siendo pura
+        // preferencia de Affiliate). Si mandan un screenId que no existe o es de otro afiliado,
+        // es un link roto/copiado mal — se trata igual que "afiliado no encontrado" (null → 404).
+        Domain.Entities.Screen? screen = null;
+        if (screenId.HasValue)
+        {
+            screen = await _db.Screens.FirstOrDefaultAsync(s => s.Id == screenId.Value && s.AffiliateId == affiliate.Id);
+            if (screen == null) return null;
+        }
 
         List<CatalogItemDto> items;
         if (affiliate.BusinessType is BusinessType.Restaurant or BusinessType.Creator or BusinessType.Publisher)
@@ -74,8 +84,22 @@ public class PublicCatalogService : IPublicCatalogService
             };
         }
 
+        // Fase 9 Etapa B — CategoryFilter de la pantalla (si la hay): recorta el catálogo a solo
+        // esas categorías. Comparación case-insensitive porque el filtro se escribe a mano en el
+        // dashboard y no hay validación contra las categorías reales del catálogo todavía.
+        if (screen?.CategoryFilter is { Length: > 0 } categoryFilter)
+        {
+            var allowed = categoryFilter.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .Select(c => c.ToLowerInvariant())
+                .ToHashSet();
+            if (allowed.Count > 0)
+                items = items.Where(i => i.Category != null && allowed.Contains(i.Category.ToLowerInvariant())).ToList();
+        }
+
         // Comerciales vigentes ahora mismo (activos, dentro de su ventana de fechas si tiene) —
-        // el Menu Board no necesita saber de vigencia, solo recibe lo que ya aplica hoy.
+        // el Menu Board no necesita saber de vigencia, solo recibe lo que ya aplica hoy. Pool
+        // compartido por afiliado — todas las pantallas del mismo negocio ven los mismos
+        // comerciales, solo cambia cada cuánto aparecen (AdFrequency, sí es por pantalla).
         var now = DateTime.UtcNow;
         var screenAds = await _db.ScreenAds
             .Where(a => a.AffiliateId == affiliate.Id && a.Active
@@ -90,9 +114,9 @@ public class PublicCatalogService : IPublicCatalogService
             items,
             BuildCapabilities(affiliate.Plan),
             screenAds,
-            affiliate.AdFrequency,
-            affiliate.Language,
-            affiliate.BoardTheme.ToString());
+            screen?.AdFrequency ?? affiliate.AdFrequency,
+            screen?.Language ?? affiliate.Language,
+            (screen?.BoardTheme ?? affiliate.BoardTheme).ToString());
     }
 
     public async Task<List<FeaturedAffiliateDto>> GetFeaturedAffiliatesAsync()

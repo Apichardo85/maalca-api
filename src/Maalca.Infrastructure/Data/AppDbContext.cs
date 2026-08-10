@@ -30,6 +30,7 @@ public class AppDbContext : DbContext
     public DbSet<StripeProcessedEvent> StripeProcessedEvents => Set<StripeProcessedEvent>();
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<ScreenAd> ScreenAds => Set<ScreenAd>();
+    public DbSet<Screen> Screens => Set<Screen>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -97,6 +98,20 @@ public class AppDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.MediaUrl).HasMaxLength(500).IsRequired();
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.AffiliateId, e.SortOrder });
+        });
+
+        // Screen — Fase 9 Etapa B
+        modelBuilder.Entity<Screen>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(120).IsRequired();
+            entity.Property(e => e.Language).HasMaxLength(2);
+            entity.Property(e => e.CategoryFilter).HasMaxLength(500);
             entity.HasOne(e => e.Affiliate)
                   .WithMany()
                   .HasForeignKey(e => e.AffiliateId)

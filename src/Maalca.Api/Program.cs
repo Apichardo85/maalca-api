@@ -72,6 +72,7 @@ builder.Services.AddScoped<IStripeConnectService, StripeConnectService>();
 builder.Services.AddScoped<IOrderNotificationService, OrderNotificationService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IScreenAdService, ScreenAdService>();
+builder.Services.AddScoped<IScreenService, ScreenService>();
 
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
@@ -818,6 +819,76 @@ app.MapDelete("/api/affiliates/{id}/screen-ads/{adId}", async (
     return deleted ? Results.NoContent() : Results.NotFound();
 });
 
+// ============ SCREENS (pantallas adicionales del Menu Board — Fase 9 Etapa B) ============
+app.MapGet("/api/affiliates/{id}/screens", async (
+    HttpContext ctx, IScreenService screenService, Guid id) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    var screens = await screenService.GetAllAsync(id);
+    return Results.Ok(screens);
+});
+
+app.MapPost("/api/affiliates/{id}/screens", async (
+    HttpContext ctx, IScreenService screenService, Guid id, CreateScreenRequest request) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    try
+    {
+        var screen = await screenService.CreateAsync(id, request);
+        return Results.Created($"/api/affiliates/{id}/screens/{screen.Id}", screen);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+});
+
+app.MapPatch("/api/affiliates/{id}/screens/{screenId}", async (
+    HttpContext ctx, IScreenService screenService, Guid id, Guid screenId, UpdateScreenRequest request) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    try
+    {
+        var result = await screenService.UpdateAsync(id, screenId, request);
+        return Results.Ok(result);
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Screen not found" } });
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+});
+
+app.MapDelete("/api/affiliates/{id}/screens/{screenId}", async (
+    HttpContext ctx, IScreenService screenService, Guid id, Guid screenId) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    try
+    {
+        await screenService.DeleteAsync(id, screenId);
+        return Results.NoContent();
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Screen not found" } });
+    }
+});
+
 // ============ AFFILIATE EVENTS ============
 app.MapPost("/api/affiliates/{id}/events", async (
     HttpContext ctx, ILogger<Program> logger, IMilestoneService milestones,
@@ -1258,9 +1329,9 @@ app.MapGet("/api/public/affiliates/{slug}", async (IPublicCatalogService catalog
 })
 .AllowAnonymous();
 
-app.MapGet("/api/public/affiliates/{slug}/catalog", async (IPublicCatalogService catalogService, string slug, HttpResponse response) =>
+app.MapGet("/api/public/affiliates/{slug}/catalog", async (IPublicCatalogService catalogService, string slug, HttpResponse response, Guid? screenId) =>
 {
-    var result = await catalogService.GetCatalogAsync(slug);
+    var result = await catalogService.GetCatalogAsync(slug, screenId);
     if (result == null)
         return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
     response.Headers.CacheControl = "public, max-age=60";
