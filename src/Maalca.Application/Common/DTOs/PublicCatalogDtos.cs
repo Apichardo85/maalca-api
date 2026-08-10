@@ -47,7 +47,8 @@ public record CatalogItemDto(
     IReadOnlyList<string>? Flags = null,        // Product only — free tokens, e.g. vegetarian/spicy/glutenFree
     bool? Featured = null,                      // Product only
     bool? Popular = null,                       // Product only
-    string? VideoUrl = null                     // Product only — Menu Board Fase 9 Etapa A
+    string? VideoUrl = null,                    // Product only — Menu Board Fase 9 Etapa A
+    IReadOnlyList<string>? Images = null        // Product/Service/InventoryItem — galería completa; Images[0] == ImageUrl
 );
 
 public record PlanCapabilitiesDto(

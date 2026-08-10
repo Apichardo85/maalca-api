@@ -15,7 +15,8 @@ public record CreateCatalogItemRequest(
     IReadOnlyList<string>? Flags = null,        // Product only
     bool? Featured = null,                      // Product only
     bool? Popular = null,                       // Product only
-    string? VideoUrl = null                     // Product only — Menu Board Fase 9 Etapa A
+    string? VideoUrl = null,                    // Product only — Menu Board Fase 9 Etapa A
+    IReadOnlyList<string>? Images = null        // Galería completa (orden = orden de visualización); Images[0] pasa a ser ImageUrl
 );
 
 public record UpdateCatalogItemRequest(
@@ -35,5 +36,6 @@ public record UpdateCatalogItemRequest(
     IReadOnlyList<string>? Flags = null,        // Product only
     bool? Featured = null,                      // Product only
     bool? Popular = null,                       // Product only
-    string? VideoUrl = null                     // Product only — Menu Board Fase 9 Etapa A
+    string? VideoUrl = null,                    // Product only — Menu Board Fase 9 Etapa A
+    IReadOnlyList<string>? Images = null        // null = no tocar la galería; [] = vaciarla; lista = reemplazarla entera
 );

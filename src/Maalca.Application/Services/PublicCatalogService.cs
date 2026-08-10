@@ -59,26 +59,18 @@ public class PublicCatalogService : IPublicCatalogService
             items = affiliate.BusinessType switch
             {
                 BusinessType.Barber or BusinessType.Service or BusinessType.Professional =>
-                    await _db.Services
+                    (await _db.Services
                         .Where(s => s.AffiliateId == affiliate.Id && s.IsPubliclyVisible)
                         .OrderBy(s => s.SortOrder).ThenBy(s => s.Name)
-                        .Select(s => new CatalogItemDto(
-                            s.Id, s.Name, s.Description, s.Price,
-                            s.Category, s.ImageUrl, s.SortOrder, s.IsDemo,
-                            s.DurationMinutes, null, s.Status,
-                            s.DescriptionEn, null, null, null, null, null, null))
-                        .ToListAsync(),
+                        .ToListAsync())
+                        .Select(CatalogItemMapper.FromService).ToList(),
 
                 BusinessType.Retail =>
-                    await _db.InventoryItems
+                    (await _db.InventoryItems
                         .Where(i => i.AffiliateId == affiliate.Id && i.IsPubliclyVisible)
                         .OrderBy(i => i.SortOrder).ThenBy(i => i.Name)
-                        .Select(i => new CatalogItemDto(
-                            i.Id, i.Name, i.Description, i.UnitPrice,
-                            i.Category, i.ImageUrl, i.SortOrder, i.IsDemo,
-                            null, i.Quantity, i.Status,
-                            i.DescriptionEn, null, null, null, null, null, null))
-                        .ToListAsync(),
+                        .ToListAsync())
+                        .Select(CatalogItemMapper.FromInventoryItem).ToList(),
 
                 _ => new List<CatalogItemDto>()
             };

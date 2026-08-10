@@ -12,6 +12,10 @@ public class Service : AuditableEntity
     public int DurationMinutes { get; set; } = 30;
     public string? Category { get; set; }
     public string? ImageUrl { get; set; }
+    // Galería — JSON array de URLs, orden = orden de visualización. ImageUrl se mantiene
+    // sincronizado con Images[0] (o null si Images queda vacío) para que nada que ya lea
+    // ImageUrl directamente (templates públicos, MenuBoard, etc.) se entere de este cambio.
+    public string? Images { get; set; }
     public bool IsActive { get; set; } = true;
     public string Status { get; set; } = "Active";
     public bool IsPubliclyVisible { get; set; } = false;

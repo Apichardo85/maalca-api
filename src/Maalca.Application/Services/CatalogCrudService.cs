@@ -36,26 +36,18 @@ public class CatalogCrudService : ICatalogCrudService
         return affiliate.BusinessType switch
         {
             BusinessType.Barber or BusinessType.Service or BusinessType.Professional =>
-                await _db.Services
+                (await _db.Services
                     .Where(s => s.AffiliateId == affiliateId)
                     .OrderBy(s => s.SortOrder).ThenBy(s => s.Name)
-                    .Select(s => new CatalogItemDto(
-                        s.Id, s.Name, s.Description, s.Price,
-                        s.Category, s.ImageUrl, s.SortOrder, s.IsDemo,
-                        s.DurationMinutes, null, s.Status,
-                        s.DescriptionEn, null, null, null, null, null, null))
-                    .ToListAsync(),
+                    .ToListAsync())
+                    .Select(CatalogItemMapper.FromService).ToList(),
 
             BusinessType.Retail =>
-                await _db.InventoryItems
+                (await _db.InventoryItems
                     .Where(i => i.AffiliateId == affiliateId)
                     .OrderBy(i => i.SortOrder).ThenBy(i => i.Name)
-                    .Select(i => new CatalogItemDto(
-                        i.Id, i.Name, i.Description, i.UnitPrice,
-                        i.Category, i.ImageUrl, i.SortOrder, i.IsDemo,
-                        null, i.Quantity, i.Status,
-                        i.DescriptionEn, null, null, null, null, null, null))
-                    .ToListAsync(),
+                    .ToListAsync())
+                    .Select(CatalogItemMapper.FromInventoryItem).ToList(),
 
             _ => new List<CatalogItemDto>()
         };
@@ -76,27 +68,49 @@ public class CatalogCrudService : ICatalogCrudService
         return affiliate.BusinessType switch
         {
             BusinessType.Barber or BusinessType.Service or BusinessType.Professional =>
-                await _db.Services
-                    .Where(s => s.AffiliateId == affiliateId && s.Id == itemId)
-                    .Select(s => new CatalogItemDto(
-                        s.Id, s.Name, s.Description, s.Price,
-                        s.Category, s.ImageUrl, s.SortOrder, s.IsDemo,
-                        s.DurationMinutes, null, s.Status,
-                        s.DescriptionEn, null, null, null, null, null, null))
-                    .FirstOrDefaultAsync(),
+                MapNullable(await _db.Services
+                    .FirstOrDefaultAsync(s => s.AffiliateId == affiliateId && s.Id == itemId),
+                    CatalogItemMapper.FromService),
 
             BusinessType.Retail =>
-                await _db.InventoryItems
-                    .Where(i => i.AffiliateId == affiliateId && i.Id == itemId)
-                    .Select(i => new CatalogItemDto(
-                        i.Id, i.Name, i.Description, i.UnitPrice,
-                        i.Category, i.ImageUrl, i.SortOrder, i.IsDemo,
-                        null, i.Quantity, i.Status,
-                        i.DescriptionEn, null, null, null, null, null, null))
-                    .FirstOrDefaultAsync(),
+                MapNullable(await _db.InventoryItems
+                    .FirstOrDefaultAsync(i => i.AffiliateId == affiliateId && i.Id == itemId),
+                    CatalogItemMapper.FromInventoryItem),
 
             _ => null
         };
+    }
+
+    private static CatalogItemDto? MapNullable<TEntity>(TEntity? entity, Func<TEntity, CatalogItemDto> map)
+        where TEntity : class
+        => entity is null ? null : map(entity);
+
+    // Galería — resuelve (ImageUrl, ImagesJson) para creación: si viene una galería, Images[0]
+    // gana sobre ImageUrl; si no, se usa ImageUrl tal cual (compatibilidad hacia atrás).
+    private static (string? ImageUrl, string? ImagesJson) ResolveImagesForCreate(
+        IReadOnlyList<string>? images, string? fallbackImageUrl)
+    {
+        if (images is null) return (fallbackImageUrl, null);
+        if (images.Count == 0) return (null, null);
+        return (images[0], JsonArrayField.Serialize(images));
+    }
+
+    // Galería — tri-estado para updates: null = no tocar la galería; [] = vaciarla
+    // (ImageUrl también queda null); lista = reemplazarla entera (ImageUrl = Images[0]).
+    // Si Images es null pero viene ImageUrl suelto, se respeta el comportamiento previo.
+    private static void ApplyImagesPatch(
+        IReadOnlyList<string>? images, string? imageUrl,
+        Action<string?> setImageUrl, Action<string?> setImages)
+    {
+        if (images is not null)
+        {
+            setImages(images.Count == 0 ? null : JsonArrayField.Serialize(images));
+            setImageUrl(images.Count > 0 ? images[0] : null);
+        }
+        else if (imageUrl is not null)
+        {
+            setImageUrl(imageUrl);
+        }
     }
 
     public async Task<CatalogItemDto> CreateItemAsync(Guid affiliateId, CreateCatalogItemRequest request)
@@ -209,7 +223,7 @@ public class CatalogCrudService : ICatalogCrudService
         if (request.Description is not null) product.Description = request.Description;
         if (request.Category is not null) product.Category = request.Category;
         if (request.Price.HasValue) product.Price = request.Price.Value;
-        if (request.ImageUrl is not null) product.ImageUrl = request.ImageUrl;
+        ApplyImagesPatch(request.Images, request.ImageUrl, v => product.ImageUrl = v, v => product.Images = v);
         if (request.SortOrder.HasValue) product.SortOrder = request.SortOrder.Value;
         if (request.IsPubliclyVisible.HasValue) product.IsPubliclyVisible = request.IsPubliclyVisible.Value;
         if (request.Status is not null) product.Status = request.Status;
@@ -237,7 +251,7 @@ public class CatalogCrudService : ICatalogCrudService
         if (request.Description is not null) service.Description = request.Description;
         if (request.Category is not null) service.Category = request.Category;
         if (request.Price.HasValue) service.Price = request.Price.Value;
-        if (request.ImageUrl is not null) service.ImageUrl = request.ImageUrl;
+        ApplyImagesPatch(request.Images, request.ImageUrl, v => service.ImageUrl = v, v => service.Images = v);
         if (request.SortOrder.HasValue) service.SortOrder = request.SortOrder.Value;
         if (request.IsPubliclyVisible.HasValue) service.IsPubliclyVisible = request.IsPubliclyVisible.Value;
         if (request.DurationMinutes.HasValue) service.DurationMinutes = request.DurationMinutes.Value;
@@ -246,10 +260,7 @@ public class CatalogCrudService : ICatalogCrudService
         if (wasDemo) service.IsDemo = false;
 
         await _db.SaveChangesAsync();
-        return (new CatalogItemDto(service.Id, service.Name, service.Description, service.Price,
-            service.Category, service.ImageUrl, service.SortOrder, service.IsDemo,
-            service.DurationMinutes, null, service.Status,
-            service.DescriptionEn), wasDemo);
+        return (CatalogItemMapper.FromService(service), wasDemo);
     }
 
     private async Task<(CatalogItemDto, bool)> PatchInventoryItemAsync(Guid affiliateId, Guid itemId, UpdateCatalogItemRequest request)
@@ -263,7 +274,7 @@ public class CatalogCrudService : ICatalogCrudService
         if (request.Description is not null) item.Description = request.Description;
         if (request.Category is not null) item.Category = request.Category;
         if (request.Price.HasValue) item.UnitPrice = request.Price.Value;
-        if (request.ImageUrl is not null) item.ImageUrl = request.ImageUrl;
+        ApplyImagesPatch(request.Images, request.ImageUrl, v => item.ImageUrl = v, v => item.Images = v);
         if (request.SortOrder.HasValue) item.SortOrder = request.SortOrder.Value;
         if (request.IsPubliclyVisible.HasValue) item.IsPubliclyVisible = request.IsPubliclyVisible.Value;
         if (request.Stock.HasValue) item.Quantity = request.Stock.Value;
@@ -272,10 +283,7 @@ public class CatalogCrudService : ICatalogCrudService
         if (wasDemo) item.IsDemo = false;
 
         await _db.SaveChangesAsync();
-        return (new CatalogItemDto(item.Id, item.Name, item.Description, item.UnitPrice,
-            item.Category, item.ImageUrl, item.SortOrder, item.IsDemo,
-            null, item.Quantity, item.Status,
-            item.DescriptionEn), wasDemo);
+        return (CatalogItemMapper.FromInventoryItem(item), wasDemo);
     }
 
     // ── Create helpers ────────────────────────────────────────────
@@ -283,6 +291,7 @@ public class CatalogCrudService : ICatalogCrudService
     private async Task<CatalogItemDto> CreateProductAsync(Guid affiliateId, CreateCatalogItemRequest request)
     {
         ValidateProductTokens(request.Periods, request.WeekDays);
+        var (productImageUrl, productImagesJson) = ResolveImagesForCreate(request.Images, request.ImageUrl);
 
         var product = new Product
         {
@@ -291,7 +300,8 @@ public class CatalogCrudService : ICatalogCrudService
             Description = request.Description,
             Price = request.Price,
             Category = request.Category,
-            ImageUrl = request.ImageUrl,
+            ImageUrl = productImageUrl,
+            Images = productImagesJson,
             SortOrder = request.SortOrder,
             IsPubliclyVisible = true,
             IsDemo = false,
@@ -311,6 +321,8 @@ public class CatalogCrudService : ICatalogCrudService
 
     private async Task<CatalogItemDto> CreateServiceAsync(Guid affiliateId, CreateCatalogItemRequest request)
     {
+        var (serviceImageUrl, serviceImagesJson) = ResolveImagesForCreate(request.Images, request.ImageUrl);
+
         var service = new Service
         {
             AffiliateId = affiliateId,
@@ -319,7 +331,8 @@ public class CatalogCrudService : ICatalogCrudService
             DescriptionEn = request.DescriptionEn,
             Price = request.Price,
             Category = request.Category,
-            ImageUrl = request.ImageUrl,
+            ImageUrl = serviceImageUrl,
+            Images = serviceImagesJson,
             SortOrder = request.SortOrder,
             DurationMinutes = request.DurationMinutes ?? 30,
             IsPubliclyVisible = true,
@@ -328,14 +341,13 @@ public class CatalogCrudService : ICatalogCrudService
         };
         _db.Services.Add(service);
         await _db.SaveChangesAsync();
-        return new CatalogItemDto(service.Id, service.Name, service.Description, service.Price,
-            service.Category, service.ImageUrl, service.SortOrder, service.IsDemo,
-            service.DurationMinutes, null, service.Status,
-            service.DescriptionEn);
+        return CatalogItemMapper.FromService(service);
     }
 
     private async Task<CatalogItemDto> CreateInventoryItemAsync(Guid affiliateId, CreateCatalogItemRequest request)
     {
+        var (itemImageUrl, itemImagesJson) = ResolveImagesForCreate(request.Images, request.ImageUrl);
+
         var item = new InventoryItem
         {
             AffiliateId = affiliateId,
@@ -344,7 +356,8 @@ public class CatalogCrudService : ICatalogCrudService
             DescriptionEn = request.DescriptionEn,
             UnitPrice = request.Price,
             Category = request.Category,
-            ImageUrl = request.ImageUrl,
+            ImageUrl = itemImageUrl,
+            Images = itemImagesJson,
             SortOrder = request.SortOrder,
             Quantity = request.Stock ?? 0,
             IsPubliclyVisible = true,
@@ -353,10 +366,7 @@ public class CatalogCrudService : ICatalogCrudService
         };
         _db.InventoryItems.Add(item);
         await _db.SaveChangesAsync();
-        return new CatalogItemDto(item.Id, item.Name, item.Description, item.UnitPrice,
-            item.Category, item.ImageUrl, item.SortOrder, item.IsDemo,
-            null, item.Quantity, item.Status,
-            item.DescriptionEn);
+        return CatalogItemMapper.FromInventoryItem(item);
     }
 
     // ── Update helpers ────────────────────────────────────────────
@@ -378,14 +388,12 @@ public class CatalogCrudService : ICatalogCrudService
         if (request.Description != null) product.Description = request.Description;
         if (request.Price.HasValue) product.Price = request.Price.Value;
         if (request.Category != null) product.Category = request.Category;
-        if (request.ImageUrl != null) product.ImageUrl = request.ImageUrl;
+        ApplyImagesPatch(request.Images, request.ImageUrl, v => product.ImageUrl = v, v => product.Images = v);
         if (request.SortOrder.HasValue) product.SortOrder = request.SortOrder.Value;
         if (request.IsPubliclyVisible.HasValue) product.IsPubliclyVisible = request.IsPubliclyVisible.Value;
 
         await _db.SaveChangesAsync();
-        return new CatalogItemDto(product.Id, product.Name, product.Description, product.Price,
-            product.Category, product.ImageUrl, product.SortOrder, product.IsDemo,
-            null, null, product.Status);
+        return CatalogItemMapper.FromProduct(product);
     }
 
     private async Task<CatalogItemDto?> UpdateServiceAsync(Guid affiliateId, Guid itemId, UpdateCatalogItemRequest request)
@@ -405,15 +413,13 @@ public class CatalogCrudService : ICatalogCrudService
         if (request.Description != null) service.Description = request.Description;
         if (request.Price.HasValue) service.Price = request.Price.Value;
         if (request.Category != null) service.Category = request.Category;
-        if (request.ImageUrl != null) service.ImageUrl = request.ImageUrl;
+        ApplyImagesPatch(request.Images, request.ImageUrl, v => service.ImageUrl = v, v => service.Images = v);
         if (request.SortOrder.HasValue) service.SortOrder = request.SortOrder.Value;
         if (request.IsPubliclyVisible.HasValue) service.IsPubliclyVisible = request.IsPubliclyVisible.Value;
         if (request.DurationMinutes.HasValue) service.DurationMinutes = request.DurationMinutes.Value;
 
         await _db.SaveChangesAsync();
-        return new CatalogItemDto(service.Id, service.Name, service.Description, service.Price,
-            service.Category, service.ImageUrl, service.SortOrder, service.IsDemo,
-            service.DurationMinutes, null, service.Status);
+        return CatalogItemMapper.FromService(service);
     }
 
     private async Task<CatalogItemDto?> UpdateInventoryItemAsync(Guid affiliateId, Guid itemId, UpdateCatalogItemRequest request)
@@ -433,15 +439,13 @@ public class CatalogCrudService : ICatalogCrudService
         if (request.Description != null) item.Description = request.Description;
         if (request.Price.HasValue) item.UnitPrice = request.Price.Value;
         if (request.Category != null) item.Category = request.Category;
-        if (request.ImageUrl != null) item.ImageUrl = request.ImageUrl;
+        ApplyImagesPatch(request.Images, request.ImageUrl, v => item.ImageUrl = v, v => item.Images = v);
         if (request.SortOrder.HasValue) item.SortOrder = request.SortOrder.Value;
         if (request.IsPubliclyVisible.HasValue) item.IsPubliclyVisible = request.IsPubliclyVisible.Value;
         if (request.Stock.HasValue) item.Quantity = request.Stock.Value;
 
         await _db.SaveChangesAsync();
-        return new CatalogItemDto(item.Id, item.Name, item.Description, item.UnitPrice,
-            item.Category, item.ImageUrl, item.SortOrder, item.IsDemo,
-            null, item.Quantity, item.Status);
+        return CatalogItemMapper.FromInventoryItem(item);
     }
 
     // ── Validation ──────────────────────────────────────────────────

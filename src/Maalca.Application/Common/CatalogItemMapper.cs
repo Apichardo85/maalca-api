@@ -3,14 +3,26 @@ using Maalca.Domain.Entities;
 
 namespace Maalca.Application.Common;
 
-// Centralizes Product -> CatalogItemDto mapping so the menu-style fields
-// (DescriptionEn/Periods/WeekDays/Flags/Featured/Popular) are only wired in one
-// place — used by both CatalogCrudService (dashboard) and PublicCatalogService.
+// Centralizes Product/Service/InventoryItem -> CatalogItemDto mapping en un solo lugar —
+// usado por CatalogCrudService (dashboard) y PublicCatalogService. Mapea sobre entidades ya
+// materializadas (LINQ-to-Objects), nunca dentro de un .Select() de IQueryable — así se puede
+// llamar libremente a JsonArrayField.Parse/TokenList.Parse sin que EF Core intente traducirlos
+// a SQL (que fallaría en runtime).
 public static class CatalogItemMapper
 {
     public static CatalogItemDto FromProduct(Product p) => new(
         p.Id, p.Name, p.Description, p.Price, p.Category, p.ImageUrl, p.SortOrder, p.IsDemo,
         null, null, p.Status,
         p.DescriptionEn, TokenList.Parse(p.Periods), TokenList.Parse(p.WeekDays), TokenList.Parse(p.Flags),
-        p.Featured, p.Popular, p.VideoUrl);
+        p.Featured, p.Popular, p.VideoUrl, JsonArrayField.Parse<string>(p.Images));
+
+    public static CatalogItemDto FromService(Service s) => new(
+        s.Id, s.Name, s.Description, s.Price, s.Category, s.ImageUrl, s.SortOrder, s.IsDemo,
+        s.DurationMinutes, null, s.Status,
+        s.DescriptionEn, Images: JsonArrayField.Parse<string>(s.Images));
+
+    public static CatalogItemDto FromInventoryItem(InventoryItem i) => new(
+        i.Id, i.Name, i.Description, i.UnitPrice, i.Category, i.ImageUrl, i.SortOrder, i.IsDemo,
+        null, i.Quantity, i.Status,
+        i.DescriptionEn, Images: JsonArrayField.Parse<string>(i.Images));
 }

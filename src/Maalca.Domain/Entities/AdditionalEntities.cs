@@ -28,6 +28,7 @@ public class InventoryItem : AuditableEntity
     public decimal UnitPrice { get; set; }
     public string Status { get; set; } = "Active";
     public string? ImageUrl { get; set; }
+    public string? Images { get; set; }
     public bool IsPubliclyVisible { get; set; } = false;
     public int SortOrder { get; set; } = 0;
     public bool IsDemo { get; set; } = false;
@@ -74,6 +75,10 @@ public class Product : AuditableEntity
     public decimal Price { get; set; }
     public int Stock { get; set; } = 0;
     public string? ImageUrl { get; set; }
+    // Galería — JSON array de URLs, orden = orden de visualización. ImageUrl se mantiene
+    // sincronizado con Images[0] (o null si Images queda vacío) para que nada que ya lea
+    // ImageUrl directamente (templates públicos, MenuBoard, etc.) se entere de este cambio.
+    public string? Images { get; set; }
     public string Status { get; set; } = "Active";
     public bool IsPubliclyVisible { get; set; } = false;
     public int SortOrder { get; set; } = 0;
