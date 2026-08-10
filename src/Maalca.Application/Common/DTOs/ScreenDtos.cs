@@ -7,7 +7,8 @@ public record ScreenDto(
     string? Language,
     string? BoardTheme,
     int? AdFrequency,
-    string? CategoryFilter
+    string? CategoryFilter,
+    string? TransitionEffect = null
 );
 
 public record CreateScreenRequest(
@@ -15,7 +16,8 @@ public record CreateScreenRequest(
     string? Language = null,
     string? BoardTheme = null,
     int? AdFrequency = null,
-    string? CategoryFilter = null
+    string? CategoryFilter = null,
+    string? TransitionEffect = null
 );
 
 /// <summary>
@@ -30,5 +32,6 @@ public record UpdateScreenRequest(
     string? Language,
     string? BoardTheme,
     int? AdFrequency,
-    string? CategoryFilter
+    string? CategoryFilter,
+    string? TransitionEffect = null
 );

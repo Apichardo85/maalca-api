@@ -68,5 +68,6 @@ public record PublicCatalogResponse(
     List<ScreenAdDto>? ScreenAds = null,   // Fase 9 Etapa A — solo tiene contenido si hay comerciales activos vigentes
     int? AdFrequency = null,               // cada cuántos slides de categoría se inserta un comercial (null/0 = ninguno)
     string? Language = null,               // Fase 9 — "es" | "en", preferencia del board
-    string? BoardTheme = null              // Fase 9 — "Dark" | "Light"
+    string? BoardTheme = null,             // Fase 9 — "Dark" | "Light"
+    string? TransitionEffect = null        // Fase 9 — "Fade" | "Slide" | "Zoom" | "None"
 );

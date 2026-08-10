@@ -33,6 +33,7 @@ public class ScreenAdService : IScreenAdService
             AffiliateId = affiliateId,
             MediaUrl = request.MediaUrl,
             MediaType = mediaType,
+            Fit = ParseFit(request.Fit),
             DurationSeconds = request.DurationSeconds > 0 ? request.DurationSeconds : 8,
             SortOrder = request.SortOrder,
             StartsAt = request.StartsAt,
@@ -58,6 +59,7 @@ public class ScreenAdService : IScreenAdService
         if (request.DurationSeconds.HasValue) ad.DurationSeconds = request.DurationSeconds.Value;
         if (request.SortOrder.HasValue) ad.SortOrder = request.SortOrder.Value;
         if (request.Active.HasValue) ad.Active = request.Active.Value;
+        if (request.Fit is not null) ad.Fit = ParseFit(request.Fit);
         ad.StartsAt = request.StartsAt ?? ad.StartsAt;
         ad.EndsAt = request.EndsAt ?? ad.EndsAt;
         ad.UpdatedAt = DateTime.UtcNow;
@@ -75,7 +77,15 @@ public class ScreenAdService : IScreenAdService
         return true;
     }
 
+    private static ScreenAdFit ParseFit(string? fit)
+    {
+        if (string.IsNullOrWhiteSpace(fit)) return ScreenAdFit.Contain;
+        if (!Enum.TryParse<ScreenAdFit>(fit, ignoreCase: true, out var parsed))
+            throw new ArgumentException($"Invalid fit '{fit}'.");
+        return parsed;
+    }
+
     private static ScreenAdDto ToDto(ScreenAd a) => new(
-        a.Id, a.MediaUrl, a.MediaType.ToString(), a.DurationSeconds, a.SortOrder, a.Active, a.StartsAt, a.EndsAt
+        a.Id, a.MediaUrl, a.MediaType.ToString(), a.DurationSeconds, a.SortOrder, a.Active, a.StartsAt, a.EndsAt, a.Fit.ToString()
     );
 }

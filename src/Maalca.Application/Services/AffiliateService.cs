@@ -81,6 +81,12 @@ public class AffiliateService : IAffiliateService
                 throw new ArgumentException($"Invalid boardTheme '{request.BoardTheme}'.");
             affiliate.BoardTheme = theme;
         }
+        if (request.TransitionEffect != null)
+        {
+            if (!Enum.TryParse<BoardTransitionEffect>(request.TransitionEffect, ignoreCase: true, out var effect))
+                throw new ArgumentException($"Invalid transitionEffect '{request.TransitionEffect}'.");
+            affiliate.TransitionEffect = effect;
+        }
 
         await _context.SaveChangesAsync();
 

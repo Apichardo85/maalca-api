@@ -22,7 +22,8 @@ public record UpdateAffiliateProfileRequest(
     string? Country = null,
     int? AdFrequency = null,  // Fase 9 Etapa A — cada cuántos slides de menú se inserta un comercial en el board
     string? Language = null,    // Fase 9 — "es" | "en", preferencia del board (no del visitante)
-    string? BoardTheme = null   // Fase 9 — "Dark" | "Light"
+    string? BoardTheme = null,  // Fase 9 — "Dark" | "Light"
+    string? TransitionEffect = null   // Fase 9 — "Fade" | "Slide" | "Zoom" | "None"
 );
 
 public record AffiliatePublicProfileDto(

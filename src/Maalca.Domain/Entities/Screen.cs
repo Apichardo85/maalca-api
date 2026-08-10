@@ -25,6 +25,7 @@ public class Screen : BaseEntity
 
     public string? Language { get; set; }
     public BoardTheme? BoardTheme { get; set; }
+    public BoardTransitionEffect? TransitionEffect { get; set; }
     public int? AdFrequency { get; set; }
 
     /// Nombres de categoría separados por coma — null/vacío = todas las categorías (igual que

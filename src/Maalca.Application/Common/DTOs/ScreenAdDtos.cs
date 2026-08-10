@@ -8,7 +8,8 @@ public record ScreenAdDto(
     int SortOrder,
     bool Active,
     DateTime? StartsAt,
-    DateTime? EndsAt
+    DateTime? EndsAt,
+    string Fit = "Contain"   // "Contain" | "Cover" — cómo se ajusta dentro del recuadro
 );
 
 public record CreateScreenAdRequest(
@@ -17,7 +18,8 @@ public record CreateScreenAdRequest(
     int DurationSeconds,
     int SortOrder,
     DateTime? StartsAt,
-    DateTime? EndsAt
+    DateTime? EndsAt,
+    string? Fit = null
 );
 
 public record UpdateScreenAdRequest(
@@ -27,5 +29,6 @@ public record UpdateScreenAdRequest(
     int? SortOrder,
     bool? Active,
     DateTime? StartsAt,
-    DateTime? EndsAt
+    DateTime? EndsAt,
+    string? Fit = null
 );

@@ -17,6 +17,7 @@ public class ScreenAd : BaseEntity
 
     public string MediaUrl { get; set; } = string.Empty;
     public ScreenAdMediaType MediaType { get; set; } = ScreenAdMediaType.Image;
+    public ScreenAdFit Fit { get; set; } = ScreenAdFit.Contain;
     public int DurationSeconds { get; set; } = 8;
     public int SortOrder { get; set; } = 0;
     public bool Active { get; set; } = true;

@@ -36,6 +36,7 @@ public class ScreenService : IScreenService
             SortOrder = maxSort + 1,
             Language = NormalizeLanguage(request.Language),
             BoardTheme = theme,
+            TransitionEffect = ParseEffect(request.TransitionEffect),
             AdFrequency = request.AdFrequency,
             CategoryFilter = string.IsNullOrWhiteSpace(request.CategoryFilter) ? null : request.CategoryFilter.Trim(),
         };
@@ -56,6 +57,7 @@ public class ScreenService : IScreenService
         // porque el form de Pantallas manda su estado completo en cada guardado.
         screen.Language = NormalizeLanguage(request.Language);
         screen.BoardTheme = ParseTheme(request.BoardTheme);
+        screen.TransitionEffect = ParseEffect(request.TransitionEffect);
         screen.AdFrequency = request.AdFrequency;
         screen.CategoryFilter = string.IsNullOrWhiteSpace(request.CategoryFilter) ? null : request.CategoryFilter.Trim();
 
@@ -82,6 +84,14 @@ public class ScreenService : IScreenService
         return parsed;
     }
 
+    private static BoardTransitionEffect? ParseEffect(string? effect)
+    {
+        if (string.IsNullOrWhiteSpace(effect)) return null;
+        if (!Enum.TryParse<BoardTransitionEffect>(effect, ignoreCase: true, out var parsed))
+            throw new ArgumentException($"Invalid transitionEffect '{effect}'.");
+        return parsed;
+    }
+
     private static ScreenDto ToDto(Screen s) => new(
-        s.Id, s.Name, s.SortOrder, s.Language, s.BoardTheme?.ToString(), s.AdFrequency, s.CategoryFilter);
+        s.Id, s.Name, s.SortOrder, s.Language, s.BoardTheme?.ToString(), s.AdFrequency, s.CategoryFilter, s.TransitionEffect?.ToString());
 }

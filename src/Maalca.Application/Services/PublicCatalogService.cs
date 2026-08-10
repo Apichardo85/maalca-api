@@ -106,7 +106,7 @@ public class PublicCatalogService : IPublicCatalogService
                 && (a.StartsAt == null || a.StartsAt <= now)
                 && (a.EndsAt == null || a.EndsAt >= now))
             .OrderBy(a => a.SortOrder)
-            .Select(a => new ScreenAdDto(a.Id, a.MediaUrl, a.MediaType.ToString(), a.DurationSeconds, a.SortOrder, a.Active, a.StartsAt, a.EndsAt))
+            .Select(a => new ScreenAdDto(a.Id, a.MediaUrl, a.MediaType.ToString(), a.DurationSeconds, a.SortOrder, a.Active, a.StartsAt, a.EndsAt, a.Fit.ToString()))
             .ToListAsync();
 
         return new PublicCatalogResponse(
@@ -116,7 +116,8 @@ public class PublicCatalogService : IPublicCatalogService
             screenAds,
             screen?.AdFrequency ?? affiliate.AdFrequency,
             screen?.Language ?? affiliate.Language,
-            (screen?.BoardTheme ?? affiliate.BoardTheme).ToString());
+            (screen?.BoardTheme ?? affiliate.BoardTheme).ToString(),
+            (screen?.TransitionEffect ?? affiliate.TransitionEffect).ToString());
     }
 
     public async Task<List<FeaturedAffiliateDto>> GetFeaturedAffiliatesAsync()
