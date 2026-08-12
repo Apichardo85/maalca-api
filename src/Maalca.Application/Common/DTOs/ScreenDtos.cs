@@ -8,7 +8,9 @@ public record ScreenDto(
     string? BoardTheme,
     int? AdFrequency,
     string? CategoryFilter,
-    string? TransitionEffect = null
+    string? TransitionEffect = null,
+    string ContentMode = "Menu",
+    IReadOnlyList<Guid>? AdIds = null
 );
 
 public record CreateScreenRequest(
@@ -17,7 +19,9 @@ public record CreateScreenRequest(
     string? BoardTheme = null,
     int? AdFrequency = null,
     string? CategoryFilter = null,
-    string? TransitionEffect = null
+    string? TransitionEffect = null,
+    string? ContentMode = null,
+    IReadOnlyList<Guid>? AdIds = null
 );
 
 /// <summary>
@@ -25,6 +29,7 @@ public record CreateScreenRequest(
 /// completas en cada guardado (igual que savePrefs en BoardContent.tsx para el negocio),
 /// así que Language/BoardTheme/AdFrequency/CategoryFilter se sobreescriben directo, sin la
 /// ambigüedad de "campo ausente vs. null explícito" que sí aplica a Name/SortOrder.
+/// AdIds sigue el mismo patrón full-state: null = heredar todos, lista = reemplazar entera.
 /// </summary>
 public record UpdateScreenRequest(
     string? Name,
@@ -33,5 +38,7 @@ public record UpdateScreenRequest(
     string? BoardTheme,
     int? AdFrequency,
     string? CategoryFilter,
-    string? TransitionEffect = null
+    string? TransitionEffect = null,
+    string? ContentMode = null,
+    IReadOnlyList<Guid>? AdIds = null
 );

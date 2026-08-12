@@ -88,18 +88,34 @@ public class PublicCatalogService : IPublicCatalogService
                 items = items.Where(i => i.Category != null && allowed.Contains(i.Category.ToLowerInvariant())).ToList();
         }
 
+        // Fase 9 Etapa C — ContentMode de la pantalla: AdsOnly vacía el menú por completo
+        // (la pantalla rota solo comerciales); FeaturedOnly lo recorta a items destacados
+        // (Featured solo existe en Product/Restaurant — en otros tipos de negocio queda vacío,
+        // caso esperado, no un bug). Menu (default) no toca items.
+        if (screen?.ContentMode == ScreenContentMode.AdsOnly)
+        {
+            items = new List<CatalogItemDto>();
+        }
+        else if (screen?.ContentMode == ScreenContentMode.FeaturedOnly)
+        {
+            items = items.Where(i => i.Featured == true).ToList();
+        }
+
         // Comerciales vigentes ahora mismo (activos, dentro de su ventana de fechas si tiene) —
         // el Menu Board no necesita saber de vigencia, solo recibe lo que ya aplica hoy. Pool
-        // compartido por afiliado — todas las pantallas del mismo negocio ven los mismos
-        // comerciales, solo cambia cada cuánto aparecen (AdFrequency, sí es por pantalla).
+        // por afiliado, pero cada pantalla puede filtrarlo con AdIds (Fase 9 Etapa C): null =
+        // hereda todos (comportamiento previo); lista = solo esos IDs (puede ser vacía = ninguno).
         var now = DateTime.UtcNow;
-        var screenAds = await _db.ScreenAds
+        var adIdsFilter = screen?.AdIds is null ? null : JsonArrayField.Parse<Guid>(screen.AdIds).ToHashSet();
+        var screenAds = (await _db.ScreenAds
             .Where(a => a.AffiliateId == affiliate.Id && a.Active
                 && (a.StartsAt == null || a.StartsAt <= now)
                 && (a.EndsAt == null || a.EndsAt >= now))
             .OrderBy(a => a.SortOrder)
+            .ToListAsync())
+            .Where(a => adIdsFilter == null || adIdsFilter.Contains(a.Id))
             .Select(a => new ScreenAdDto(a.Id, a.MediaUrl, a.MediaType.ToString(), a.DurationSeconds, a.SortOrder, a.Active, a.StartsAt, a.EndsAt, a.Fit.ToString()))
-            .ToListAsync();
+            .ToList();
 
         return new PublicCatalogResponse(
             await MapToAffiliatePublicDtoAsync(affiliate),

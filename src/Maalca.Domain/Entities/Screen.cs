@@ -31,4 +31,14 @@ public class Screen : BaseEntity
     /// Nombres de categoría separados por coma — null/vacío = todas las categorías (igual que
     /// hoy). Mismo formato simple que Affiliate.Modules, sin tabla aparte todavía.
     public string? CategoryFilter { get; set; }
+
+    /// Fase 9 Etapa C — qué rota en esta pantalla: menú normal (default), solo comerciales,
+    /// o solo items destacados. No es "override de Affiliate" porque el negocio en sí no tiene
+    /// este concepto (la pantalla base siempre es menú) — es exclusivo de pantallas extra.
+    public ScreenContentMode ContentMode { get; set; } = ScreenContentMode.Menu;
+
+    /// Fase 9 Etapa C — JSON array de ScreenAd.Id. null = hereda todos los comerciales activos
+    /// del negocio (comportamiento previo, default). Lista (incluso vacía) = solo esos IDs;
+    /// una lista vacía explícita significa "sin comerciales en esta pantalla".
+    public string? AdIds { get; set; }
 }

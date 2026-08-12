@@ -1,3 +1,4 @@
+using Maalca.Application.Common;
 using Maalca.Application.Common.DTOs;
 using Maalca.Application.Common.Interfaces;
 using Maalca.Domain.Entities;
@@ -14,11 +15,11 @@ public class ScreenService : IScreenService
     public ScreenService(AppDbContext db) => _db = db;
 
     public async Task<List<ScreenDto>> GetAllAsync(Guid affiliateId)
-        => await _db.Screens
+        => (await _db.Screens
             .Where(s => s.AffiliateId == affiliateId)
             .OrderBy(s => s.SortOrder).ThenBy(s => s.Name)
-            .Select(s => ToDto(s))
-            .ToListAsync();
+            .ToListAsync())
+            .Select(ToDto).ToList();
 
     public async Task<ScreenDto> CreateAsync(Guid affiliateId, CreateScreenRequest request)
     {
@@ -39,6 +40,8 @@ public class ScreenService : IScreenService
             TransitionEffect = ParseEffect(request.TransitionEffect),
             AdFrequency = request.AdFrequency,
             CategoryFilter = string.IsNullOrWhiteSpace(request.CategoryFilter) ? null : request.CategoryFilter.Trim(),
+            ContentMode = ParseContentMode(request.ContentMode),
+            AdIds = request.AdIds is null ? null : JsonArrayField.Serialize(request.AdIds),
         };
         _db.Screens.Add(screen);
         await _db.SaveChangesAsync();
@@ -53,13 +56,15 @@ public class ScreenService : IScreenService
         if (!string.IsNullOrWhiteSpace(request.Name)) screen.Name = request.Name.Trim();
         if (request.SortOrder.HasValue) screen.SortOrder = request.SortOrder.Value;
 
-        // Estos cuatro sí se sobreescriben directo (incluyendo a null = "heredar del negocio")
+        // Estos campos sí se sobreescriben directo (incluyendo a null = "heredar del negocio")
         // porque el form de Pantallas manda su estado completo en cada guardado.
         screen.Language = NormalizeLanguage(request.Language);
         screen.BoardTheme = ParseTheme(request.BoardTheme);
         screen.TransitionEffect = ParseEffect(request.TransitionEffect);
         screen.AdFrequency = request.AdFrequency;
         screen.CategoryFilter = string.IsNullOrWhiteSpace(request.CategoryFilter) ? null : request.CategoryFilter.Trim();
+        screen.ContentMode = ParseContentMode(request.ContentMode);
+        screen.AdIds = request.AdIds is null ? null : JsonArrayField.Serialize(request.AdIds);
 
         await _db.SaveChangesAsync();
         return ToDto(screen);
@@ -92,6 +97,16 @@ public class ScreenService : IScreenService
         return parsed;
     }
 
+    private static ScreenContentMode ParseContentMode(string? mode)
+    {
+        if (string.IsNullOrWhiteSpace(mode)) return ScreenContentMode.Menu;
+        if (!Enum.TryParse<ScreenContentMode>(mode, ignoreCase: true, out var parsed))
+            throw new ArgumentException($"Invalid contentMode '{mode}'.");
+        return parsed;
+    }
+
     private static ScreenDto ToDto(Screen s) => new(
-        s.Id, s.Name, s.SortOrder, s.Language, s.BoardTheme?.ToString(), s.AdFrequency, s.CategoryFilter, s.TransitionEffect?.ToString());
+        s.Id, s.Name, s.SortOrder, s.Language, s.BoardTheme?.ToString(), s.AdFrequency, s.CategoryFilter,
+        s.TransitionEffect?.ToString(), s.ContentMode.ToString(),
+        s.AdIds is null ? null : JsonArrayField.Parse<Guid>(s.AdIds));
 }
