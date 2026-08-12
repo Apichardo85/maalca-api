@@ -46,10 +46,14 @@ public class PublicCatalogService : IPublicCatalogService
         }
 
         List<CatalogItemDto> items;
+        // Status == "Active" además de IsPubliclyVisible — un item "Inactivo" (ej. un plato que
+        // hoy no se puede servir) desaparece tanto de la página pública como del Menu Board a la
+        // vez, desde el mismo punto: antes solo MenuBoard.tsx filtraba esto en el cliente, la
+        // página pública no lo hacía en ningún lado, así que un item inactivo se seguía viendo ahí.
         if (affiliate.BusinessType is BusinessType.Restaurant or BusinessType.Creator or BusinessType.Publisher)
         {
             var products = await _db.Products
-                .Where(p => p.AffiliateId == affiliate.Id && p.IsPubliclyVisible)
+                .Where(p => p.AffiliateId == affiliate.Id && p.IsPubliclyVisible && p.Status == "Active")
                 .OrderBy(p => p.SortOrder).ThenBy(p => p.Name)
                 .ToListAsync();
             items = products.Select(CatalogItemMapper.FromProduct).ToList();
@@ -60,14 +64,14 @@ public class PublicCatalogService : IPublicCatalogService
             {
                 BusinessType.Barber or BusinessType.Service or BusinessType.Professional =>
                     (await _db.Services
-                        .Where(s => s.AffiliateId == affiliate.Id && s.IsPubliclyVisible)
+                        .Where(s => s.AffiliateId == affiliate.Id && s.IsPubliclyVisible && s.Status == "Active")
                         .OrderBy(s => s.SortOrder).ThenBy(s => s.Name)
                         .ToListAsync())
                         .Select(CatalogItemMapper.FromService).ToList(),
 
                 BusinessType.Retail =>
                     (await _db.InventoryItems
-                        .Where(i => i.AffiliateId == affiliate.Id && i.IsPubliclyVisible)
+                        .Where(i => i.AffiliateId == affiliate.Id && i.IsPubliclyVisible && i.Status == "Active")
                         .OrderBy(i => i.SortOrder).ThenBy(i => i.Name)
                         .ToListAsync())
                         .Select(CatalogItemMapper.FromInventoryItem).ToList(),
