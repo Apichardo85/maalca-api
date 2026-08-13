@@ -70,6 +70,7 @@ builder.Services.AddScoped<IInteractionEventService, InteractionEventService>();
 builder.Services.AddScoped<IStripeBillingService, StripeBillingService>();
 builder.Services.AddScoped<IStripeConnectService, StripeConnectService>();
 builder.Services.AddScoped<IOrderNotificationService, OrderNotificationService>();
+builder.Services.AddScoped<Maalca.Application.Common.Interfaces.IOrderRealtimeNotifier, Maalca.Api.Hubs.SignalROrderRealtimeNotifier>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IScreenAdService, ScreenAdService>();
 builder.Services.AddScoped<IScreenService, ScreenService>();
@@ -113,6 +114,7 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapHub<Maalca.Api.Hubs.QueueHub>("/hubs/queue");
+app.MapHub<Maalca.Api.Hubs.OrdersHub>("/hubs/orders");
 
 // ============ AUTH ENDPOINTS ============
 app.MapPost("/api/auth/login", async (IAuthService authService, LoginRequest request) =>

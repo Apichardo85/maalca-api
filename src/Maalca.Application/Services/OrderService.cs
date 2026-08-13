@@ -26,11 +26,13 @@ public class OrderService : IOrderService
 {
     private readonly AppDbContext _db;
     private readonly IOrderNotificationService _notifications;
+    private readonly IOrderRealtimeNotifier _realtime;
 
-    public OrderService(AppDbContext db, IOrderNotificationService notifications)
+    public OrderService(AppDbContext db, IOrderNotificationService notifications, IOrderRealtimeNotifier realtime)
     {
         _db = db;
         _notifications = notifications;
+        _realtime = realtime;
     }
 
     public async Task<CreateOrderResponseDto?> CreateOrderAsync(string affiliateSlug, CreateOrderRequest request)
@@ -133,7 +135,9 @@ public class OrderService : IOrderService
         if (parsed == OrderStatus.Fulfilled)
             await _notifications.NotifyOrderFulfilledAsync(order);
 
-        return ToDto(order);
+        var dto = ToDto(order);
+        await _realtime.NotifyOrderUpdatedAsync(affiliateId, dto);
+        return dto;
     }
 
     public async Task<OrderDto?> ConfirmCheckoutAsync(Guid orderId, string checkoutSessionId)
@@ -174,6 +178,8 @@ public class OrderService : IOrderService
         await _db.SaveChangesAsync();
 
         await _notifications.NotifyOrderConfirmedAsync(order);
+        // Pedido recién pagado — aparece como "Nuevo" en el Kitchen Display.
+        await _realtime.NotifyOrderUpdatedAsync(order.AffiliateId, ToDto(order));
     }
 
     private static OrderDto ToDto(Order o) => new(
