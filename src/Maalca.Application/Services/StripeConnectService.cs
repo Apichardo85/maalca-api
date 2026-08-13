@@ -45,10 +45,17 @@ public class StripeConnectService : IStripeConnectService
         if (string.IsNullOrEmpty(affiliate.StripeConnectAccountId))
         {
             // Country viene de Affiliate.Country (ISO alpha-2, configurado por el afiliado en
-            // Configuración). "US" es solo el último recurso si nunca lo configuró — Stripe no
-            // permite cambiar el país de una cuenta conectada después de creada, así que este
-            // fallback puede dejar mal configurado a un afiliado que no sea de EE.UU. y nunca
-            // tocó ese campo. El fix real es forzar a completarlo en el onboarding, no aquí.
+            // Configuración) — ya NO hay fallback silencioso a "US". Stripe no permite cambiar
+            // el país de una cuenta conectada después de creada, así que un fallback mal
+            // adivinado dejaría a un afiliado no-estadounidense mal configurado para siempre.
+            // El frontend (SettingsContent.tsx) ya guarda el país antes de llegar acá; si de
+            // todos modos llega sin país (esa llamada falló, o algo llamó este endpoint
+            // directo), es mejor fallar fuerte y visible que crear la cuenta con un país
+            // adivinado.
+            if (string.IsNullOrEmpty(affiliate.Country))
+                throw new InvalidOperationException(
+                    "El negocio no tiene país configurado. Guarda el país antes de conectar Stripe.");
+
             var client = new StripeClient(apiKey);
             var v2Options = new Stripe.V2.Core.AccountCreateOptions
             {
@@ -56,7 +63,7 @@ public class StripeConnectService : IStripeConnectService
                 Dashboard = "full",
                 Identity = new Stripe.V2.Core.AccountCreateIdentityOptions
                 {
-                    Country = string.IsNullOrEmpty(affiliate.Country) ? "US" : affiliate.Country,
+                    Country = affiliate.Country,
                 },
                 // Equivalente v2 de "negative balance liability" en v1 — quién responde por
                 // pérdidas y a quién le cobra Stripe sus fees. "stripe" en ambos = mismo

@@ -700,6 +700,10 @@ app.MapPost("/api/affiliates/{id}/connect/onboarding-link", async (
     {
         return Results.NotFound(new { error = new { code = "NOT_FOUND", message = ex.Message } });
     }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "MISSING_COUNTRY", message = ex.Message } });
+    }
     catch (Stripe.StripeException ex)
     {
         return Results.BadRequest(new { error = new { code = "STRIPE_ERROR", message = ex.Message } });
