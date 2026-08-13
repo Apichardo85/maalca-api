@@ -125,6 +125,14 @@ public class SupabaseAuthMiddleware
             return;
         }
 
+        // Fase 8 — dashboard multiusuario con roles: si el dueño de otro negocio invitó a este
+        // correo antes de que esta persona tuviera cuenta, acá es donde se engancha — DEBE ir
+        // antes de GetMapsForUserAsync, porque si no, alguien recién invitado que se acaba de
+        // registrar seguiría teniendo 0 mapas en su primer login y esta misma función lo
+        // mandaría por error a onboarding (rama de abajo) en vez de dejarlo entrar al negocio
+        // al que lo invitaron.
+        await mapService.ClaimPendingInvitesAsync(supabaseUserId, email ?? "");
+
         var maps = await mapService.GetMapsForUserAsync(supabaseUserId);
         _logger.LogInformation("Auth: affiliate map lookup for sub {Sub} returned {Count}", supabaseUserId, maps.Count);
         if (maps.Count == 0)

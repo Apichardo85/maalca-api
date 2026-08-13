@@ -148,6 +148,8 @@ app.MapGet("/api/me/affiliates", async (HttpContext ctx, IAffiliateMapService ma
     if (string.IsNullOrEmpty(sub))
         return Results.Unauthorized();
 
+    // ClaimPendingInvitesAsync ya corrió en SupabaseAuthMiddleware para este mismo request
+    // (tiene que pasar ahí, antes de resolver los claims — ver comentario en ese archivo).
     var maps = await mapService.GetMapsForUserAsync(sub);
     if (maps.Count == 0)
         return Results.Ok(Array.Empty<AffiliateSummaryDto>());
@@ -169,6 +171,100 @@ app.MapGet("/api/me/affiliates", async (HttpContext ctx, IAffiliateMapService ma
         ));
 
     return Results.Ok(result);
+});
+
+// ============ COLLABORATOR ENDPOINTS (Fase 8 — dashboard multiusuario con roles) ============
+// Solo Owner puede administrar el equipo. Exclusivo de plan Emprendedor — un negocio Gratis no
+// puede sumar usuarios adicionales (mismo criterio que el resto de features de ese plan).
+// Nota: se llama "collaborators" (no "team") porque "/team" ya existe más abajo para el
+// concepto de staff/empleados del negocio (ITeamService) — son cosas distintas.
+
+app.MapGet("/api/affiliates/{id:guid}/collaborators", async (
+    HttpContext ctx, IAffiliateMapService mapService, Guid id) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value != "Owner")
+        return Results.Forbid();
+
+    var team = await mapService.GetTeamAsync(id);
+    var result = team.Select(m => new TeamMemberDto(
+        m.Id, m.Email, m.Role.ToString(), string.IsNullOrEmpty(m.SupabaseUserId), m.CreatedAt));
+    return Results.Ok(result);
+});
+
+app.MapPost("/api/affiliates/{id:guid}/collaborators", async (
+    HttpContext ctx, IAffiliateMapService mapService, AppDbContext db, Guid id, InviteTeamMemberRequest request) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value != "Owner")
+        return Results.Forbid();
+
+    var affiliate = await db.Affiliates.FindAsync(id);
+    if (affiliate is null) return Results.NotFound();
+    if (affiliate.Plan != Plan.Entrepreneur)
+        return Results.BadRequest(new { error = new { code = "PLAN_REQUIRED", message = "Invitar usuarios es parte del plan Emprendedor." } });
+
+    if (string.IsNullOrWhiteSpace(request.Email) || !Enum.TryParse<AffiliateRole>(request.Role, ignoreCase: true, out var role))
+        return Results.BadRequest(new { error = new { code = "INVALID_REQUEST", message = "Correo o rol inválido." } });
+
+    try
+    {
+        var map = await mapService.InviteAsync(id, request.Email, role);
+        return Results.Created($"/api/affiliates/{id}/collaborators/{map.Id}",
+            new TeamMemberDto(map.Id, map.Email, map.Role.ToString(), Pending: true, map.CreatedAt));
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "ALREADY_INVITED", message = ex.Message } });
+    }
+});
+
+app.MapPatch("/api/affiliates/{id:guid}/collaborators/{mapId:guid}", async (
+    HttpContext ctx, IAffiliateMapService mapService, Guid id, Guid mapId, UpdateTeamMemberRoleRequest request) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value != "Owner")
+        return Results.Forbid();
+
+    if (!Enum.TryParse<AffiliateRole>(request.Role, ignoreCase: true, out var role))
+        return Results.BadRequest(new { error = new { code = "INVALID_REQUEST", message = "Rol inválido." } });
+
+    try
+    {
+        var map = await mapService.UpdateRoleAsync(id, mapId, role);
+        if (map is null) return Results.NotFound();
+        return Results.Ok(new TeamMemberDto(map.Id, map.Email, map.Role.ToString(), string.IsNullOrEmpty(map.SupabaseUserId), map.CreatedAt));
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "LAST_OWNER", message = ex.Message } });
+    }
+});
+
+app.MapDelete("/api/affiliates/{id:guid}/collaborators/{mapId:guid}", async (
+    HttpContext ctx, IAffiliateMapService mapService, Guid id, Guid mapId) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value != "Owner")
+        return Results.Forbid();
+
+    try
+    {
+        var removed = await mapService.RemoveAsync(id, mapId);
+        return removed ? Results.NoContent() : Results.NotFound();
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "LAST_OWNER", message = ex.Message } });
+    }
 });
 
 // ============ CUSTOMER ENDPOINTS ============

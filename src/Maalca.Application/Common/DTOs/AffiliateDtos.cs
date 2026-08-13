@@ -9,6 +9,20 @@ public record AffiliateSummaryDto(
     string Role
 );
 
+// Dashboard multiusuario con roles — Pending = true cuando el dueño invitó por email pero esa
+// persona todavía no inició sesión ninguna vez (SupabaseUserId sigue vacío hasta que lo hace).
+public record TeamMemberDto(
+    Guid Id,
+    string Email,
+    string Role,
+    bool Pending,
+    DateTime CreatedAt
+);
+
+public record InviteTeamMemberRequest(string Email, string Role);
+
+public record UpdateTeamMemberRoleRequest(string Role);
+
 public record UpdateAffiliateProfileRequest(
     string? Name,
     string? Description,
