@@ -5,6 +5,20 @@
 
 ---
 
+## 🔄 ACTUALIZACIÓN DE ESTADO — 2026-08-13 (leer esto primero)
+
+Verificado contra el código real: **todo este documento está resuelto.**
+
+- **Fase 0** — cerrada, incluido el pendiente de seed.
+- **Fase A (Canales)** — ✅ hecho. `CanalDto` ya se expone en `/api/space/{slug}` y en `/api/public/affiliates/{slug}` (`MapToAffiliatePublicDtoAsync` en `PublicCatalogService.cs`), y `CanalesTab.tsx` en el frontend ya lo consume.
+- **Fase B (Módulos activos)** — ✅ hecho, tal cual quedó documentado en la sección "Actualización de implementación" de abajo (`Affiliate.ModulosActivos` coexistiendo con el legacy `Modules`).
+- **Fase C (tracking KPIs)** — sin re-verificar a fondo si "Escaneos QR"/"Clics a canales" ya trackean de verdad o siguen en `disponible: false` — no es bloqueante para nada más, queda como duda menor.
+- **Fase D (Onboarding extendido)** — no re-auditado si `OnboardingRequest` ya tiene `PrimaryColor`/`LogoUrl` — baja prioridad.
+
+Ver el spec hermano de frontend para el estado real de todo el programa "Espacio v2" — casi todo (Fases 1-9, salvo multiusuario con roles y POS) ya está construido. Este documento queda como referencia histórica, no como backlog activo.
+
+---
+
 ## Fase 0 — Corrección de datos de producción (CERRADA ✅)
 
 **Causa raíz confirmada:** el seed en `Program.cs` (bloque `if (!db.Set<Affiliate>().Any())`, líneas ~841–846) nunca asignaba `Plan` al crear los afiliados reales, por lo que heredaban el default `Plan.Free` de la entidad (`src/Maalca.Domain/Entities/User.cs`). El endpoint `/api/space/{slug}` y `PlanLimitService.GetMaxItems()` leían ese mismo campo correctamente — la lógica de negocio nunca estuvo rota, el dato sí.
