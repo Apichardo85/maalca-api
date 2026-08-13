@@ -23,6 +23,7 @@ public class SupabaseAuthMiddleware
     public async Task InvokeAsync(
         HttpContext context,
         IAffiliateMapService mapService,
+        IPlatformAdminService platformAdminService,
         SupabaseJwksCache jwksCache,
         SupabaseTokenVerifier tokenVerifier)
     {
@@ -133,10 +134,31 @@ public class SupabaseAuthMiddleware
         // al que lo invitaron.
         await mapService.ClaimPendingInvitesAsync(supabaseUserId, email ?? "");
 
+        // Fase 60 — panel de operaciones: se resuelve acá (una vez por request, junto con todo
+        // lo demás) en vez de en cada endpoint de /api/ops individualmente.
+        var isPlatformAdmin = await platformAdminService.IsPlatformAdminAsync(supabaseUserId, email ?? "");
+
         var maps = await mapService.GetMapsForUserAsync(supabaseUserId);
         _logger.LogInformation("Auth: affiliate map lookup for sub {Sub} returned {Count}", supabaseUserId, maps.Count);
         if (maps.Count == 0)
         {
+            // Admins de plataforma sin negocio propio igual necesitan poder pegarle a /api/ops
+            // (overview, lista de afiliados, impersonar) — no son "usuarios nuevos sin onboarding".
+            if (isPlatformAdmin && context.Request.Path.StartsWithSegments("/api/ops", StringComparison.OrdinalIgnoreCase))
+            {
+                var adminIdentity = new ClaimsIdentity(
+                    new[]
+                    {
+                        new Claim("sub", supabaseUserId),
+                        new Claim("email", email ?? string.Empty),
+                        new Claim("platform_admin", "true"),
+                    },
+                    authenticationType: "supabase");
+                context.User = new ClaimsPrincipal(adminIdentity);
+                await _next(context);
+                return;
+            }
+
             // Allow new users to reach the onboarding endpoint (no affiliates yet)
             if (context.Request.Path.StartsWithSegments("/api/onboarding", StringComparison.OrdinalIgnoreCase))
             {
@@ -145,6 +167,7 @@ public class SupabaseAuthMiddleware
                     {
                         new Claim("sub", supabaseUserId),
                         new Claim("email", email ?? string.Empty),
+                        new Claim("platform_admin", isPlatformAdmin ? "true" : "false"),
                     },
                     authenticationType: "supabase");
                 context.User = new ClaimsPrincipal(partialIdentity);
@@ -156,7 +179,9 @@ public class SupabaseAuthMiddleware
             return;
         }
 
-        // Resolve active affiliate: use X-Affiliate-Id header if valid, else oldest by CreatedAt
+        // Resolve active affiliate: use X-Affiliate-Id header if valid, else oldest by CreatedAt.
+        // Si el afiliado activo llegó por un grant de impersonation (Fase 60), maps ya lo incluye
+        // como si fuera un map real — ver AffiliateMapService.GetMapsForUserAsync.
         var requestedId = context.Request.Headers["X-Affiliate-Id"].FirstOrDefault();
         var activeMap = maps.FirstOrDefault(m => m.AffiliateId.ToString() == requestedId)
                      ?? maps.OrderBy(m => m.CreatedAt).First();
@@ -169,6 +194,7 @@ public class SupabaseAuthMiddleware
                 new Claim("active_affiliate_id", activeMap.AffiliateId.ToString()),
                 new Claim("role", activeMap.Role.ToString()),
                 new Claim("affiliate_ids", string.Join(",", maps.Select(m => m.AffiliateId))),
+                new Claim("platform_admin", isPlatformAdmin ? "true" : "false"),
             },
             authenticationType: "supabase");
 

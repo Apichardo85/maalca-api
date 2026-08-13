@@ -60,6 +60,7 @@ builder.Services.AddScoped<ICampaignService, CampaignService>();
 builder.Services.AddScoped<IMetricsService, MetricsService>();
 builder.Services.AddScoped<ILeadService, LeadService>();
 builder.Services.AddScoped<IAffiliateMapService, AffiliateMapService>();
+builder.Services.AddScoped<IPlatformAdminService, PlatformAdminService>();
 builder.Services.AddScoped<IPublicCatalogService, PublicCatalogService>();
 builder.Services.AddScoped<IOnboardingService, OnboardingService>();
 builder.Services.AddScoped<IPlanLimitService, PlanLimitService>();
@@ -154,12 +155,16 @@ app.MapGet("/api/me/affiliates", async (HttpContext ctx, IAffiliateMapService ma
     if (maps.Count == 0)
         return Results.Ok(Array.Empty<AffiliateSummaryDto>());
 
-    var affiliateIds = maps.Select(m => m.AffiliateId).ToList();
+    // IsImpersonation=false — el negocio que un admin de plataforma está soportando temporalmente
+    // no debe aparecer en su propio selector de negocios (entra por /space/{slug} directo desde /ops).
+    var ownMaps = maps.Where(m => !m.IsImpersonation).ToList();
+
+    var affiliateIds = ownMaps.Select(m => m.AffiliateId).ToList();
     var affiliates = await db.Affiliates
         .Where(a => affiliateIds.Contains(a.Id))
         .ToDictionaryAsync(a => a.Id);
 
-    var result = maps
+    var result = ownMaps
         .Where(m => affiliates.ContainsKey(m.AffiliateId))
         .Select(m => new AffiliateSummaryDto(
             m.AffiliateId,
@@ -171,6 +176,62 @@ app.MapGet("/api/me/affiliates", async (HttpContext ctx, IAffiliateMapService ma
         ));
 
     return Results.Ok(result);
+});
+
+app.MapGet("/api/me/admin-status", (HttpContext ctx) =>
+{
+    var isAdmin = ctx.User.FindFirst("platform_admin")?.Value == "true";
+    return Results.Ok(new { isPlatformAdmin = isAdmin });
+});
+
+// ============ OPS ENDPOINTS (Fase 60 — panel de operaciones para admins de plataforma) ============
+// Todos requieren el claim platform_admin=="true", resuelto en SupabaseAuthMiddleware. No están
+// atados a ningún afiliado — son de la plataforma entera, por eso viven fuera de /api/affiliates.
+
+app.MapGet("/api/ops/overview", async (HttpContext ctx, IPlatformAdminService opsService) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    return Results.Ok(await opsService.GetOverviewAsync());
+});
+
+app.MapGet("/api/ops/affiliates", async (HttpContext ctx, IPlatformAdminService opsService) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    return Results.Ok(await opsService.GetAffiliatesAsync());
+});
+
+app.MapPost("/api/ops/impersonate/{affiliateId:guid}", async (HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    var sub = ctx.User.FindFirst("sub")?.Value;
+    var email = ctx.User.FindFirst("email")?.Value ?? "";
+    if (string.IsNullOrEmpty(sub))
+        return Results.Unauthorized();
+
+    try
+    {
+        var session = await opsService.StartImpersonationAsync(sub, email, affiliateId);
+        return Results.Ok(session);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = ex.Message } });
+    }
+});
+
+app.MapDelete("/api/ops/impersonate", async (HttpContext ctx, IPlatformAdminService opsService) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    var sub = ctx.User.FindFirst("sub")?.Value;
+    if (string.IsNullOrEmpty(sub))
+        return Results.Unauthorized();
+
+    await opsService.EndImpersonationAsync(sub);
+    return Results.NoContent();
 });
 
 // ============ COLLABORATOR ENDPOINTS (Fase 8 — dashboard multiusuario con roles) ============
@@ -1547,6 +1608,15 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.Migrate();
+
+    // Fase 60 — panel de operaciones: siembra el primer admin de plataforma si la tabla está
+    // vacía. SupabaseUserId="" hasta que esa persona inicie sesión con ese correo (mismo patrón
+    // invite-claim que UserAffiliateMap) — ver PlatformAdminService.IsPlatformAdminAsync.
+    if (!db.Set<PlatformAdmin>().Any())
+    {
+        db.Set<PlatformAdmin>().Add(new PlatformAdmin { SupabaseUserId = "", Email = "alejandropichardo85@gmail.com" });
+        db.SaveChanges();
+    }
 
     // Seed affiliates and users if DB is empty
     if (!db.Set<Affiliate>().Any())

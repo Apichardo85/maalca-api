@@ -25,6 +25,8 @@ public class AppDbContext : DbContext
     public DbSet<AgentExecution> AgentExecutions => Set<AgentExecution>();
     public DbSet<UserAffiliateMap> UserAffiliateMaps => Set<UserAffiliateMap>();
     public DbSet<AffiliateMilestone> AffiliateMilestones => Set<AffiliateMilestone>();
+    public DbSet<PlatformAdmin> PlatformAdmins => Set<PlatformAdmin>();
+    public DbSet<AdminImpersonationLog> AdminImpersonationLogs => Set<AdminImpersonationLog>();
     public DbSet<Canal> Canales => Set<Canal>();
     public DbSet<EventoInteraccion> EventosInteraccion => Set<EventoInteraccion>();
     public DbSet<StripeProcessedEvent> StripeProcessedEvents => Set<StripeProcessedEvent>();
@@ -307,6 +309,26 @@ public class AppDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(e => e.AffiliateId)
                   .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // PlatformAdmin
+        modelBuilder.Entity<PlatformAdmin>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.SupabaseUserId).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.Email).IsRequired().HasMaxLength(256);
+            entity.HasIndex(e => e.SupabaseUserId);
+            entity.HasIndex(e => e.Email).IsUnique();
+        });
+
+        // AdminImpersonationLog
+        modelBuilder.Entity<AdminImpersonationLog>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.AdminSupabaseUserId).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.AdminEmail).IsRequired().HasMaxLength(256);
+            entity.HasIndex(e => e.AdminSupabaseUserId);
+            entity.HasIndex(e => e.AffiliateId);
         });
 
         // AffiliateMilestone

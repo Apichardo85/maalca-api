@@ -12,10 +12,25 @@ public class AffiliateMapService : IAffiliateMapService
     public AffiliateMapService(AppDbContext context) => _context = context;
 
     public async Task<List<UserAffiliateMap>> GetMapsForUserAsync(string supabaseUserId)
-        => await _context.UserAffiliateMaps
+    {
+        // Limpieza perezosa de grants de impersonation vencidos (Fase 60) — se corre en cada
+        // request porque este método es el que arma los claims en SupabaseAuthMiddleware, así
+        // que es el punto natural para que un grant expirado deje de tener efecto de inmediato.
+        var now = DateTime.UtcNow;
+        var expired = await _context.UserAffiliateMaps
+            .Where(m => m.SupabaseUserId == supabaseUserId && m.IsImpersonation && m.ImpersonationExpiresAt < now)
+            .ToListAsync();
+        if (expired.Count > 0)
+        {
+            _context.UserAffiliateMaps.RemoveRange(expired);
+            await _context.SaveChangesAsync();
+        }
+
+        return await _context.UserAffiliateMaps
             .Where(m => m.SupabaseUserId == supabaseUserId)
             .OrderByDescending(m => m.CreatedAt)
             .ToListAsync();
+    }
 
     public async Task<UserAffiliateMap?> GetMapAsync(string supabaseUserId, Guid affiliateId)
         => await _context.UserAffiliateMaps
@@ -53,8 +68,10 @@ public class AffiliateMapService : IAffiliateMapService
     }
 
     public async Task<List<UserAffiliateMap>> GetTeamAsync(Guid affiliateId)
+        // IsImpersonation=false — un admin de plataforma dando soporte no debe aparecer como
+        // "miembro del equipo" ante el dueño real del negocio (ver comentario en la entidad).
         => await _context.UserAffiliateMaps
-            .Where(m => m.AffiliateId == affiliateId)
+            .Where(m => m.AffiliateId == affiliateId && !m.IsImpersonation)
             .OrderBy(m => m.CreatedAt)
             .ToListAsync();
 
