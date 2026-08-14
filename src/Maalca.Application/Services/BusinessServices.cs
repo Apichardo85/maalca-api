@@ -15,8 +15,14 @@ public class AppointmentService : IAppointmentService
     public async Task<PaginatedResponse<Appointment>> GetAppointmentsAsync(Guid affiliateId, DateTime? date = null, string? status = null, int page = 1)
     {
         var baseQuery = _context.Appointments.Where(a => a.AffiliateId == affiliateId);
-        
-        IQueryable<Appointment> query = baseQuery.Include(a => a.Customer).Include(a => a.Service).Include(a => a.AssignedTo);
+
+        // AsNoTracking: sin esto, el change tracker hace "fix-up" automático de la navegación
+        // inversa Service.Appointments con el mismo Appointment que se está devolviendo, creando
+        // un ciclo (Appointment→Service→Appointments→mismo Appointment→...) que rompía la
+        // serialización JSON a mitad de respuesta. Estos son endpoints de solo lectura — no hay
+        // razón para trackear cambios.
+        IQueryable<Appointment> query = baseQuery.AsNoTracking()
+            .Include(a => a.Customer).Include(a => a.Service).Include(a => a.AssignedTo);
 
         if (date.HasValue)
             query = query.Where(a => a.Date.Date == date.Value.Date);
@@ -31,7 +37,8 @@ public class AppointmentService : IAppointmentService
     }
 
     public async Task<Appointment?> GetAppointmentAsync(Guid affiliateId, Guid id)
-        => await _context.Appointments.Include(a => a.Customer).Include(a => a.Service).Include(a => a.AssignedTo)
+        => await _context.Appointments.AsNoTracking()
+            .Include(a => a.Customer).Include(a => a.Service).Include(a => a.AssignedTo)
             .FirstOrDefaultAsync(a => a.Id == id && a.AffiliateId == affiliateId);
 
     public async Task<Appointment> CreateAppointmentAsync(Guid affiliateId, Appointment appointment)

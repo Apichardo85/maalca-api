@@ -80,6 +80,20 @@ builder.Services.AddScoped<IPublicBookingService, PublicBookingService>();
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
 
+// Red de seguridad global contra ciclos de referencia en respuestas JSON. Bug real encontrado:
+// GET /api/affiliates/{id}/appointments hace .Include(a => a.Service), y EF Core's change
+// tracker auto-completa la navegación inversa Service.Appointments con ese mismo appointment
+// (fix-up automático) aunque nunca se pidió explícitamente — eso crea Appointment→Service→
+// Appointments[mismo Appointment]→Service→... y el serializador tira una excepción a mitad de
+// stream, dejando al cliente con un JSON cortado ("Expected ',' o '}'..."). Pasó en producción
+// con el primer afiliado (Pegote) que ya tenía citas reales creadas. IgnoreCycles corta la
+// propiedad que cerraría el ciclo en vez de tirar excepción — no afecta ninguna respuesta que
+// no tuviera el problema.
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+});
+
 builder.Services.AddSingleton<SupabaseJwksCache>();
 builder.Services.AddSingleton<SupabaseTokenVerifier>();
 
