@@ -12,6 +12,26 @@ public class PlatformAdmin : BaseEntity
 {
     public string SupabaseUserId { get; set; } = "";
     public string Email { get; set; } = null!;
+
+    // Owner: control total (incluye publicar/pausar negocios y gestionar este mismo equipo).
+    // Support: mismo acceso de lectura + impersonation para dar soporte, pero no puede tocar
+    // acciones destructivas de negocio ni el equipo interno — ver comentario de gating en
+    // PlatformAdminService y los checks de "platform_role" en Program.cs.
+    public PlatformAdminRole Role { get; set; } = PlatformAdminRole.Owner;
+}
+
+public enum PlatformAdminRole { Owner = 0, Support = 1 }
+
+/// <summary>
+/// Nota interna de CRM sobre un afiliado — visible solo en /ops, nunca al dueño del negocio.
+/// Simple bitácora cronológica (sin edición/borrado en v1) para que el equipo de MaalCa lleve
+/// contexto de la relación con cada negocio sin depender de memoria o chats sueltos.
+/// </summary>
+public class AffiliateNote : BaseEntity
+{
+    public Guid AffiliateId { get; set; }
+    public string AuthorEmail { get; set; } = null!;
+    public string Text { get; set; } = null!;
 }
 
 /// <summary>

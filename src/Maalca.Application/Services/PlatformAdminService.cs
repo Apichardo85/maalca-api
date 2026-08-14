@@ -37,6 +37,12 @@ public class PlatformAdminService : IPlatformAdminService
         return true;
     }
 
+    public async Task<PlatformAdminRole?> GetRoleAsync(string supabaseUserId)
+    {
+        var admin = await _context.PlatformAdmins.FirstOrDefaultAsync(a => a.SupabaseUserId == supabaseUserId);
+        return admin?.Role;
+    }
+
     public async Task<PlatformOpsOverviewDto> GetOverviewAsync()
     {
         var affiliates = await _context.Affiliates
@@ -189,5 +195,89 @@ public class PlatformAdminService : IPlatformAdminService
             log.EndedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
+    }
+
+    public async Task<List<PlatformTeamMemberDto>> GetPlatformTeamAsync()
+        => await _context.PlatformAdmins
+            .OrderBy(a => a.CreatedAt)
+            .Select(a => new PlatformTeamMemberDto(a.Id, a.Email, a.Role.ToString(), a.SupabaseUserId == "", a.CreatedAt))
+            .ToListAsync();
+
+    public async Task<PlatformTeamMemberDto> InvitePlatformAdminAsync(string email, PlatformAdminRole role)
+    {
+        var normalizedEmail = email.Trim().ToLowerInvariant();
+        var exists = await _context.PlatformAdmins.AnyAsync(a => a.Email.ToLower() == normalizedEmail);
+        if (exists)
+            throw new InvalidOperationException("Ese correo ya es parte del equipo interno.");
+
+        // SupabaseUserId vacío = invitación pendiente, igual que UserAffiliateMap — se engancha
+        // en el próximo login de esa persona (ver IsPlatformAdminAsync).
+        var admin = new PlatformAdmin
+        {
+            SupabaseUserId = "",
+            Email = normalizedEmail,
+            Role = role,
+            CreatedAt = DateTime.UtcNow,
+        };
+        _context.PlatformAdmins.Add(admin);
+        await _context.SaveChangesAsync();
+        return new PlatformTeamMemberDto(admin.Id, admin.Email, admin.Role.ToString(), true, admin.CreatedAt);
+    }
+
+    public async Task<PlatformTeamMemberDto> UpdatePlatformAdminRoleAsync(Guid platformAdminId, PlatformAdminRole role)
+    {
+        var admin = await _context.PlatformAdmins.FindAsync(platformAdminId)
+            ?? throw new InvalidOperationException("Ese miembro del equipo no existe.");
+
+        if (admin.Role == PlatformAdminRole.Owner && role != PlatformAdminRole.Owner)
+            await EnsureNotLastPlatformOwnerAsync(excludingId: platformAdminId);
+
+        admin.Role = role;
+        admin.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        return new PlatformTeamMemberDto(admin.Id, admin.Email, admin.Role.ToString(), admin.SupabaseUserId == "", admin.CreatedAt);
+    }
+
+    public async Task RemovePlatformAdminAsync(Guid platformAdminId)
+    {
+        var admin = await _context.PlatformAdmins.FindAsync(platformAdminId)
+            ?? throw new InvalidOperationException("Ese miembro del equipo no existe.");
+
+        if (admin.Role == PlatformAdminRole.Owner)
+            await EnsureNotLastPlatformOwnerAsync(excludingId: platformAdminId);
+
+        _context.PlatformAdmins.Remove(admin);
+        await _context.SaveChangesAsync();
+    }
+
+    // El equipo interno siempre necesita al menos un Owner — si no, nadie podría volver a
+    // gestionar el equipo ni las acciones destructivas de /ops.
+    private async Task EnsureNotLastPlatformOwnerAsync(Guid excludingId)
+    {
+        var otherOwners = await _context.PlatformAdmins
+            .CountAsync(a => a.Role == PlatformAdminRole.Owner && a.Id != excludingId);
+        if (otherOwners == 0)
+            throw new InvalidOperationException("No puedes quitar al último Owner del equipo interno.");
+    }
+
+    public async Task<List<AffiliateNoteDto>> GetAffiliateNotesAsync(Guid affiliateId)
+        => await _context.AffiliateNotes
+            .Where(n => n.AffiliateId == affiliateId)
+            .OrderByDescending(n => n.CreatedAt)
+            .Select(n => new AffiliateNoteDto(n.Id, n.AuthorEmail, n.Text, n.CreatedAt))
+            .ToListAsync();
+
+    public async Task<AffiliateNoteDto> AddAffiliateNoteAsync(Guid affiliateId, string authorEmail, string text)
+    {
+        var note = new AffiliateNote
+        {
+            AffiliateId = affiliateId,
+            AuthorEmail = authorEmail,
+            Text = text.Trim(),
+            CreatedAt = DateTime.UtcNow,
+        };
+        _context.AffiliateNotes.Add(note);
+        await _context.SaveChangesAsync();
+        return new AffiliateNoteDto(note.Id, note.AuthorEmail, note.Text, note.CreatedAt);
     }
 }

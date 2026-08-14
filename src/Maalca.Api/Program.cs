@@ -181,7 +181,8 @@ app.MapGet("/api/me/affiliates", async (HttpContext ctx, IAffiliateMapService ma
 app.MapGet("/api/me/admin-status", (HttpContext ctx) =>
 {
     var isAdmin = ctx.User.FindFirst("platform_admin")?.Value == "true";
-    return Results.Ok(new { isPlatformAdmin = isAdmin });
+    var role = ctx.User.FindFirst("platform_role")?.Value;
+    return Results.Ok(new MyAdminStatusDto(isAdmin, string.IsNullOrEmpty(role) ? null : role));
 });
 
 // ============ OPS ENDPOINTS (Fase 60 — panel de operaciones para admins de plataforma) ============
@@ -205,7 +206,11 @@ app.MapGet("/api/ops/affiliates", async (HttpContext ctx, IPlatformAdminService 
 app.MapPatch("/api/ops/affiliates/{affiliateId:guid}", async (
     HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId, SetAffiliateStatusRequest request) =>
 {
+    // Publicar/pausar un negocio es una acción destructiva de plataforma — solo Owner, no Support
+    // (ver comentario de gating en PlatformAdmin.cs).
     if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    if (ctx.User.FindFirst("platform_role")?.Value != nameof(PlatformAdminRole.Owner))
         return Results.Forbid();
 
     try
@@ -249,6 +254,98 @@ app.MapDelete("/api/ops/impersonate", async (HttpContext ctx, IPlatformAdminServ
 
     await opsService.EndImpersonationAsync(sub);
     return Results.NoContent();
+});
+
+// ---- Equipo interno de plataforma (Fase 82/83) — separado del equipo por-afiliado. Solo Owner
+// puede invitar/cambiar rol/quitar; Support solo puede ver quién es parte del equipo. ----
+
+app.MapGet("/api/ops/team", async (HttpContext ctx, IPlatformAdminService opsService) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    return Results.Ok(await opsService.GetPlatformTeamAsync());
+});
+
+app.MapPost("/api/ops/team", async (HttpContext ctx, IPlatformAdminService opsService, InvitePlatformAdminRequest request) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    if (ctx.User.FindFirst("platform_role")?.Value != nameof(PlatformAdminRole.Owner))
+        return Results.Forbid();
+    if (!Enum.TryParse<PlatformAdminRole>(request.Role, out var role))
+        return Results.BadRequest(new { error = new { code = "INVALID_ROLE", message = "Rol inválido." } });
+
+    try
+    {
+        var member = await opsService.InvitePlatformAdminAsync(request.Email, role);
+        return Results.Ok(member);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_OPERATION", message = ex.Message } });
+    }
+});
+
+app.MapPatch("/api/ops/team/{platformAdminId:guid}", async (
+    HttpContext ctx, IPlatformAdminService opsService, Guid platformAdminId, UpdatePlatformAdminRoleRequest request) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    if (ctx.User.FindFirst("platform_role")?.Value != nameof(PlatformAdminRole.Owner))
+        return Results.Forbid();
+    if (!Enum.TryParse<PlatformAdminRole>(request.Role, out var role))
+        return Results.BadRequest(new { error = new { code = "INVALID_ROLE", message = "Rol inválido." } });
+
+    try
+    {
+        var member = await opsService.UpdatePlatformAdminRoleAsync(platformAdminId, role);
+        return Results.Ok(member);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_OPERATION", message = ex.Message } });
+    }
+});
+
+app.MapDelete("/api/ops/team/{platformAdminId:guid}", async (HttpContext ctx, IPlatformAdminService opsService, Guid platformAdminId) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    if (ctx.User.FindFirst("platform_role")?.Value != nameof(PlatformAdminRole.Owner))
+        return Results.Forbid();
+
+    try
+    {
+        await opsService.RemovePlatformAdminAsync(platformAdminId);
+        return Results.NoContent();
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_OPERATION", message = ex.Message } });
+    }
+});
+
+// ---- Notas CRM internas por afiliado (Fase 84) — visibles solo en /ops, cualquier admin
+// (Owner o Support) puede leer y escribir; no son una acción destructiva. ----
+
+app.MapGet("/api/ops/affiliates/{affiliateId:guid}/notes", async (HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    return Results.Ok(await opsService.GetAffiliateNotesAsync(affiliateId));
+});
+
+app.MapPost("/api/ops/affiliates/{affiliateId:guid}/notes", async (
+    HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId, CreateAffiliateNoteRequest request) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    if (string.IsNullOrWhiteSpace(request.Text))
+        return Results.BadRequest(new { error = new { code = "EMPTY_TEXT", message = "La nota no puede estar vacía." } });
+
+    var email = ctx.User.FindFirst("email")?.Value ?? "";
+    var note = await opsService.AddAffiliateNoteAsync(affiliateId, email, request.Text);
+    return Results.Ok(note);
 });
 
 // ============ COLLABORATOR ENDPOINTS (Fase 8 — dashboard multiusuario con roles) ============

@@ -1,4 +1,5 @@
 using Maalca.Application.Common.DTOs;
+using Maalca.Domain.Entities;
 
 namespace Maalca.Application.Common.Interfaces;
 
@@ -10,6 +11,12 @@ public interface IPlatformAdminService
     /// y el email coincide, la engancha a este usuario en la misma llamada.
     /// </summary>
     Task<bool> IsPlatformAdminAsync(string supabaseUserId, string email);
+
+    /// <summary>
+    /// Rol del admin ya reclamado (asume que IsPlatformAdminAsync ya corrió esta request y, si
+    /// aplicaba, ya hizo el claim). Devuelve null si no es admin.
+    /// </summary>
+    Task<PlatformAdminRole?> GetRoleAsync(string supabaseUserId);
 
     Task<PlatformOpsOverviewDto> GetOverviewAsync();
     Task<List<PlatformAffiliateSummaryDto>> GetAffiliatesAsync();
@@ -24,4 +31,14 @@ public interface IPlatformAdminService
 
     Task<ImpersonationSessionDto> StartImpersonationAsync(string adminSupabaseUserId, string adminEmail, Guid affiliateId);
     Task EndImpersonationAsync(string adminSupabaseUserId);
+
+    // ---- Equipo interno de plataforma (solo Owner puede invitar/cambiar rol/quitar) ----
+    Task<List<PlatformTeamMemberDto>> GetPlatformTeamAsync();
+    Task<PlatformTeamMemberDto> InvitePlatformAdminAsync(string email, PlatformAdminRole role);
+    Task<PlatformTeamMemberDto> UpdatePlatformAdminRoleAsync(Guid platformAdminId, PlatformAdminRole role);
+    Task RemovePlatformAdminAsync(Guid platformAdminId);
+
+    // ---- Notas CRM internas por afiliado ----
+    Task<List<AffiliateNoteDto>> GetAffiliateNotesAsync(Guid affiliateId);
+    Task<AffiliateNoteDto> AddAffiliateNoteAsync(Guid affiliateId, string authorEmail, string text);
 }

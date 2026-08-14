@@ -137,6 +137,7 @@ public class SupabaseAuthMiddleware
         // Fase 60 — panel de operaciones: se resuelve acá (una vez por request, junto con todo
         // lo demás) en vez de en cada endpoint de /api/ops individualmente.
         var isPlatformAdmin = await platformAdminService.IsPlatformAdminAsync(supabaseUserId, email ?? "");
+        var platformRole = isPlatformAdmin ? await platformAdminService.GetRoleAsync(supabaseUserId) : null;
 
         var maps = await mapService.GetMapsForUserAsync(supabaseUserId);
         _logger.LogInformation("Auth: affiliate map lookup for sub {Sub} returned {Count}", supabaseUserId, maps.Count);
@@ -152,6 +153,7 @@ public class SupabaseAuthMiddleware
                         new Claim("sub", supabaseUserId),
                         new Claim("email", email ?? string.Empty),
                         new Claim("platform_admin", "true"),
+                        new Claim("platform_role", platformRole?.ToString() ?? ""),
                     },
                     authenticationType: "supabase");
                 context.User = new ClaimsPrincipal(adminIdentity);
@@ -168,6 +170,7 @@ public class SupabaseAuthMiddleware
                         new Claim("sub", supabaseUserId),
                         new Claim("email", email ?? string.Empty),
                         new Claim("platform_admin", isPlatformAdmin ? "true" : "false"),
+                        new Claim("platform_role", platformRole?.ToString() ?? ""),
                     },
                     authenticationType: "supabase");
                 context.User = new ClaimsPrincipal(partialIdentity);
@@ -195,6 +198,7 @@ public class SupabaseAuthMiddleware
                 new Claim("role", activeMap.Role.ToString()),
                 new Claim("affiliate_ids", string.Join(",", maps.Select(m => m.AffiliateId))),
                 new Claim("platform_admin", isPlatformAdmin ? "true" : "false"),
+                new Claim("platform_role", platformRole?.ToString() ?? ""),
             },
             authenticationType: "supabase");
 
