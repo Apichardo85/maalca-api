@@ -442,82 +442,120 @@ app.MapDelete("/api/affiliates/{id:guid}/collaborators/{mapId:guid}", async (
     }
 });
 
-// ============ CUSTOMER ENDPOINTS ============
-app.MapGet("/api/affiliates/{affiliateId:guid}/customers", async (ICustomerService customerService, Guid affiliateId, int page = 1, int limit = 20, string? search = null, string? status = null) =>
+// ============ CUSTOMER ENDPOINTS (mismo gating que /team — legacy sin chequeo de
+// pertenencia; lectura requiere ser el afiliado activo, escritura además excluye Staff) ============
+app.MapGet("/api/affiliates/{affiliateId:guid}/customers", async (HttpContext ctx, ICustomerService customerService, Guid affiliateId, int page = 1, int limit = 20, string? search = null, string? status = null) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
     var result = await customerService.GetCustomersAsync(affiliateId, page, limit, search, status);
     return Results.Ok(result);
 });
 
-app.MapGet("/api/affiliates/{affiliateId:guid}/customers/{id:guid}", async (ICustomerService customerService, Guid affiliateId, Guid id) =>
+app.MapGet("/api/affiliates/{affiliateId:guid}/customers/{id:guid}", async (HttpContext ctx, ICustomerService customerService, Guid affiliateId, Guid id) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
     var result = await customerService.GetCustomerAsync(affiliateId, id);
     if (result == null)
         return Results.NotFound();
     return Results.Ok(result);
 });
 
-app.MapPost("/api/affiliates/{affiliateId:guid}/customers", async (ICustomerService customerService, Guid affiliateId, Customer customer) =>
+app.MapPost("/api/affiliates/{affiliateId:guid}/customers", async (HttpContext ctx, ICustomerService customerService, Guid affiliateId, Customer customer) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
     var result = await customerService.CreateCustomerAsync(affiliateId, customer);
     return Results.Created($"/api/affiliates/{affiliateId}/customers/{result.Id}", result);
 });
 
-app.MapPut("/api/affiliates/{affiliateId:guid}/customers/{id:guid}", async (ICustomerService customerService, Guid affiliateId, Guid id, Customer customer) =>
+app.MapPut("/api/affiliates/{affiliateId:guid}/customers/{id:guid}", async (HttpContext ctx, ICustomerService customerService, Guid affiliateId, Guid id, Customer customer) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
     var result = await customerService.UpdateCustomerAsync(affiliateId, id, customer);
     if (result == null)
         return Results.NotFound();
     return Results.Ok(result);
 });
 
-app.MapDelete("/api/affiliates/{affiliateId:guid}/customers/{id:guid}", async (ICustomerService customerService, Guid affiliateId, Guid id) =>
+app.MapDelete("/api/affiliates/{affiliateId:guid}/customers/{id:guid}", async (HttpContext ctx, ICustomerService customerService, Guid affiliateId, Guid id) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
     var result = await customerService.DeleteCustomerAsync(affiliateId, id);
     if (!result)
         return Results.NotFound();
     return Results.NoContent();
 });
 
-// ============ APPOINTMENT ENDPOINTS ============
-app.MapGet("/api/affiliates/{affiliateId:guid}/appointments", async (IAppointmentService appointmentService, Guid affiliateId, DateTime? date = null, string? status = null, int page = 1) =>
+// ============ APPOINTMENT ENDPOINTS (dashboard — agenda manual del negocio; el flujo de
+// reserva público, cuando exista, va a ser un endpoint /api/public/... aparte, no este) ============
+app.MapGet("/api/affiliates/{affiliateId:guid}/appointments", async (HttpContext ctx, IAppointmentService appointmentService, Guid affiliateId, DateTime? date = null, string? status = null, int page = 1) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
     var result = await appointmentService.GetAppointmentsAsync(affiliateId, date, status, page);
     return Results.Ok(result);
 });
 
-app.MapGet("/api/affiliates/{affiliateId:guid}/appointments/{id:guid}", async (IAppointmentService appointmentService, Guid affiliateId, Guid id) =>
+app.MapGet("/api/affiliates/{affiliateId:guid}/appointments/{id:guid}", async (HttpContext ctx, IAppointmentService appointmentService, Guid affiliateId, Guid id) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
     var result = await appointmentService.GetAppointmentAsync(affiliateId, id);
     if (result == null)
         return Results.NotFound();
     return Results.Ok(result);
 });
 
-app.MapPost("/api/affiliates/{affiliateId:guid}/appointments", async (IAppointmentService appointmentService, Guid affiliateId, Appointment appointment) =>
+app.MapPost("/api/affiliates/{affiliateId:guid}/appointments", async (HttpContext ctx, IAppointmentService appointmentService, Guid affiliateId, Appointment appointment) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
     var result = await appointmentService.CreateAppointmentAsync(affiliateId, appointment);
     return Results.Created($"/api/affiliates/{affiliateId}/appointments/{result.Id}", result);
 });
 
-app.MapPut("/api/affiliates/{affiliateId:guid}/appointments/{id:guid}", async (IAppointmentService appointmentService, Guid affiliateId, Guid id, Appointment appointment) =>
+app.MapPut("/api/affiliates/{affiliateId:guid}/appointments/{id:guid}", async (HttpContext ctx, IAppointmentService appointmentService, Guid affiliateId, Guid id, Appointment appointment) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
     var result = await appointmentService.UpdateAppointmentAsync(affiliateId, id, appointment);
     if (result == null)
         return Results.NotFound();
     return Results.Ok(result);
 });
 
-app.MapPatch("/api/affiliates/{affiliateId:guid}/appointments/{id:guid}", async (IAppointmentService appointmentService, Guid affiliateId, Guid id, string status) =>
+app.MapPatch("/api/affiliates/{affiliateId:guid}/appointments/{id:guid}", async (HttpContext ctx, IAppointmentService appointmentService, Guid affiliateId, Guid id, string status) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    // Staff sí puede mover el estado (Confirmada/Completada/No-show) — es su trabajo del día a
+    // día — pero no crear/editar/borrar citas completas.
     var result = await appointmentService.UpdateAppointmentStatusAsync(affiliateId, id, status);
     if (result == null)
         return Results.NotFound();
     return Results.Ok(result);
 });
 
-app.MapDelete("/api/affiliates/{affiliateId:guid}/appointments/{id:guid}", async (IAppointmentService appointmentService, Guid affiliateId, Guid id) =>
+app.MapDelete("/api/affiliates/{affiliateId:guid}/appointments/{id:guid}", async (HttpContext ctx, IAppointmentService appointmentService, Guid affiliateId, Guid id) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
     var result = await appointmentService.DeleteAppointmentAsync(affiliateId, id);
     if (!result)
         return Results.NotFound();

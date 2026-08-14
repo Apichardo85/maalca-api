@@ -16,7 +16,7 @@ public class AppointmentService : IAppointmentService
     {
         var baseQuery = _context.Appointments.Where(a => a.AffiliateId == affiliateId);
         
-        IQueryable<Appointment> query = baseQuery.Include(a => a.Customer).Include(a => a.Service);
+        IQueryable<Appointment> query = baseQuery.Include(a => a.Customer).Include(a => a.Service).Include(a => a.AssignedTo);
 
         if (date.HasValue)
             query = query.Where(a => a.Date.Date == date.Value.Date);
@@ -31,7 +31,8 @@ public class AppointmentService : IAppointmentService
     }
 
     public async Task<Appointment?> GetAppointmentAsync(Guid affiliateId, Guid id)
-        => await _context.Appointments.Include(a => a.Customer).Include(a => a.Service).FirstOrDefaultAsync(a => a.Id == id && a.AffiliateId == affiliateId);
+        => await _context.Appointments.Include(a => a.Customer).Include(a => a.Service).Include(a => a.AssignedTo)
+            .FirstOrDefaultAsync(a => a.Id == id && a.AffiliateId == affiliateId);
 
     public async Task<Appointment> CreateAppointmentAsync(Guid affiliateId, Appointment appointment)
     {
