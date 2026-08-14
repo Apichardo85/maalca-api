@@ -12,7 +12,9 @@ public static class ModuleCatalog
 {
     public static readonly HashSet<string> Whitelist = new(StringComparer.OrdinalIgnoreCase)
     {
-        "catalog", "page", "metrics"
+        "catalog", "page", "metrics", "staff"
+        // "appointments" se agrega cuando la Agenda esté conectada (fase siguiente) — hasta
+        // entonces no debe aparecer como módulo "activo" aunque el endpoint ya exista.
     };
 
     public static string[] FilterActive(string? modules)

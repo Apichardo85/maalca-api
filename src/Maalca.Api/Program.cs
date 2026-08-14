@@ -632,37 +632,59 @@ app.MapPatch("/api/affiliates/{affiliateId:guid}/queue/{id:guid}", async (IQueue
     return Results.Ok(result);
 });
 
-// ============ TEAM ENDPOINTS ============
-app.MapGet("/api/affiliates/{affiliateId:guid}/team", async (ITeamService teamService, Guid affiliateId, string? department = null, string? status = null) =>
+// ============ TEAM ENDPOINTS (personal operativo del negocio — meseros, barberos, etc.;
+// distinto de /api/affiliates/{id}/collaborators, que es quién puede iniciar sesión en el
+// dashboard) ============
+// Estos endpoints venían del dashboard legacy sin ningún chequeo de pertenencia — cualquier
+// usuario autenticado podía leer/editar el staff de OTRO afiliado con solo cambiar el guid en
+// la URL. Se agrega el mismo gating que el resto de /api/affiliates/{id}/... : lectura requiere
+// que sea el afiliado activo del usuario; escritura además exige que no sea rol Staff.
+app.MapGet("/api/affiliates/{affiliateId:guid}/team", async (HttpContext ctx, ITeamService teamService, Guid affiliateId, string? department = null, string? status = null) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
     var result = await teamService.GetTeamAsync(affiliateId, department, status);
     return Results.Ok(result);
 });
 
-app.MapGet("/api/affiliates/{affiliateId:guid}/team/{id:guid}", async (ITeamService teamService, Guid affiliateId, Guid id) =>
+app.MapGet("/api/affiliates/{affiliateId:guid}/team/{id:guid}", async (HttpContext ctx, ITeamService teamService, Guid affiliateId, Guid id) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
     var result = await teamService.GetTeamMemberAsync(affiliateId, id);
     if (result == null)
         return Results.NotFound();
     return Results.Ok(result);
 });
 
-app.MapPost("/api/affiliates/{affiliateId:guid}/team", async (ITeamService teamService, Guid affiliateId, TeamMember member) =>
+app.MapPost("/api/affiliates/{affiliateId:guid}/team", async (HttpContext ctx, ITeamService teamService, Guid affiliateId, TeamMember member) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
     var result = await teamService.CreateTeamMemberAsync(affiliateId, member);
     return Results.Created($"/api/affiliates/{affiliateId}/team/{result.Id}", result);
 });
 
-app.MapPut("/api/affiliates/{affiliateId:guid}/team/{id:guid}", async (ITeamService teamService, Guid affiliateId, Guid id, TeamMember member) =>
+app.MapPut("/api/affiliates/{affiliateId:guid}/team/{id:guid}", async (HttpContext ctx, ITeamService teamService, Guid affiliateId, Guid id, TeamMember member) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
     var result = await teamService.UpdateTeamMemberAsync(affiliateId, id, member);
     if (result == null)
         return Results.NotFound();
     return Results.Ok(result);
 });
 
-app.MapDelete("/api/affiliates/{affiliateId:guid}/team/{id:guid}", async (ITeamService teamService, Guid affiliateId, Guid id) =>
+app.MapDelete("/api/affiliates/{affiliateId:guid}/team/{id:guid}", async (HttpContext ctx, ITeamService teamService, Guid affiliateId, Guid id) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
     var result = await teamService.DeleteTeamMemberAsync(affiliateId, id);
     if (!result)
         return Results.NotFound();
