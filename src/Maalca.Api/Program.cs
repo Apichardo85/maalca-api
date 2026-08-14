@@ -380,7 +380,7 @@ app.MapGet("/api/affiliates/{id:guid}/collaborators", async (
 
     var team = await mapService.GetTeamAsync(id);
     var result = team.Select(m => new TeamMemberDto(
-        m.Id, m.Email, m.Role.ToString(), string.IsNullOrEmpty(m.SupabaseUserId), m.CreatedAt));
+        m.Id, m.Email, m.Role.ToString(), string.IsNullOrEmpty(m.SupabaseUserId), m.CreatedAt, m.TeamMemberId));
     return Results.Ok(result);
 });
 
@@ -403,9 +403,9 @@ app.MapPost("/api/affiliates/{id:guid}/collaborators", async (
 
     try
     {
-        var map = await mapService.InviteAsync(id, request.Email, role);
+        var map = await mapService.InviteAsync(id, request.Email, role, request.TeamMemberId);
         return Results.Created($"/api/affiliates/{id}/collaborators/{map.Id}",
-            new TeamMemberDto(map.Id, map.Email, map.Role.ToString(), Pending: true, map.CreatedAt));
+            new TeamMemberDto(map.Id, map.Email, map.Role.ToString(), Pending: true, map.CreatedAt, map.TeamMemberId));
     }
     catch (InvalidOperationException ex)
     {
@@ -429,7 +429,7 @@ app.MapPatch("/api/affiliates/{id:guid}/collaborators/{mapId:guid}", async (
     {
         var map = await mapService.UpdateRoleAsync(id, mapId, role);
         if (map is null) return Results.NotFound();
-        return Results.Ok(new TeamMemberDto(map.Id, map.Email, map.Role.ToString(), string.IsNullOrEmpty(map.SupabaseUserId), map.CreatedAt));
+        return Results.Ok(new TeamMemberDto(map.Id, map.Email, map.Role.ToString(), string.IsNullOrEmpty(map.SupabaseUserId), map.CreatedAt, map.TeamMemberId));
     }
     catch (InvalidOperationException ex)
     {

@@ -16,10 +16,11 @@ public record TeamMemberDto(
     string Email,
     string Role,
     bool Pending,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+    Guid? TeamMemberId = null
 );
 
-public record InviteTeamMemberRequest(string Email, string Role);
+public record InviteTeamMemberRequest(string Email, string Role, Guid? TeamMemberId = null);
 
 public record UpdateTeamMemberRoleRequest(string Role);
 

@@ -75,13 +75,28 @@ public class AffiliateMapService : IAffiliateMapService
             .OrderBy(m => m.CreatedAt)
             .ToListAsync();
 
-    public async Task<UserAffiliateMap> InviteAsync(Guid affiliateId, string email, AffiliateRole role)
+    public async Task<UserAffiliateMap> InviteAsync(Guid affiliateId, string email, AffiliateRole role, Guid? teamMemberId = null)
     {
         var normalizedEmail = email.Trim().ToLowerInvariant();
         var exists = await _context.UserAffiliateMaps
             .AnyAsync(m => m.AffiliateId == affiliateId && m.Email.ToLower() == normalizedEmail);
         if (exists)
             throw new InvalidOperationException("Ese correo ya tiene acceso a este negocio.");
+
+        // Si se manda teamMemberId, debe ser un miembro de Personal real de ESTE afiliado —
+        // evita que alguien vincule un id de otro negocio a mano.
+        if (teamMemberId is Guid tmId)
+        {
+            var belongsToAffiliate = await _context.TeamMembers
+                .AnyAsync(t => t.Id == tmId && t.AffiliateId == affiliateId);
+            if (!belongsToAffiliate)
+                throw new InvalidOperationException("Ese miembro de Personal no pertenece a este negocio.");
+
+            var alreadyLinked = await _context.UserAffiliateMaps
+                .AnyAsync(m => m.AffiliateId == affiliateId && m.TeamMemberId == tmId);
+            if (alreadyLinked)
+                throw new InvalidOperationException("Ese miembro de Personal ya tiene acceso al dashboard.");
+        }
 
         // SupabaseUserId vacío = invitación pendiente, hasta que ClaimPendingInvitesAsync lo
         // enganche en el próximo login de esa persona con ese mismo correo verificado.
@@ -91,6 +106,7 @@ public class AffiliateMapService : IAffiliateMapService
             Email = normalizedEmail,
             AffiliateId = affiliateId,
             Role = role,
+            TeamMemberId = teamMemberId,
             CreatedAt = DateTime.UtcNow,
         };
         _context.UserAffiliateMaps.Add(map);

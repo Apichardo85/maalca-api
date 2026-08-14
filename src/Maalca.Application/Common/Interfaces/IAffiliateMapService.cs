@@ -16,7 +16,7 @@ public interface IAffiliateMapService
     Task ClaimPendingInvitesAsync(string supabaseUserId, string email);
 
     Task<List<UserAffiliateMap>> GetTeamAsync(Guid affiliateId);
-    Task<UserAffiliateMap> InviteAsync(Guid affiliateId, string email, AffiliateRole role);
+    Task<UserAffiliateMap> InviteAsync(Guid affiliateId, string email, AffiliateRole role, Guid? teamMemberId = null);
     Task<UserAffiliateMap?> UpdateRoleAsync(Guid affiliateId, Guid mapId, AffiliateRole role);
     Task<bool> RemoveAsync(Guid affiliateId, Guid mapId);
 }

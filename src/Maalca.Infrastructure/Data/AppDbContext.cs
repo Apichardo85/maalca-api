@@ -310,6 +310,12 @@ public class AppDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(e => e.AffiliateId)
                   .OnDelete(DeleteBehavior.Cascade);
+            // Vínculo opcional Personal ↔ Equipo — SetNull para que borrar un TeamMember de
+            // Personal no arrastre el acceso al dashboard, solo lo desvincule.
+            entity.HasOne(e => e.TeamMember)
+                  .WithMany()
+                  .HasForeignKey(e => e.TeamMemberId)
+                  .OnDelete(DeleteBehavior.SetNull);
         });
 
         // PlatformAdmin

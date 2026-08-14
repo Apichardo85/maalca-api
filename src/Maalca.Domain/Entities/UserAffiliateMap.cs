@@ -21,6 +21,14 @@ public class UserAffiliateMap : BaseEntity
     // switcher del admin. Expira solo y se limpia perezosamente (ver GetMapsForUserAsync).
     public bool IsImpersonation { get; set; } = false;
     public DateTime? ImpersonationExpiresAt { get; set; }
+
+    // ── Vínculo Personal ↔ Equipo ────────────────────────────────────────
+    // Opcional: cuando el dueño invita a alguien que YA existe como TeamMember (staff
+    // operativo — mesera, barbero), este campo conecta el login del dashboard con esa
+    // misma persona en vez de tratarlos como dos registros sin relación. Null = acceso
+    // de dashboard sin contraparte operativa (ej: un contador que nunca atiende clientes).
+    public Guid? TeamMemberId { get; set; }
+    public TeamMember? TeamMember { get; set; }
 }
 
 public enum AffiliateRole { Owner = 0, Manager = 1, Staff = 2 }
