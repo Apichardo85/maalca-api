@@ -16,9 +16,12 @@ public record PlatformAffiliateSummaryDto(
     string Plan,
     string PlanStatus,
     bool Published,
+    bool IsActive,
     DateTime CreatedAt,
     int OrdersLast30Days,
     bool StripeConnectChargesEnabled,
     List<string> Alerts);
 
 public record ImpersonationSessionDto(Guid AffiliateId, string Slug, string Name, DateTime ExpiresAt);
+
+public record SetAffiliateStatusRequest(bool? Published, bool? Active);

@@ -202,6 +202,23 @@ app.MapGet("/api/ops/affiliates", async (HttpContext ctx, IPlatformAdminService 
     return Results.Ok(await opsService.GetAffiliatesAsync());
 });
 
+app.MapPatch("/api/ops/affiliates/{affiliateId:guid}", async (
+    HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId, SetAffiliateStatusRequest request) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+
+    try
+    {
+        var result = await opsService.SetAffiliateStatusAsync(affiliateId, request.Published, request.Active);
+        return Results.Ok(result);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = ex.Message } });
+    }
+});
+
 app.MapPost("/api/ops/impersonate/{affiliateId:guid}", async (HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId) =>
 {
     if (ctx.User.FindFirst("platform_admin")?.Value != "true")

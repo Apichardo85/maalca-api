@@ -18,8 +18,10 @@ public class PublicCatalogService : IPublicCatalogService
 
     public async Task<AffiliatePublicDto?> GetAffiliateBySlugAsync(string slug)
     {
+        // IsActive=false = suspendido desde /ops (Fase 60) — se comporta igual que "no publicado"
+        // de cara al público, sin tocar la preferencia real del dueño en Published.
         var affiliate = await _db.Affiliates
-            .Where(a => a.Slug == slug && a.Published)
+            .Where(a => a.Slug == slug && a.Published && a.IsActive)
             .FirstOrDefaultAsync();
 
         if (affiliate == null) return null;
@@ -30,7 +32,7 @@ public class PublicCatalogService : IPublicCatalogService
     public async Task<PublicCatalogResponse?> GetCatalogAsync(string slug, Guid? screenId = null)
     {
         var affiliate = await _db.Affiliates
-            .Where(a => a.Slug == slug && a.Published)
+            .Where(a => a.Slug == slug && a.Published && a.IsActive)
             .FirstOrDefaultAsync();
 
         if (affiliate == null) return null;
@@ -134,7 +136,7 @@ public class PublicCatalogService : IPublicCatalogService
 
     public async Task<List<FeaturedAffiliateDto>> GetFeaturedAffiliatesAsync()
         => await _db.Affiliates
-            .Where(a => a.IsFeatured && a.Published)
+            .Where(a => a.IsFeatured && a.Published && a.IsActive)
             .OrderBy(a => a.Name)
             .Select(a => new FeaturedAffiliateDto(a.Slug!, a.Name, a.Description, a.LogoUrl))
             .ToListAsync();

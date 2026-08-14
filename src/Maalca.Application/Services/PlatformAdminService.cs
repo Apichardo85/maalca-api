@@ -82,12 +82,44 @@ public class PlatformAdminService : IPlatformAdminService
                 alerts.Add("Sin pedidos en 30 días");
             if (!a.Published && a.CreatedAt < now.AddDays(-7))
                 alerts.Add("Sin publicar");
+            if (!a.IsActive)
+                alerts.Add("Suspendido");
 
             result.Add(new PlatformAffiliateSummaryDto(
                 a.Id, a.Name, a.Slug ?? "", a.BusinessType.ToString(), a.Plan.ToString(), a.PlanStatus.ToString(),
-                a.Published, a.CreatedAt, orders30d, a.StripeConnectChargesEnabled, alerts));
+                a.Published, a.IsActive, a.CreatedAt, orders30d, a.StripeConnectChargesEnabled, alerts));
         }
         return result;
+    }
+
+    public async Task<PlatformAffiliateSummaryDto> SetAffiliateStatusAsync(Guid affiliateId, bool? published, bool? active)
+    {
+        var affiliate = await _context.Affiliates.FindAsync(affiliateId)
+            ?? throw new InvalidOperationException("Ese negocio no existe.");
+
+        if (published.HasValue) affiliate.Published = published.Value;
+        if (active.HasValue) affiliate.IsActive = active.Value;
+        affiliate.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        var since30d = DateTime.UtcNow.AddDays(-30);
+        var orders30d = await _context.Orders.CountAsync(o => o.AffiliateId == affiliateId && o.CreatedAt >= since30d);
+
+        var alerts = new List<string>();
+        var now = DateTime.UtcNow;
+        if (affiliate.Plan == Plan.Entrepreneur && !affiliate.StripeConnectChargesEnabled)
+            alerts.Add("Sin conectar pagos");
+        if (affiliate.Plan == Plan.Entrepreneur && orders30d == 0 && affiliate.CreatedAt < now.AddDays(-30))
+            alerts.Add("Sin pedidos en 30 días");
+        if (!affiliate.Published && affiliate.CreatedAt < now.AddDays(-7))
+            alerts.Add("Sin publicar");
+        if (!affiliate.IsActive)
+            alerts.Add("Suspendido");
+
+        return new PlatformAffiliateSummaryDto(
+            affiliate.Id, affiliate.Name, affiliate.Slug ?? "", affiliate.BusinessType.ToString(),
+            affiliate.Plan.ToString(), affiliate.PlanStatus.ToString(), affiliate.Published, affiliate.IsActive,
+            affiliate.CreatedAt, orders30d, affiliate.StripeConnectChargesEnabled, alerts);
     }
 
     public async Task<ImpersonationSessionDto> StartImpersonationAsync(string adminSupabaseUserId, string adminEmail, Guid affiliateId)
