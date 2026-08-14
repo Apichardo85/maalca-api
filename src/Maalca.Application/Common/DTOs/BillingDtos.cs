@@ -4,6 +4,10 @@ public record CreateCheckoutSessionRequest(string SuccessUrl, string CancelUrl);
 
 public record CheckoutSessionResponseDto(string Url);
 
+public record CreatePortalSessionRequest(string ReturnUrl);
+
+public record PortalSessionResponseDto(string Url);
+
 // ── Stripe Connect: cuenta de pago del afiliado (destino donde recibe el dinero
 // de SUS clientes) — distinto de la suscripción MaalCa→afiliado de arriba. ──
 

@@ -15,6 +15,7 @@ public record BusinessDto(
     string Name,
     string BusinessType,
     string Plan,
+    string PlanStatus,
     string? Whatsapp,
     string? PrimaryColor,
     string? DescriptionEn,

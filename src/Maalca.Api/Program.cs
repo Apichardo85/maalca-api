@@ -850,6 +850,29 @@ app.MapPost("/api/affiliates/{id}/billing/checkout-session", async (
     }
 });
 
+app.MapPost("/api/affiliates/{id}/billing/portal-session", async (
+    HttpContext ctx, IStripeBillingService billingService,
+    Guid id, CreatePortalSessionRequest request) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    var role = ctx.User.FindFirst("role")?.Value;
+    if (role == "Staff")
+        return Results.Forbid();
+
+    try
+    {
+        var session = await billingService.CreatePortalSessionAsync(id, request.ReturnUrl);
+        return Results.Ok(session);
+    }
+    catch (KeyNotFoundException ex)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = ex.Message } });
+    }
+});
+
 // ============ STRIPE CONNECT (afiliado recibe pagos de SUS clientes) ============
 // Distinto de /billing arriba: eso es la suscripción MaalCa→afiliado. Esto es la cuenta
 // donde el afiliado cobra a sus propios clientes (tarjeta/Apple Pay/Google Pay).
@@ -1451,6 +1474,7 @@ app.MapGet("/api/space/{slug}", async (
             affiliate.Id, affiliate.Slug!, affiliate.Name,
             affiliate.BusinessType.ToString(),
             affiliate.Plan.ToString().ToLower(),
+            affiliate.PlanStatus.ToString(),
             affiliate.WhatsApp, affiliate.PrimaryColor,
             affiliate.DescriptionEn,
             canales, ModuleCatalog.FilterActive(affiliate.ModulosActivos),

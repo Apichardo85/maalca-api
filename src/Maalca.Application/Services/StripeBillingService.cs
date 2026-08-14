@@ -51,6 +51,26 @@ public class StripeBillingService : IStripeBillingService
         return new CheckoutSessionResponseDto(session.Url);
     }
 
+    public async Task<PortalSessionResponseDto> CreatePortalSessionAsync(Guid affiliateId, string returnUrl)
+    {
+        var affiliate = await _db.Affiliates.FindAsync(affiliateId)
+            ?? throw new KeyNotFoundException("Affiliate not found");
+
+        if (string.IsNullOrEmpty(affiliate.StripeCustomerId))
+            throw new KeyNotFoundException("Este negocio todavía no tiene una suscripción con Stripe.");
+
+        StripeConfiguration.ApiKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY") ?? "";
+
+        var session = await new Stripe.BillingPortal.SessionService().CreateAsync(
+            new Stripe.BillingPortal.SessionCreateOptions
+            {
+                Customer = affiliate.StripeCustomerId,
+                ReturnUrl = returnUrl,
+            });
+
+        return new PortalSessionResponseDto(session.Url);
+    }
+
     public async Task HandleWebhookEventAsync(string json, string signatureHeader)
     {
         var webhookSecret = Environment.GetEnvironmentVariable("STRIPE_WEBHOOK_SECRET") ?? "";

@@ -84,6 +84,8 @@ public class PlatformAdminService : IPlatformAdminService
                 alerts.Add("Sin publicar");
             if (!a.IsActive)
                 alerts.Add("Suspendido");
+            if (a.PlanStatus == PlanStatus.PastDue)
+                alerts.Add("Pago atrasado");
 
             result.Add(new PlatformAffiliateSummaryDto(
                 a.Id, a.Name, a.Slug ?? "", a.BusinessType.ToString(), a.Plan.ToString(), a.PlanStatus.ToString(),
@@ -115,6 +117,8 @@ public class PlatformAdminService : IPlatformAdminService
             alerts.Add("Sin publicar");
         if (!affiliate.IsActive)
             alerts.Add("Suspendido");
+        if (affiliate.PlanStatus == PlanStatus.PastDue)
+            alerts.Add("Pago atrasado");
 
         return new PlatformAffiliateSummaryDto(
             affiliate.Id, affiliate.Name, affiliate.Slug ?? "", affiliate.BusinessType.ToString(),
