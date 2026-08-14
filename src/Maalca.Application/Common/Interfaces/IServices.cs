@@ -110,6 +110,18 @@ public interface IMetricsService
     Task<object> GetMetricsAsync(Guid affiliateId);
 }
 
+/// <summary>
+/// Reserva pública (sin login) — usada por el widget de agenda en las plantillas públicas
+/// (restaurant/barber/service). Resuelve el afiliado por slug (igual que IPublicCatalogService)
+/// en vez de por Guid, porque el visitante nunca tiene un affiliateId ni un JWT.
+/// </summary>
+public interface IPublicBookingService
+{
+    Task<List<PublicTeamMemberDto>?> GetPublicTeamAsync(string affiliateSlug);
+    Task<List<PublicServiceDto>?> GetPublicServicesAsync(string affiliateSlug);
+    Task<PublicAppointmentResultDto> CreatePublicAppointmentAsync(string affiliateSlug, CreatePublicAppointmentRequest request);
+}
+
 public interface ILeadService
 {
     Task<object> GetOverviewMetricsAsync();

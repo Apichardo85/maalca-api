@@ -17,7 +17,13 @@ public static class ModuleCatalog
 
     public static string[] FilterActive(string? modules)
     {
-        if (string.IsNullOrWhiteSpace(modules)) return Array.Empty<string>();
+        // ModulosActivos nunca se ha escrito para ningún afiliado (ni onboarding ni ningún
+        // servicio lo setea todavía) — hasta que exista un admin panel real para prender/apagar
+        // módulos por afiliado, "sin configurar" significa "todos los módulos base activos",
+        // que es el comportamiento real de hoy (catalog/page/metrics/staff/appointments
+        // funcionan para cualquier afiliado sin excepción). El día que se construya el toggle
+        // real, un afiliado con ModulosActivos="" explícito (no null) podría usarse para "ninguno".
+        if (string.IsNullOrWhiteSpace(modules)) return Whitelist.ToArray();
 
         return modules
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)

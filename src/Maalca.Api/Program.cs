@@ -75,6 +75,7 @@ builder.Services.AddScoped<Maalca.Application.Common.Interfaces.IOrderRealtimeNo
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IScreenAdService, ScreenAdService>();
 builder.Services.AddScoped<IScreenService, ScreenService>();
+builder.Services.AddScoped<IPublicBookingService, PublicBookingService>();
 
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
@@ -563,41 +564,61 @@ app.MapDelete("/api/affiliates/{affiliateId:guid}/appointments/{id:guid}", async
 });
 
 // ============ SERVICE ENDPOINTS ============
-app.MapGet("/api/affiliates/{affiliateId:guid}/services", async (IServiceService serviceService, Guid affiliateId, string? category = null, string? status = null) =>
+// Mismo hueco que team/customers/appointments tenían: cualquier usuario autenticado podía
+// leer/editar el catálogo de servicios de OTRO afiliado con solo cambiar el guid en la URL.
+// Confirmado que ningún caller público (plantillas sin login) pega directo a estos endpoints —
+// solo el dashboard (space/[slug]/agenda, /api/space/[slug]/services) que ya manda el token.
+app.MapGet("/api/affiliates/{affiliateId:guid}/services", async (IServiceService serviceService, Guid affiliateId, HttpContext ctx, string? category = null, string? status = null) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
     var result = await serviceService.GetServicesAsync(affiliateId, category, status);
     return Results.Ok(result);
-});
+}).RequireAuthorization();
 
-app.MapGet("/api/affiliates/{affiliateId:guid}/services/{id:guid}", async (IServiceService serviceService, Guid affiliateId, Guid id) =>
+app.MapGet("/api/affiliates/{affiliateId:guid}/services/{id:guid}", async (IServiceService serviceService, Guid affiliateId, Guid id, HttpContext ctx) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
     var result = await serviceService.GetServiceAsync(affiliateId, id);
     if (result == null)
         return Results.NotFound();
     return Results.Ok(result);
-});
+}).RequireAuthorization();
 
-app.MapPost("/api/affiliates/{affiliateId:guid}/services", async (IServiceService serviceService, Guid affiliateId, Maalca.Domain.Entities.Service service) =>
+app.MapPost("/api/affiliates/{affiliateId:guid}/services", async (IServiceService serviceService, Guid affiliateId, Maalca.Domain.Entities.Service service, HttpContext ctx) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
     var result = await serviceService.CreateServiceAsync(affiliateId, service);
     return Results.Created($"/api/affiliates/{affiliateId}/services/{result.Id}", result);
-});
+}).RequireAuthorization();
 
-app.MapPut("/api/affiliates/{affiliateId:guid}/services/{id:guid}", async (IServiceService serviceService, Guid affiliateId, Guid id, Maalca.Domain.Entities.Service service) =>
+app.MapPut("/api/affiliates/{affiliateId:guid}/services/{id:guid}", async (IServiceService serviceService, Guid affiliateId, Guid id, Maalca.Domain.Entities.Service service, HttpContext ctx) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
     var result = await serviceService.UpdateServiceAsync(affiliateId, id, service);
     if (result == null)
         return Results.NotFound();
     return Results.Ok(result);
-});
+}).RequireAuthorization();
 
-app.MapDelete("/api/affiliates/{affiliateId:guid}/services/{id:guid}", async (IServiceService serviceService, Guid affiliateId, Guid id) =>
+app.MapDelete("/api/affiliates/{affiliateId:guid}/services/{id:guid}", async (IServiceService serviceService, Guid affiliateId, Guid id, HttpContext ctx) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
     var result = await serviceService.DeleteServiceAsync(affiliateId, id);
     if (!result)
         return Results.NotFound();
     return Results.NoContent();
-});
+}).RequireAuthorization();
 
 // ============ INVENTORY ENDPOINTS ============
 app.MapGet("/api/affiliates/{affiliateId:guid}/inventory", async (IInventoryService inventoryService, Guid affiliateId, string? category = null, string? status = null, int page = 1) =>
@@ -1697,6 +1718,50 @@ app.MapGet("/api/public/affiliates/{slug}/catalog", async (IPublicCatalogService
         return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
     response.Headers.CacheControl = "public, max-age=60";
     return Results.Ok(result);
+})
+.AllowAnonymous();
+
+// ============ PUBLIC BOOKING (agenda pública, sin login) ============
+app.MapGet("/api/public/affiliates/{slug}/team", async (IPublicBookingService bookingService, string slug, HttpResponse response) =>
+{
+    var result = await bookingService.GetPublicTeamAsync(slug);
+    if (result == null)
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
+    response.Headers.CacheControl = "public, max-age=30";
+    return Results.Ok(result);
+})
+.AllowAnonymous();
+
+app.MapGet("/api/public/affiliates/{slug}/services", async (IPublicBookingService bookingService, string slug, HttpResponse response) =>
+{
+    var result = await bookingService.GetPublicServicesAsync(slug);
+    if (result == null)
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
+    response.Headers.CacheControl = "public, max-age=30";
+    return Results.Ok(result);
+})
+.AllowAnonymous();
+
+app.MapPost("/api/public/affiliates/{slug}/appointments", async (
+    IPublicBookingService bookingService, string slug, CreatePublicAppointmentRequest request) =>
+{
+    try
+    {
+        var result = await bookingService.CreatePublicAppointmentAsync(slug, request);
+        return Results.Ok(result);
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.Conflict(new { error = new { code = "SLOT_TAKEN", message = ex.Message } });
+    }
 })
 .AllowAnonymous();
 
