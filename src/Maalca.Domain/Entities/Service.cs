@@ -9,7 +9,10 @@ public class Service : AuditableEntity
     public string? Description { get; set; }
     public string? DescriptionEn { get; set; }
     public decimal Price { get; set; }
-    public int DurationMinutes { get; set; } = 30;
+    // Nullable a propósito — null = el dueño no fijó duración, se oculta en catálogo/canales
+    // públicos. Ver CatalogCrudService.UpdateServiceAsync para el sentinel de "vaciar" (0)
+    // y PublicBookingService para el fallback usado solo al calcular horarios de Agenda.
+    public int? DurationMinutes { get; set; }
     public string? Category { get; set; }
     public string? ImageUrl { get; set; }
     // Galería — JSON array de URLs, orden = orden de visualización. ImageUrl se mantiene

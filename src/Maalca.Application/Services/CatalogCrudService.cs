@@ -254,7 +254,13 @@ public class CatalogCrudService : ICatalogCrudService
         ApplyImagesPatch(request.Images, request.ImageUrl, v => service.ImageUrl = v, v => service.Images = v);
         if (request.SortOrder.HasValue) service.SortOrder = request.SortOrder.Value;
         if (request.IsPubliclyVisible.HasValue) service.IsPubliclyVisible = request.IsPubliclyVisible.Value;
-        if (request.DurationMinutes.HasValue) service.DurationMinutes = request.DurationMinutes.Value;
+        // Sentinel: HasValue=false (clave ausente del JSON) = no tocar. 0 = el dueño vació el
+        // campo → limpiar a null (oculta la duración en público). N>0 = fijar ese valor.
+        // El frontend (EditForm.tsx) nunca omite la clave cuando el tipo de negocio la usa,
+        // así que 0 no colisiona con "no tocar". Este es el path real — UpdateAsync/
+        // PatchServiceAsync, no UpdateItemAsync/UpdateServiceAsync (ese no está wireado).
+        if (request.DurationMinutes.HasValue)
+            service.DurationMinutes = request.DurationMinutes.Value == 0 ? null : request.DurationMinutes.Value;
         if (request.Status is not null) service.Status = request.Status;
         if (request.DescriptionEn is not null) service.DescriptionEn = request.DescriptionEn;
         if (wasDemo) service.IsDemo = false;
@@ -334,7 +340,9 @@ public class CatalogCrudService : ICatalogCrudService
             ImageUrl = serviceImageUrl,
             Images = serviceImagesJson,
             SortOrder = request.SortOrder,
-            DurationMinutes = request.DurationMinutes ?? 30,
+            // Sin forzar 30 — si el dueño lo deja vacío al crear, queda sin duración (oculto
+            // en público) hasta que la fije explícitamente. Ver Service.cs.
+            DurationMinutes = request.DurationMinutes,
             IsPubliclyVisible = true,
             IsDemo = false,
             Status = "Active"

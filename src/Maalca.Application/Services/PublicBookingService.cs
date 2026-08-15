@@ -51,7 +51,10 @@ public class PublicBookingService : IPublicBookingService
         return await _db.Services
             .Where(s => s.AffiliateId == affiliate.Id && s.IsActive && s.Status == "Active")
             .OrderBy(s => s.SortOrder)
-            .Select(s => new PublicServiceDto(s.Id, s.Name, s.Description, s.Price, s.DurationMinutes))
+            // Agenda necesita un número para calcular slots aunque el dueño no haya fijado
+            // duración en el catálogo (donde null = oculto) — 30 min es el mismo fallback
+            // que ya se usaba como default histórico. No afecta lo que se guarda en Service.
+            .Select(s => new PublicServiceDto(s.Id, s.Name, s.Description, s.Price, s.DurationMinutes ?? 30))
             .ToListAsync();
     }
 
