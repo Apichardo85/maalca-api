@@ -90,6 +90,11 @@ public class Affiliate : BaseEntity
     // recurso si sigue sin setearse.
     public string? Country { get; set; }
 
+    // ISO 4217 — "USD" | "DOP". Cómo el negocio le muestra sus precios a sus clientes (catálogo
+    // público, tarjetas de servicio, POS del dashboard). Independiente de Country (que es para
+    // Stripe Connect) — un negocio en RD puede facturar en USD y viceversa, así que no se infiere.
+    public string Currency { get; set; } = "USD";
+
     // Fase 9 Etapa A — cada cuántos slides de menú se inserta un comercial en el Menu Board
     // público. Null/0 = sin comerciales intercalados (comportamiento actual, sin cambios para
     // quien no configure esto). Simple a propósito — nada de listas de orden explícito todavía.

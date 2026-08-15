@@ -19,7 +19,8 @@ public record AffiliatePublicDto(
     List<ProcessStepDto> ProcessSteps,
     List<FaqItemDto> Faq,
     List<HorarioEntryDto> Horario,
-    string? Timezone
+    string? Timezone,
+    string Currency = "USD"   // "USD" | "DOP" — cómo el negocio muestra sus precios
 );
 
 public record FeaturedAffiliateDto(

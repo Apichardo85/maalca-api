@@ -26,7 +26,8 @@ public record BusinessDto(
     IReadOnlyList<HorarioEntryDto> Horario,
     string? Timezone,
     int? TrialDaysRemaining,
-    DateTime? TrialEndsAt
+    DateTime? TrialEndsAt,
+    string Currency = "USD"
 );
 
 public record ProcessStepDto(string Title, string Description);

@@ -35,6 +35,7 @@ public record UpdateAffiliateProfileRequest(
     string? Website,
     string? PrimaryColor,
     string? Country = null,
+    string? Currency = null,   // "USD" | "DOP"
     int? AdFrequency = null,  // Fase 9 Etapa A — cada cuántos slides de menú se inserta un comercial en el board
     string? Language = null,    // Fase 9 — "es" | "en", preferencia del board (no del visitante)
     string? BoardTheme = null,  // Fase 9 — "Dark" | "Light"
@@ -55,7 +56,8 @@ public record AffiliatePublicProfileDto(
     string? ContactEmail,
     string? Address,
     string? Website,
-    string? Country = null
+    string? Country = null,
+    string? Currency = null
 );
 
 public record UpdateAffiliateContentRequest(

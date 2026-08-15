@@ -160,7 +160,8 @@ public class PublicCatalogService : IPublicCatalogService
             JsonArrayField.Parse<ProcessStepDto>(a.ProcessSteps),
             JsonArrayField.Parse<FaqItemDto>(a.Faq),
             JsonArrayField.Parse<HorarioEntryDto>(a.Horario),
-            a.Timezone);
+            a.Timezone,
+            a.Currency);
     }
 
     // Single source of truth for what each plan unlocks — flip a value here to change it

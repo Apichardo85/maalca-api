@@ -73,6 +73,13 @@ public class AffiliateService : IAffiliateService
         // de una cuenta conectada ya creada, así que una vez fijado no debería sobreescribirse
         // silenciosamente. Si el afiliado necesita corregirlo, es un caso manual.
         if (request.Country != null && affiliate.Country == null) affiliate.Country = request.Country.Trim().ToUpperInvariant();
+        if (request.Currency != null)
+        {
+            var currency = request.Currency.Trim().ToUpperInvariant();
+            if (currency != "USD" && currency != "DOP")
+                throw new ArgumentException("Currency must be USD or DOP.");
+            affiliate.Currency = currency;
+        }
         if (request.AdFrequency.HasValue) affiliate.AdFrequency = request.AdFrequency.Value > 0 ? request.AdFrequency.Value : null;
         if (request.Language != null) affiliate.Language = request.Language.Trim().ToLowerInvariant();
         if (request.BoardTheme != null)
@@ -96,7 +103,7 @@ public class AffiliateService : IAffiliateService
             affiliate.Description, affiliate.DescriptionEn, affiliate.PrimaryColor,
             affiliate.LogoUrl, affiliate.CoverImageUrl,
             affiliate.ContactEmail,
-            affiliate.Address, affiliate.Website, affiliate.Country);
+            affiliate.Address, affiliate.Website, affiliate.Country, affiliate.Currency);
     }
 
     public async Task<AffiliateContentDto?> UpdateContentAsync(Guid affiliateId, UpdateAffiliateContentRequest request)
