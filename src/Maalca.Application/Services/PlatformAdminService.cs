@@ -95,7 +95,7 @@ public class PlatformAdminService : IPlatformAdminService
 
             result.Add(new PlatformAffiliateSummaryDto(
                 a.Id, a.Name, a.Slug ?? "", a.BusinessType.ToString(), a.Plan.ToString(), a.PlanStatus.ToString(),
-                a.Published, a.IsActive, a.CreatedAt, orders30d, a.StripeConnectChargesEnabled, alerts));
+                a.Published, a.IsActive, a.CreatedAt, orders30d, a.StripeConnectChargesEnabled, alerts, a.LogoUrl));
         }
         return result;
     }
@@ -129,7 +129,7 @@ public class PlatformAdminService : IPlatformAdminService
         return new PlatformAffiliateSummaryDto(
             affiliate.Id, affiliate.Name, affiliate.Slug ?? "", affiliate.BusinessType.ToString(),
             affiliate.Plan.ToString(), affiliate.PlanStatus.ToString(), affiliate.Published, affiliate.IsActive,
-            affiliate.CreatedAt, orders30d, affiliate.StripeConnectChargesEnabled, alerts);
+            affiliate.CreatedAt, orders30d, affiliate.StripeConnectChargesEnabled, alerts, affiliate.LogoUrl);
     }
 
     public async Task<ImpersonationSessionDto> StartImpersonationAsync(string adminSupabaseUserId, string adminEmail, Guid affiliateId)

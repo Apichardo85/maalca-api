@@ -20,7 +20,8 @@ public record PlatformAffiliateSummaryDto(
     DateTime CreatedAt,
     int OrdersLast30Days,
     bool StripeConnectChargesEnabled,
-    List<string> Alerts);
+    List<string> Alerts,
+    string? LogoUrl = null);
 
 public record ImpersonationSessionDto(Guid AffiliateId, string Slug, string Name, DateTime ExpiresAt);
 
