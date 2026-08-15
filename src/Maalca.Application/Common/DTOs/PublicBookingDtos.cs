@@ -6,7 +6,7 @@ namespace Maalca.Application.Common.DTOs;
 /// entidades TeamMember/Service/Appointment completas: esos tienen campos internos (email,
 /// teléfono del staff, notas de otros clientes) que no deben salir por un endpoint anónimo.
 /// </summary>
-public record PublicTeamMemberDto(Guid Id, string Name, string Role);
+public record PublicTeamMemberDto(Guid Id, string Name, string Role, string? PhotoUrl = null);
 
 public record PublicServiceDto(Guid Id, string Name, string? Description, decimal Price, int DurationMinutes);
 

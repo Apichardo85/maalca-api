@@ -289,6 +289,7 @@ public class TeamService : ITeamService
         existing.Role = member.Role;
         existing.Department = member.Department;
         existing.IsActive = member.IsActive;
+        existing.PhotoUrl = member.PhotoUrl;
         existing.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
         return existing;

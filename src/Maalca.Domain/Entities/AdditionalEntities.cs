@@ -12,6 +12,10 @@ public class TeamMember : AuditableEntity
     public string Department { get; set; } = "General";
     public DateTime JoinDate { get; set; }
     public bool IsActive { get; set; } = true;
+    /// <summary>Foto subida por el dueño desde Equipo. Su sola presencia autoriza mostrarla en
+    /// canales públicos (página de reserva, MenuBoard) — sin foto, esos canales caen a un
+    /// avatar con iniciales en vez de exponer una imagen no aprobada.</summary>
+    public string? PhotoUrl { get; set; }
 
     public Affiliate? Affiliate { get; set; }
 }

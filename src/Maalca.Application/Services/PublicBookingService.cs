@@ -36,7 +36,7 @@ public class PublicBookingService : IPublicBookingService
         return await _db.TeamMembers
             .Where(t => t.AffiliateId == affiliate.Id && t.IsActive)
             .OrderBy(t => t.Name)
-            .Select(t => new PublicTeamMemberDto(t.Id, t.Name, t.Role))
+            .Select(t => new PublicTeamMemberDto(t.Id, t.Name, t.Role, t.PhotoUrl))
             .ToListAsync();
     }
 
