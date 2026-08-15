@@ -46,6 +46,11 @@ public class AppointmentService : IAppointmentService
         appointment.AffiliateId = affiliateId;
         appointment.Id = Guid.NewGuid();
         appointment.CreatedAt = DateTime.UtcNow;
+        // El body llega como fecha "bare" (yyyy-MM-dd), System.Text.Json la deserializa con
+        // Kind=Unspecified. La columna es timestamp with time zone y Npgsql 8+ rechaza escribir
+        // ahí un DateTime Unspecified. Es una fecha de calendario, no un instante real — forzamos
+        // Kind=Utc en vez de tocar el tipo de columna.
+        appointment.Date = DateTime.SpecifyKind(appointment.Date.Date, DateTimeKind.Utc);
         _context.Appointments.Add(appointment);
         await _context.SaveChangesAsync();
         return appointment;
@@ -57,7 +62,7 @@ public class AppointmentService : IAppointmentService
         if (existing == null) return null;
         existing.CustomerId = appointment.CustomerId;
         existing.ServiceId = appointment.ServiceId;
-        existing.Date = appointment.Date;
+        existing.Date = DateTime.SpecifyKind(appointment.Date.Date, DateTimeKind.Utc);
         existing.Time = appointment.Time;
         existing.Status = appointment.Status;
         existing.Notes = appointment.Notes;

@@ -118,7 +118,12 @@ public class PublicBookingService : IPublicBookingService
             CustomerId = customer.Id,
             ServiceId = service.Id,
             AssignedToId = request.AssignedToId,
-            Date = request.Date.Date,
+            // El front manda una fecha "bare" (yyyy-MM-dd, sin hora/offset), que System.Text.Json
+            // deserializa con Kind=Unspecified. La columna es timestamp with time zone y Npgsql 8+
+            // rechaza escribir un DateTime Unspecified ahí (throws en SaveChangesAsync). Como esto
+            // es una fecha de calendario, no un instante real, forzamos Kind=Utc explícitamente en
+            // vez de cambiar el tipo de columna.
+            Date = DateTime.SpecifyKind(request.Date.Date, DateTimeKind.Utc),
             Time = request.Time,
             Status = "Scheduled",
             Notes = request.Notes,
