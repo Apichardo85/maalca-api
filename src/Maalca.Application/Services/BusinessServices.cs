@@ -51,6 +51,21 @@ public class AppointmentService : IAppointmentService
         // ahí un DateTime Unspecified. Es una fecha de calendario, no un instante real — forzamos
         // Kind=Utc en vez de tocar el tipo de columna.
         appointment.Date = DateTime.SpecifyKind(appointment.Date.Date, DateTimeKind.Utc);
+
+        // Mismo chequeo de choque que ya existe en la reserva pública (PublicBookingService)
+        // — el dashboard nunca lo tuvo y permitía doble-agendar al mismo barbero a la misma hora.
+        if (appointment.AssignedToId is Guid assignedToId)
+        {
+            var conflict = await _context.Appointments.AnyAsync(a =>
+                a.AffiliateId == affiliateId &&
+                a.AssignedToId == assignedToId &&
+                a.Date.Date == appointment.Date.Date &&
+                a.Time == appointment.Time &&
+                a.Status != "Cancelled");
+            if (conflict)
+                throw new InvalidOperationException("Ese horario ya no está disponible — elige otro.");
+        }
+
         _context.Appointments.Add(appointment);
         await _context.SaveChangesAsync();
         return appointment;
@@ -60,9 +75,27 @@ public class AppointmentService : IAppointmentService
     {
         var existing = await _context.Appointments.FirstOrDefaultAsync(a => a.Id == id && a.AffiliateId == affiliateId);
         if (existing == null) return null;
+
+        var newDate = DateTime.SpecifyKind(appointment.Date.Date, DateTimeKind.Utc);
+
+        // Mismo chequeo, excluyendo la propia cita que se está editando — para no bloquear
+        // guardar una cita contra sí misma cuando no cambió nada relevante.
+        if (appointment.AssignedToId is Guid assignedToId)
+        {
+            var conflict = await _context.Appointments.AnyAsync(a =>
+                a.Id != id &&
+                a.AffiliateId == affiliateId &&
+                a.AssignedToId == assignedToId &&
+                a.Date.Date == newDate.Date &&
+                a.Time == appointment.Time &&
+                a.Status != "Cancelled");
+            if (conflict)
+                throw new InvalidOperationException("Ese horario ya no está disponible — elige otro.");
+        }
+
         existing.CustomerId = appointment.CustomerId;
         existing.ServiceId = appointment.ServiceId;
-        existing.Date = DateTime.SpecifyKind(appointment.Date.Date, DateTimeKind.Utc);
+        existing.Date = newDate;
         existing.Time = appointment.Time;
         existing.Status = appointment.Status;
         existing.Notes = appointment.Notes;

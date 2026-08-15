@@ -537,8 +537,15 @@ app.MapPost("/api/affiliates/{affiliateId:guid}/appointments", async (HttpContex
         return Results.Forbid();
     if (ctx.User.FindFirst("role")?.Value == "Staff")
         return Results.Forbid();
-    var result = await appointmentService.CreateAppointmentAsync(affiliateId, appointment);
-    return Results.Created($"/api/affiliates/{affiliateId}/appointments/{result.Id}", result);
+    try
+    {
+        var result = await appointmentService.CreateAppointmentAsync(affiliateId, appointment);
+        return Results.Created($"/api/affiliates/{affiliateId}/appointments/{result.Id}", result);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.Conflict(new { error = new { code = "CONFLICT", message = ex.Message } });
+    }
 });
 
 app.MapPut("/api/affiliates/{affiliateId:guid}/appointments/{id:guid}", async (HttpContext ctx, IAppointmentService appointmentService, Guid affiliateId, Guid id, Appointment appointment) =>
@@ -547,10 +554,17 @@ app.MapPut("/api/affiliates/{affiliateId:guid}/appointments/{id:guid}", async (H
         return Results.Forbid();
     if (ctx.User.FindFirst("role")?.Value == "Staff")
         return Results.Forbid();
-    var result = await appointmentService.UpdateAppointmentAsync(affiliateId, id, appointment);
-    if (result == null)
-        return Results.NotFound();
-    return Results.Ok(result);
+    try
+    {
+        var result = await appointmentService.UpdateAppointmentAsync(affiliateId, id, appointment);
+        if (result == null)
+            return Results.NotFound();
+        return Results.Ok(result);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.Conflict(new { error = ex.Message });
+    }
 });
 
 app.MapPatch("/api/affiliates/{affiliateId:guid}/appointments/{id:guid}", async (HttpContext ctx, IAppointmentService appointmentService, Guid affiliateId, Guid id, string status) =>
