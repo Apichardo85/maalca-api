@@ -62,3 +62,24 @@ public record CreatePosOrderRequest(
     string? Currency,
     string PaymentMethod
 );
+
+/// <summary>
+/// POS con cobro real de Stripe (Etapa D, fase 2) — a diferencia de CreatePosOrderRequest
+/// (Cash/Other, entra directo Paid porque el cobro ya pasó por fuera), esto genera una Checkout
+/// Session con la cuenta Connect del negocio (mismo direct charge que el storefront público) y
+/// el pedido queda Pending hasta que el cliente paga desde su propio teléfono (QR/link) — el
+/// webhook de Connect confirma el pago igual que en CreateOrderAsync. SuccessUrl/CancelUrl
+/// apuntan a una página pública genérica de "gracias" (no requiere volver al POS: el POS se
+/// entera del pago vía SignalR, no por la redirección).
+/// </summary>
+public record CreatePosCheckoutRequest(
+    IReadOnlyList<OrderItemDto> Items,
+    decimal Subtotal,
+    decimal Tax,
+    decimal Total,
+    string? CustomerName,
+    string? Notes,
+    string? Currency,
+    string SuccessUrl,
+    string CancelUrl
+);

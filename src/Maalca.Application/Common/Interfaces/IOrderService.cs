@@ -19,6 +19,14 @@ public interface IOrderService
     /// </summary>
     Task<OrderDto?> CreatePosOrderAsync(Guid affiliateId, CreatePosOrderRequest request);
 
+    /// <summary>
+    /// POS (Etapa D, fase 2) — cobro real con Stripe desde el mostrador, sin lector físico: crea
+    /// el pedido Pending + una Checkout Session direct charge contra la cuenta Connect del
+    /// negocio, para que el cliente pague desde su propio teléfono (QR/link). Lanza
+    /// InvalidOperationException si el negocio no tiene Stripe Connect activo todavía.
+    /// </summary>
+    Task<CreateOrderResponseDto?> CreatePosCheckoutAsync(Guid affiliateId, CreatePosCheckoutRequest request);
+
     Task<IReadOnlyList<OrderDto>> GetOrdersAsync(Guid affiliateId);
 
     Task<OrderDto?> UpdateStatusAsync(Guid affiliateId, Guid orderId, string status);

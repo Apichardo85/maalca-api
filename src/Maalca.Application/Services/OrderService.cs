@@ -144,6 +144,78 @@ public class OrderService : IOrderService
         return dto;
     }
 
+    public async Task<CreateOrderResponseDto?> CreatePosCheckoutAsync(Guid affiliateId, CreatePosCheckoutRequest request)
+    {
+        var affiliate = await _db.Affiliates.FindAsync(affiliateId);
+        if (affiliate is null) return null;
+        if (request.Items.Count == 0) throw new ArgumentException("Order must have at least one item.");
+
+        // A diferencia del storefront público (que cae calladito a WhatsApp si no hay Connect),
+        // acá el staff está parado frente al cliente esperando cobrar — mejor fallar visible con
+        // un mensaje accionable que devolver un CheckoutUrl null sin explicación.
+        if (!affiliate.StripeConnectChargesEnabled || string.IsNullOrEmpty(affiliate.StripeConnectAccountId))
+            throw new InvalidOperationException("Conecta Stripe en Configuración antes de cobrar con QR.");
+
+        var order = new Order
+        {
+            AffiliateId = affiliateId,
+            CustomerName = request.CustomerName,
+            Notes = request.Notes,
+            ItemsJson = JsonArrayField.Serialize(request.Items),
+            Subtotal = request.Subtotal,
+            Tax = request.Tax,
+            Total = request.Total,
+            Currency = string.IsNullOrWhiteSpace(request.Currency) ? "USD" : request.Currency.ToUpperInvariant(),
+            Status = OrderStatus.Pending,
+            Channel = "POS",
+            PaymentMethod = "Card",
+        };
+        _db.Orders.Add(order);
+        await _db.SaveChangesAsync();
+
+        StripeConfiguration.ApiKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY") ?? "";
+        var requestOptions = new RequestOptions { StripeAccount = affiliate.StripeConnectAccountId };
+
+        var lineItems = request.Items.Select(i => new SessionLineItemOptions
+        {
+            Quantity = i.Qty,
+            PriceData = new SessionLineItemPriceDataOptions
+            {
+                Currency = order.Currency.ToLowerInvariant(),
+                UnitAmount = (long)Math.Round(i.Price * 100),
+                ProductData = new SessionLineItemPriceDataProductDataOptions { Name = i.Name },
+            },
+        }).ToList();
+
+        if (request.Tax > 0)
+        {
+            lineItems.Add(new SessionLineItemOptions
+            {
+                Quantity = 1,
+                PriceData = new SessionLineItemPriceDataOptions
+                {
+                    Currency = order.Currency.ToLowerInvariant(),
+                    UnitAmount = (long)Math.Round(request.Tax * 100),
+                    ProductData = new SessionLineItemPriceDataProductDataOptions { Name = "Tax" },
+                },
+            });
+        }
+
+        var session = await new SessionService().CreateAsync(new SessionCreateOptions
+        {
+            Mode = "payment",
+            LineItems = lineItems,
+            SuccessUrl = request.SuccessUrl,
+            CancelUrl = request.CancelUrl,
+            ClientReferenceId = order.Id.ToString(),
+        }, requestOptions);
+
+        order.StripeCheckoutSessionId = session.Id;
+        await _db.SaveChangesAsync();
+
+        return new CreateOrderResponseDto(order.Id, session.Url);
+    }
+
     public async Task<IReadOnlyList<OrderDto>> GetOrdersAsync(Guid affiliateId)
     {
         var orders = await _db.Orders

@@ -1166,6 +1166,33 @@ app.MapPost("/api/affiliates/{id:guid}/orders/pos", async (
     }
 });
 
+// POS (Etapa D, fase 2) — cobro real con Stripe sin lector físico: genera un QR/link de
+// Checkout que el cliente paga desde su propio teléfono. El pedido queda Pending; el POS se
+// entera de que se pagó vía SignalR (OrdersHub), no por esta respuesta.
+app.MapPost("/api/affiliates/{id:guid}/orders/pos/checkout", async (
+    HttpContext ctx, IOrderService orderService, Guid id, CreatePosCheckoutRequest request) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    try
+    {
+        var result = await orderService.CreatePosCheckoutAsync(id, request);
+        if (result is null)
+            return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
+        return Results.Ok(result);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "VALIDATION", message = ex.Message } });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.Conflict(new { error = new { code = "CONFLICT", message = ex.Message } });
+    }
+});
+
 app.MapPatch("/api/affiliates/{id}/orders/{orderId}/status", async (
     HttpContext ctx, IOrderService orderService, Guid id, Guid orderId, UpdateOrderStatusRequest request) =>
 {
