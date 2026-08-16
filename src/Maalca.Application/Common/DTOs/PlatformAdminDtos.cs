@@ -21,7 +21,16 @@ public record PlatformAffiliateSummaryDto(
     int OrdersLast30Days,
     bool StripeConnectChargesEnabled,
     List<string> Alerts,
-    string? LogoUrl = null);
+    string? LogoUrl = null,
+    /// Módulos efectivamente activos (ya filtrados por ModuleCatalog.FilterActive) — la misma
+    /// lista que ve el afiliado en /space/{slug}/modules, expuesta acá para que /ops pueda
+    /// mostrar y editar el toggle real.
+    List<string>? ModulosActivos = null);
+
+/// <summary>Control de módulos por afiliado (Etapa: MaalCa converge plan + overrides) — MaalCa
+/// puede prender/apagar cualquier token del whitelist por encima de lo que el plan normalmente
+/// daría. Lista vacía = explícitamente ningún módulo (distinto de nunca haberlo configurado).</summary>
+public record SetAffiliateModulesRequest(List<string> Modules);
 
 public record ImpersonationSessionDto(Guid AffiliateId, string Slug, string Name, DateTime ExpiresAt);
 

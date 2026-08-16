@@ -239,6 +239,26 @@ app.MapPatch("/api/ops/affiliates/{affiliateId:guid}", async (
     }
 });
 
+// Control de módulos por afiliado (MaalCa converge lo que da el plan + overrides manuales) —
+// no es tan destructivo como publicar/suspender, así que cualquier admin de plataforma puede
+// tocarlo (no solo Owner), igual que las lecturas de overview/affiliates.
+app.MapPatch("/api/ops/affiliates/{affiliateId:guid}/modules", async (
+    HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId, SetAffiliateModulesRequest request) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+
+    try
+    {
+        var result = await opsService.SetAffiliateModulesAsync(affiliateId, request.Modules);
+        return Results.Ok(result);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = ex.Message } });
+    }
+});
+
 app.MapPost("/api/ops/impersonate/{affiliateId:guid}", async (HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId) =>
 {
     if (ctx.User.FindFirst("platform_admin")?.Value != "true")

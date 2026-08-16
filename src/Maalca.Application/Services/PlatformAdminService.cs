@@ -1,3 +1,4 @@
+using Maalca.Application.Common;
 using Maalca.Application.Common.DTOs;
 using Maalca.Application.Common.Interfaces;
 using Maalca.Domain.Entities;
@@ -95,7 +96,8 @@ public class PlatformAdminService : IPlatformAdminService
 
             result.Add(new PlatformAffiliateSummaryDto(
                 a.Id, a.Name, a.Slug ?? "", a.BusinessType.ToString(), a.Plan.ToString(), a.PlanStatus.ToString(),
-                a.Published, a.IsActive, a.CreatedAt, orders30d, a.StripeConnectChargesEnabled, alerts, a.LogoUrl));
+                a.Published, a.IsActive, a.CreatedAt, orders30d, a.StripeConnectChargesEnabled, alerts, a.LogoUrl,
+                ModuleCatalog.FilterActive(a.ModulosActivos).ToList()));
         }
         return result;
     }
@@ -129,7 +131,52 @@ public class PlatformAdminService : IPlatformAdminService
         return new PlatformAffiliateSummaryDto(
             affiliate.Id, affiliate.Name, affiliate.Slug ?? "", affiliate.BusinessType.ToString(),
             affiliate.Plan.ToString(), affiliate.PlanStatus.ToString(), affiliate.Published, affiliate.IsActive,
-            affiliate.CreatedAt, orders30d, affiliate.StripeConnectChargesEnabled, alerts, affiliate.LogoUrl);
+            affiliate.CreatedAt, orders30d, affiliate.StripeConnectChargesEnabled, alerts, affiliate.LogoUrl,
+            ModuleCatalog.FilterActive(affiliate.ModulosActivos).ToList());
+    }
+
+    /// <summary>
+    /// Control de módulos por afiliado (MaalCa, no el plan, es la autoridad final acá) — guarda
+    /// el override explícito de Affiliate.ModulosActivos. Lista vacía se guarda como "" (no
+    /// null): eso marca "explícitamente ningún módulo", distinto de nunca haberlo tocado (null),
+    /// que ModuleCatalog.FilterActive sigue leyendo como "todos" por compatibilidad con
+    /// afiliados creados antes de que este toggle existiera.
+    /// </summary>
+    public async Task<PlatformAffiliateSummaryDto> SetAffiliateModulesAsync(Guid affiliateId, List<string> modules)
+    {
+        var affiliate = await _context.Affiliates.FindAsync(affiliateId)
+            ?? throw new InvalidOperationException("Ese negocio no existe.");
+
+        var validTokens = modules
+            .Where(m => ModuleCatalog.Whitelist.Contains(m))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        affiliate.ModulosActivos = validTokens.Count == 0 ? "" : string.Join(",", validTokens);
+        affiliate.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        var since30d = DateTime.UtcNow.AddDays(-30);
+        var orders30d = await _context.Orders.CountAsync(o => o.AffiliateId == affiliateId && o.CreatedAt >= since30d);
+
+        var alerts = new List<string>();
+        var now = DateTime.UtcNow;
+        if (affiliate.Plan == Plan.Entrepreneur && !affiliate.StripeConnectChargesEnabled)
+            alerts.Add("Sin conectar pagos");
+        if (affiliate.Plan == Plan.Entrepreneur && orders30d == 0 && affiliate.CreatedAt < now.AddDays(-30))
+            alerts.Add("Sin pedidos en 30 días");
+        if (!affiliate.Published && affiliate.CreatedAt < now.AddDays(-7))
+            alerts.Add("Sin publicar");
+        if (!affiliate.IsActive)
+            alerts.Add("Suspendido");
+        if (affiliate.PlanStatus == PlanStatus.PastDue)
+            alerts.Add("Pago atrasado");
+
+        return new PlatformAffiliateSummaryDto(
+            affiliate.Id, affiliate.Name, affiliate.Slug ?? "", affiliate.BusinessType.ToString(),
+            affiliate.Plan.ToString(), affiliate.PlanStatus.ToString(), affiliate.Published, affiliate.IsActive,
+            affiliate.CreatedAt, orders30d, affiliate.StripeConnectChargesEnabled, alerts, affiliate.LogoUrl,
+            ModuleCatalog.FilterActive(affiliate.ModulosActivos).ToList());
     }
 
     public async Task<ImpersonationSessionDto> StartImpersonationAsync(string adminSupabaseUserId, string adminEmail, Guid affiliateId)

@@ -29,6 +29,10 @@ public interface IPlatformAdminService
     /// </summary>
     Task<PlatformAffiliateSummaryDto> SetAffiliateStatusAsync(Guid affiliateId, bool? published, bool? active);
 
+    /// <summary>Control de módulos por afiliado — MaalCa prende/apaga tokens del whitelist por
+    /// encima de lo que el plan normalmente daría.</summary>
+    Task<PlatformAffiliateSummaryDto> SetAffiliateModulesAsync(Guid affiliateId, List<string> modules);
+
     Task<ImpersonationSessionDto> StartImpersonationAsync(string adminSupabaseUserId, string adminEmail, Guid affiliateId);
     Task EndImpersonationAsync(string adminSupabaseUserId);
 
