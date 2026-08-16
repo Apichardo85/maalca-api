@@ -11,6 +11,14 @@ public interface IOrderService
     /// </summary>
     Task<CreateOrderResponseDto?> CreateOrderAsync(string affiliateSlug, CreateOrderRequest request);
 
+    /// <summary>
+    /// POS (Etapa D, fase 1) — venta presencial desde el dashboard. Entra directo como Paid
+    /// (el cobro real ya ocurrió en el mostrador, esto solo lo registra) y dispara el mismo
+    /// aviso en tiempo real que un pedido online recién pagado, así aparece igual en Kitchen
+    /// Display. Resuelve por affiliateId (llamado autenticado, no público).
+    /// </summary>
+    Task<OrderDto?> CreatePosOrderAsync(Guid affiliateId, CreatePosOrderRequest request);
+
     Task<IReadOnlyList<OrderDto>> GetOrdersAsync(Guid affiliateId);
 
     Task<OrderDto?> UpdateStatusAsync(Guid affiliateId, Guid orderId, string status);

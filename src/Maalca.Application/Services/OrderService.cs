@@ -110,6 +110,40 @@ public class OrderService : IOrderService
         return new CreateOrderResponseDto(order.Id, session.Url);
     }
 
+    public async Task<OrderDto?> CreatePosOrderAsync(Guid affiliateId, CreatePosOrderRequest request)
+    {
+        var affiliate = await _db.Affiliates.FindAsync(affiliateId);
+        if (affiliate is null) return null;
+        if (request.Items.Count == 0) throw new ArgumentException("Order must have at least one item.");
+
+        var order = new Order
+        {
+            AffiliateId = affiliateId,
+            CustomerName = request.CustomerName,
+            Notes = request.Notes,
+            ItemsJson = JsonArrayField.Serialize(request.Items),
+            Subtotal = request.Subtotal,
+            Tax = request.Tax,
+            Total = request.Total,
+            Currency = string.IsNullOrWhiteSpace(request.Currency) ? "USD" : request.Currency.ToUpperInvariant(),
+            // A diferencia de CreateOrderAsync (Pending -> espera Stripe Checkout), el POS entra
+            // directo Paid: el cobro presencial (efectivo/tarjeta externa) ya pasó en el
+            // mostrador antes de tocar "Cobrar" aquí.
+            Status = OrderStatus.Paid,
+            Channel = "POS",
+            PaymentMethod = request.PaymentMethod,
+        };
+        _db.Orders.Add(order);
+        await _db.SaveChangesAsync();
+
+        await _notifications.NotifyOrderConfirmedAsync(order);
+        var dto = ToDto(order);
+        // Mismo canal realtime que un pedido online recién pagado — aparece igual de "Nuevo"
+        // en el Kitchen Display, sin que la cocina tenga que saber de dónde vino.
+        await _realtime.NotifyOrderUpdatedAsync(affiliateId, dto);
+        return dto;
+    }
+
     public async Task<IReadOnlyList<OrderDto>> GetOrdersAsync(Guid affiliateId)
     {
         var orders = await _db.Orders
@@ -194,6 +228,8 @@ public class OrderService : IOrderService
         o.Total,
         o.Currency,
         o.Status.ToString(),
-        o.CreatedAt
+        o.CreatedAt,
+        o.Channel,
+        o.PaymentMethod
     );
 }

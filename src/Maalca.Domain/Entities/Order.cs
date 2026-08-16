@@ -33,4 +33,11 @@ public class Order : BaseEntity
     // pedido se hizo por el flujo de WhatsApp sin cobro online.
     public string? StripeCheckoutSessionId { get; set; }
     public string? StripePaymentIntentId { get; set; }
+
+    // POS (Etapa D) — de dónde vino el pedido: "Online" (storefront público, default) o "POS"
+    // (registrado a mano desde el dashboard, venta presencial). PaymentMethod solo aplica a
+    // POS por ahora: "Cash" | "Card" | "Other" — el POS registra el cobro, no lo procesa (fase
+    // 1, sin hardware lector todavía).
+    public string Channel { get; set; } = "Online";
+    public string? PaymentMethod { get; set; }
 }

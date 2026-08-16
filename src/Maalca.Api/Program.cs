@@ -1143,6 +1143,29 @@ app.MapGet("/api/affiliates/{id}/orders", async (
     return Results.Ok(orders);
 });
 
+// POS (Etapa D, fase 1) — venta presencial registrada desde el dashboard, entra directo Paid.
+// Staff SÍ puede operar el POS (es su trabajo del día a día en el mostrador), a diferencia de
+// crear/editar pedidos completos a mano.
+app.MapPost("/api/affiliates/{id:guid}/orders/pos", async (
+    HttpContext ctx, IOrderService orderService, Guid id, CreatePosOrderRequest request) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    try
+    {
+        var result = await orderService.CreatePosOrderAsync(id, request);
+        if (result is null)
+            return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
+        return Results.Created($"/api/affiliates/{id}/orders/{result.Id}", result);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "VALIDATION", message = ex.Message } });
+    }
+});
+
 app.MapPatch("/api/affiliates/{id}/orders/{orderId}/status", async (
     HttpContext ctx, IOrderService orderService, Guid id, Guid orderId, UpdateOrderStatusRequest request) =>
 {

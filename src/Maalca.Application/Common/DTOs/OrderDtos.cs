@@ -37,9 +37,28 @@ public record OrderDto(
     decimal Total,
     string Currency,
     string Status,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+    string Channel = "Online",
+    string? PaymentMethod = null
 );
 
 public record UpdateOrderStatusRequest(string Status);
 
 public record ConfirmOrderRequest(string CheckoutSessionId);
+
+/// <summary>
+/// POS (Etapa D, fase 1) — venta presencial registrada desde el dashboard. A diferencia de
+/// CreateOrderRequest (storefront público, pasa por Stripe Checkout), esto entra directo como
+/// Paid: el cobro real (efectivo, tarjeta externa, etc.) ya ocurrió en el mostrador, el POS
+/// solo lo deja constando. PaymentMethod: "Cash" | "Card" | "Other".
+/// </summary>
+public record CreatePosOrderRequest(
+    IReadOnlyList<OrderItemDto> Items,
+    decimal Subtotal,
+    decimal Tax,
+    decimal Total,
+    string? CustomerName,
+    string? Notes,
+    string? Currency,
+    string PaymentMethod
+);
