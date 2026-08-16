@@ -1213,6 +1213,25 @@ app.MapPost("/api/affiliates/{id:guid}/orders/pos/checkout", async (
     }
 });
 
+// Solicitud de módulo desde la vitrina de /space/{slug}/modules — cualquier staff con acceso al
+// negocio puede pedir un módulo que no está activo. No es self-serve: se registra como nota CRM
+// interna (misma tabla/endpoint que /ops/negocios/[id] ya lee) para que MaalCa decida precio y
+// lo active manualmente desde el toggle que ya existe en /ops. Cero infraestructura nueva.
+app.MapPost("/api/affiliates/{id:guid}/modules/request", async (
+    HttpContext ctx, IPlatformAdminService opsService, Guid id, CreateAffiliateNoteRequest request) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    if (string.IsNullOrWhiteSpace(request.Text))
+        return Results.BadRequest(new { error = new { code = "EMPTY_TEXT", message = "Falta el módulo solicitado." } });
+
+    var email = ctx.User.FindFirst("email")?.Value ?? "";
+    var note = await opsService.AddAffiliateNoteAsync(id, email, request.Text);
+    return Results.Ok(note);
+});
+
 app.MapPatch("/api/affiliates/{id}/orders/{orderId}/status", async (
     HttpContext ctx, IOrderService orderService, Guid id, Guid orderId, UpdateOrderStatusRequest request) =>
 {
