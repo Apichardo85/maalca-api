@@ -103,6 +103,21 @@ public interface IPublicBookingService
     Task<List<PublicTeamMemberDto>?> GetPublicTeamAsync(string affiliateSlug);
     Task<List<PublicServiceDto>?> GetPublicServicesAsync(string affiliateSlug);
     Task<PublicAppointmentResultDto> CreatePublicAppointmentAsync(string affiliateSlug, CreatePublicAppointmentRequest request);
+    Task<PublicTableReservationResultDto> CreatePublicTableReservationAsync(string affiliateSlug, CreatePublicTableReservationRequest request);
+}
+
+/// <summary>
+/// CRUD de reservas de mesa para el dashboard — separado de IAppointmentService a propósito.
+/// Ver TableReservation.cs.
+/// </summary>
+public interface ITableReservationService
+{
+    Task<PaginatedResponse<TableReservation>> GetReservationsAsync(Guid affiliateId, DateTime? date = null, string? status = null, int page = 1);
+    Task<TableReservation?> GetReservationAsync(Guid affiliateId, Guid id);
+    Task<TableReservation> CreateReservationAsync(Guid affiliateId, TableReservation reservation);
+    Task<TableReservation?> UpdateReservationAsync(Guid affiliateId, Guid id, TableReservation reservation);
+    Task<TableReservation?> UpdateReservationStatusAsync(Guid affiliateId, Guid id, string status);
+    Task<bool> DeleteReservationAsync(Guid affiliateId, Guid id);
 }
 
 public interface ILeadService

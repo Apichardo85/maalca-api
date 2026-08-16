@@ -49,6 +49,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IAffiliateService, AffiliateService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddScoped<IAppointmentService, AppointmentService>();
+builder.Services.AddScoped<ITableReservationService, TableReservationService>();
 builder.Services.AddScoped<IServiceService, ServiceService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<IQueueService, QueueService>();
@@ -605,6 +606,72 @@ app.MapDelete("/api/affiliates/{affiliateId:guid}/appointments/{id:guid}", async
     if (ctx.User.FindFirst("role")?.Value == "Staff")
         return Results.Forbid();
     var result = await appointmentService.DeleteAppointmentAsync(affiliateId, id);
+    if (!result)
+        return Results.NotFound();
+    return Results.NoContent();
+});
+
+// ============ TABLE RESERVATION ENDPOINTS (Restaurante) ============
+// Separado a propósito de /appointments — ver TableReservation.cs.
+app.MapGet("/api/affiliates/{affiliateId:guid}/reservations", async (HttpContext ctx, ITableReservationService reservationService, Guid affiliateId, DateTime? date = null, string? status = null, int page = 1) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    var result = await reservationService.GetReservationsAsync(affiliateId, date, status, page);
+    return Results.Ok(result);
+});
+
+app.MapGet("/api/affiliates/{affiliateId:guid}/reservations/{id:guid}", async (HttpContext ctx, ITableReservationService reservationService, Guid affiliateId, Guid id) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    var result = await reservationService.GetReservationAsync(affiliateId, id);
+    if (result == null)
+        return Results.NotFound();
+    return Results.Ok(result);
+});
+
+app.MapPost("/api/affiliates/{affiliateId:guid}/reservations", async (HttpContext ctx, ITableReservationService reservationService, Guid affiliateId, TableReservation reservation) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    var result = await reservationService.CreateReservationAsync(affiliateId, reservation);
+    return Results.Created($"/api/affiliates/{affiliateId}/reservations/{result.Id}", result);
+});
+
+app.MapPut("/api/affiliates/{affiliateId:guid}/reservations/{id:guid}", async (HttpContext ctx, ITableReservationService reservationService, Guid affiliateId, Guid id, TableReservation reservation) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    var result = await reservationService.UpdateReservationAsync(affiliateId, id, reservation);
+    if (result == null)
+        return Results.NotFound();
+    return Results.Ok(result);
+});
+
+app.MapPatch("/api/affiliates/{affiliateId:guid}/reservations/{id:guid}", async (HttpContext ctx, ITableReservationService reservationService, Guid affiliateId, Guid id, string status) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    // Staff sí puede mover el estado (Confirmar/Sentar/Completar/No-show) — mismo criterio que
+    // Appointment: es trabajo del día a día, no crear/editar/borrar reservas completas.
+    var result = await reservationService.UpdateReservationStatusAsync(affiliateId, id, status);
+    if (result == null)
+        return Results.NotFound();
+    return Results.Ok(result);
+});
+
+app.MapDelete("/api/affiliates/{affiliateId:guid}/reservations/{id:guid}", async (HttpContext ctx, ITableReservationService reservationService, Guid affiliateId, Guid id) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    var result = await reservationService.DeleteReservationAsync(affiliateId, id);
     if (!result)
         return Results.NotFound();
     return Results.NoContent();
@@ -1846,6 +1913,25 @@ app.MapPost("/api/public/affiliates/{slug}/appointments", async (
     catch (InvalidOperationException ex)
     {
         return Results.Conflict(new { error = new { code = "SLOT_TAKEN", message = ex.Message } });
+    }
+})
+.AllowAnonymous();
+
+app.MapPost("/api/public/affiliates/{slug}/reservations", async (
+    IPublicBookingService bookingService, string slug, CreatePublicTableReservationRequest request) =>
+{
+    try
+    {
+        var result = await bookingService.CreatePublicTableReservationAsync(slug, request);
+        return Results.Ok(result);
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
     }
 })
 .AllowAnonymous();

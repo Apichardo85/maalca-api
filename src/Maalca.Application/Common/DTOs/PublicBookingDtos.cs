@@ -21,3 +21,19 @@ public record CreatePublicAppointmentRequest(
 );
 
 public record PublicAppointmentResultDto(Guid Id, DateTime Date, string Time, string Status);
+
+/// <summary>
+/// Reserva de mesa pública — deliberadamente distinta de CreatePublicAppointmentRequest: no pide
+/// ServiceId ni AssignedToId, pide cuántas personas. Ver TableReservation.cs.
+/// </summary>
+public record CreatePublicTableReservationRequest(
+    DateTime Date,
+    string Time,
+    int PartySize,
+    string CustomerName,
+    string CustomerPhone,
+    string? CustomerEmail,
+    string? Notes
+);
+
+public record PublicTableReservationResultDto(Guid Id, DateTime Date, string Time, int PartySize, string Status);

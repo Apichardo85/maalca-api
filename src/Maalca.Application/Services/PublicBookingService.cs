@@ -133,4 +133,42 @@ public class PublicBookingService : IPublicBookingService
 
         return new PublicAppointmentResultDto(appointment.Id, appointment.Date, appointment.Time, appointment.Status);
     }
+
+    public async Task<PublicTableReservationResultDto> CreatePublicTableReservationAsync(string affiliateSlug, CreatePublicTableReservationRequest request)
+    {
+        var affiliate = await _db.Affiliates
+            .FirstOrDefaultAsync(a => a.Slug == affiliateSlug && a.Published);
+        if (affiliate is null)
+            throw new KeyNotFoundException();
+
+        if (string.IsNullOrWhiteSpace(request.CustomerName))
+            throw new ArgumentException("El nombre es requerido.");
+        if (string.IsNullOrWhiteSpace(request.CustomerPhone))
+            throw new ArgumentException("El teléfono es requerido.");
+        if (string.IsNullOrWhiteSpace(request.Time))
+            throw new ArgumentException("La hora es requerida.");
+        if (request.Date.Date < DateTime.UtcNow.Date)
+            throw new ArgumentException("La fecha no puede ser en el pasado.");
+        if (request.PartySize < 1)
+            throw new ArgumentException("El número de personas debe ser al menos 1.");
+
+        var reservation = new TableReservation
+        {
+            AffiliateId = affiliate.Id,
+            CustomerName = request.CustomerName,
+            CustomerPhone = request.CustomerPhone,
+            CustomerEmail = request.CustomerEmail,
+            // Misma razón que en CreatePublicAppointmentAsync — fecha "bare" deserializa
+            // Kind=Unspecified, la columna es timestamptz.
+            Date = DateTime.SpecifyKind(request.Date.Date, DateTimeKind.Utc),
+            Time = request.Time,
+            PartySize = request.PartySize,
+            Status = "Requested",
+            Notes = request.Notes,
+        };
+        _db.TableReservations.Add(reservation);
+        await _db.SaveChangesAsync();
+
+        return new PublicTableReservationResultDto(reservation.Id, reservation.Date, reservation.Time, reservation.PartySize, reservation.Status);
+    }
 }

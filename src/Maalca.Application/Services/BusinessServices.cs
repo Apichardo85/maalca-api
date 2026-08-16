@@ -125,6 +125,86 @@ public class AppointmentService : IAppointmentService
     }
 }
 
+public class TableReservationService : ITableReservationService
+{
+    private readonly AppDbContext _context;
+
+    public TableReservationService(AppDbContext context) => _context = context;
+
+    public async Task<PaginatedResponse<TableReservation>> GetReservationsAsync(Guid affiliateId, DateTime? date = null, string? status = null, int page = 1)
+    {
+        IQueryable<TableReservation> query = _context.TableReservations.AsNoTracking()
+            .Where(r => r.AffiliateId == affiliateId);
+
+        if (date.HasValue)
+            query = query.Where(r => r.Date.Date == date.Value.Date);
+        if (!string.IsNullOrEmpty(status))
+            query = query.Where(r => r.Status == status);
+
+        var total = await query.CountAsync();
+        var data = await query.OrderBy(r => r.Date).ThenBy(r => r.Time)
+            .Skip((page - 1) * 20).Take(20).ToListAsync();
+
+        return new PaginatedResponse<TableReservation> { Data = data, Total = total, Page = page, TotalPages = (int)Math.Ceiling((double)total / 20) };
+    }
+
+    public async Task<TableReservation?> GetReservationAsync(Guid affiliateId, Guid id)
+        => await _context.TableReservations.AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Id == id && r.AffiliateId == affiliateId);
+
+    public async Task<TableReservation> CreateReservationAsync(Guid affiliateId, TableReservation reservation)
+    {
+        reservation.AffiliateId = affiliateId;
+        reservation.Id = Guid.NewGuid();
+        reservation.CreatedAt = DateTime.UtcNow;
+        // Misma razón que Appointment.Date — fecha "bare" deserializa Kind=Unspecified, la columna
+        // es timestamptz y Npgsql 8+ rechaza escribir ahí un DateTime Unspecified.
+        reservation.Date = DateTime.SpecifyKind(reservation.Date.Date, DateTimeKind.Utc);
+        if (reservation.PartySize < 1) reservation.PartySize = 1;
+
+        _context.TableReservations.Add(reservation);
+        await _context.SaveChangesAsync();
+        return reservation;
+    }
+
+    public async Task<TableReservation?> UpdateReservationAsync(Guid affiliateId, Guid id, TableReservation reservation)
+    {
+        var existing = await _context.TableReservations.FirstOrDefaultAsync(r => r.Id == id && r.AffiliateId == affiliateId);
+        if (existing == null) return null;
+
+        existing.CustomerName = reservation.CustomerName;
+        existing.CustomerPhone = reservation.CustomerPhone;
+        existing.CustomerEmail = reservation.CustomerEmail;
+        existing.Date = DateTime.SpecifyKind(reservation.Date.Date, DateTimeKind.Utc);
+        existing.Time = reservation.Time;
+        existing.PartySize = reservation.PartySize < 1 ? 1 : reservation.PartySize;
+        existing.Status = reservation.Status;
+        existing.Notes = reservation.Notes;
+        existing.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        return existing;
+    }
+
+    public async Task<TableReservation?> UpdateReservationStatusAsync(Guid affiliateId, Guid id, string status)
+    {
+        var reservation = await _context.TableReservations.FirstOrDefaultAsync(r => r.Id == id && r.AffiliateId == affiliateId);
+        if (reservation == null) return null;
+        reservation.Status = status;
+        reservation.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        return reservation;
+    }
+
+    public async Task<bool> DeleteReservationAsync(Guid affiliateId, Guid id)
+    {
+        var reservation = await _context.TableReservations.FirstOrDefaultAsync(r => r.Id == id && r.AffiliateId == affiliateId);
+        if (reservation == null) return false;
+        _context.TableReservations.Remove(reservation);
+        await _context.SaveChangesAsync();
+        return true;
+    }
+}
+
 public class ServiceService : IServiceService
 {
     private readonly AppDbContext _context;

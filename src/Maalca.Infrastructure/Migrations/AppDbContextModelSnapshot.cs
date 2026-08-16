@@ -1071,6 +1071,62 @@ namespace Maalca.Infrastructure.Migrations
                     b.ToTable("QueueEntries");
                 });
 
+            modelBuilder.Entity("Maalca.Domain.Entities.TableReservation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AffiliateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CustomerEmail")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CustomerName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("CustomerPhone")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<int>("PartySize")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Time")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AffiliateId", "Date");
+
+                    b.ToTable("TableReservations");
+                });
+
             modelBuilder.Entity("Maalca.Domain.Entities.Screen", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1602,6 +1658,17 @@ namespace Maalca.Infrastructure.Migrations
                     b.Navigation("Service");
                 });
 
+            modelBuilder.Entity("Maalca.Domain.Entities.TableReservation", b =>
+                {
+                    b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
+                        .WithMany("TableReservations")
+                        .HasForeignKey("AffiliateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Affiliate");
+                });
+
             modelBuilder.Entity("Maalca.Domain.Entities.Screen", b =>
                 {
                     b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
@@ -1689,6 +1756,8 @@ namespace Maalca.Infrastructure.Migrations
                     b.Navigation("QueueEntries");
 
                     b.Navigation("Services");
+
+                    b.Navigation("TableReservations");
 
                     b.Navigation("TeamMembers");
 

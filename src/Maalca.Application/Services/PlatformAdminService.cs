@@ -77,11 +77,32 @@ public class PlatformAdminService : IPlatformAdminService
             .Select(g => new { AffiliateId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.AffiliateId, x => x.Count);
 
+        // Notas/solicitudes de módulo escritas por el propio afiliado (no por un admin de MaalCa)
+        // en los últimos 14 días — hoy la única forma de verlas era entrar al detalle de cada
+        // negocio uno por uno. No hay campo IsRead (decisión explícita: la tarjeta de "Necesitan
+        // atención" ya es la señal — no se necesita estado leído/no-leído todavía).
+        var since14d = now.AddDays(-14);
+        var adminEmails = (await _context.PlatformAdmins.Select(p => p.Email).ToListAsync())
+            .Select(e => e.ToLowerInvariant())
+            .ToHashSet();
+        var affiliateNoteCounts = (await _context.AffiliateNotes
+            .Where(n => n.CreatedAt >= since14d)
+            .Select(n => new { n.AffiliateId, n.AuthorEmail })
+            .ToListAsync())
+            .Where(n => !adminEmails.Contains(n.AuthorEmail.ToLowerInvariant()))
+            .GroupBy(n => n.AffiliateId)
+            .ToDictionary(g => g.Key, g => g.Count());
+
         var result = new List<PlatformAffiliateSummaryDto>();
         foreach (var a in affiliates)
         {
             var orders30d = orderCounts.TryGetValue(a.Id, out var c) ? c : 0;
             var alerts = new List<string>();
+
+            // Primero — es comunicación directa del afiliado, no un problema detectado por el
+            // sistema, y hoy no tiene ningún otro lugar donde se note sin entrar al detalle.
+            if (affiliateNoteCounts.TryGetValue(a.Id, out var noteCount))
+                alerts.Add(noteCount == 1 ? "📝 Nota nueva" : $"📝 {noteCount} notas nuevas");
 
             if (a.Plan == Plan.Entrepreneur && !a.StripeConnectChargesEnabled)
                 alerts.Add("Sin conectar pagos");

@@ -19,6 +19,7 @@ public class AppDbContext : DbContext
     public DbSet<Product> Products => Set<Product>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
     public DbSet<InvoiceItem> InvoiceItems => Set<InvoiceItem>();
+    public DbSet<TableReservation> TableReservations => Set<TableReservation>();
     public DbSet<Lead> Leads => Set<Lead>();
     public DbSet<AgentExecution> AgentExecutions => Set<AgentExecution>();
     public DbSet<UserAffiliateMap> UserAffiliateMaps => Set<UserAffiliateMap>();
@@ -165,6 +166,17 @@ public class AppDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(e => e.AssignedToId)
                   .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // TableReservation — sin FK a Customer a propósito, ver comentario en la entidad.
+        modelBuilder.Entity<TableReservation>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany(a => a.TableReservations)
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.AffiliateId, e.Date });
         });
 
         // TeamMember
