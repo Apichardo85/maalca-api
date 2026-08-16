@@ -117,6 +117,4 @@ public class Affiliate : BaseEntity
     public ICollection<TeamMember> TeamMembers { get; set; } = new List<TeamMember>();
     public ICollection<Product> Products { get; set; } = new List<Product>();
     public ICollection<Invoice> Invoices { get; set; } = new List<Invoice>();
-    public ICollection<GiftCard> GiftCards { get; set; } = new List<GiftCard>();
-    public ICollection<Campaign> Campaigns { get; set; } = new List<Campaign>();
 }

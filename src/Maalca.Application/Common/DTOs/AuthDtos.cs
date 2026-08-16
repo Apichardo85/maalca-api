@@ -71,7 +71,18 @@ public class ErrorDetail
     public object? Details { get; set; }
 }
 
-public class RedeemGiftCardRequest
+public class CreateInvoiceItemRequest
 {
-    public decimal Amount { get; set; }
+    public string Description { get; set; } = string.Empty;
+    public int Quantity { get; set; } = 1;
+    public decimal UnitPrice { get; set; }
+}
+
+public class CreateInvoiceRequest
+{
+    public Guid CustomerId { get; set; }
+    public decimal Tax { get; set; }
+    public DateTime? DueDate { get; set; }
+    public string? Notes { get; set; }
+    public List<CreateInvoiceItemRequest> Items { get; set; } = new();
 }

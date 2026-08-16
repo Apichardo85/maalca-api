@@ -138,33 +138,6 @@ public class InvoiceItem : BaseEntity
     public Invoice? Invoice { get; set; }
 }
 
-public class GiftCard : AuditableEntity
-{
-    public Guid AffiliateId { get; set; }
-    public string Code { get; set; } = string.Empty;
-    public decimal InitialAmount { get; set; }
-    public decimal Balance { get; set; }
-    public string? RecipientEmail { get; set; }
-    public string? Message { get; set; }
-    public string Status { get; set; } = "Active"; // Active, Redeemed, Expired
-    public DateTime? ExpiresAt { get; set; }
-
-    public Affiliate? Affiliate { get; set; }
-}
-
-public class Campaign : AuditableEntity
-{
-    public Guid AffiliateId { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public string Type { get; set; } = "email"; // email, sms, push
-    public string? TargetAudience { get; set; }
-    public string? Content { get; set; }
-    public DateTime? Schedule { get; set; }
-    public string Status { get; set; } = "Draft"; // Draft, Scheduled, Sent, Failed
-
-    public Affiliate? Affiliate { get; set; }
-}
-
 public class AgentExecution : BaseEntity
 {
     public int IssueNumber { get; set; }

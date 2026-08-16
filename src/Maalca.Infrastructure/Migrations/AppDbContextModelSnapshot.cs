@@ -422,55 +422,6 @@ namespace Maalca.Infrastructure.Migrations
                     b.ToTable("Appointments");
                 });
 
-            modelBuilder.Entity("Maalca.Domain.Entities.Campaign", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("AffiliateId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Content")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("CreatedBy")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("Schedule")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("TargetAudience")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Type")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AffiliateId");
-
-                    b.ToTable("Campaigns");
-                });
-
             modelBuilder.Entity("Maalca.Domain.Entities.Canal", b =>
                 {
                     b.Property<Guid>("Id")
@@ -607,62 +558,6 @@ namespace Maalca.Infrastructure.Migrations
                     b.HasIndex("AffiliateId", "Tipo", "CreatedAt");
 
                     b.ToTable("EventosInteraccion");
-                });
-
-            modelBuilder.Entity("Maalca.Domain.Entities.GiftCard", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("AffiliateId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Balance")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("CreatedBy")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<decimal>("InitialAmount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<string>("Message")
-                        .HasColumnType("text");
-
-                    b.Property<string>("RecipientEmail")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AffiliateId");
-
-                    b.HasIndex("Code")
-                        .IsUnique();
-
-                    b.ToTable("GiftCards");
                 });
 
             modelBuilder.Entity("Maalca.Domain.Entities.InventoryItem", b =>
@@ -971,6 +866,10 @@ namespace Maalca.Infrastructure.Migrations
                         .HasColumnType("numeric(18,2)");
 
                     b.Property<decimal>("Tax")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("Tip")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
@@ -1564,17 +1463,6 @@ namespace Maalca.Infrastructure.Migrations
                     b.Navigation("Service");
                 });
 
-            modelBuilder.Entity("Maalca.Domain.Entities.Campaign", b =>
-                {
-                    b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
-                        .WithMany("Campaigns")
-                        .HasForeignKey("AffiliateId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Affiliate");
-                });
-
             modelBuilder.Entity("Maalca.Domain.Entities.Canal", b =>
                 {
                     b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
@@ -1613,17 +1501,6 @@ namespace Maalca.Infrastructure.Migrations
                     b.Navigation("Affiliate");
 
                     b.Navigation("Canal");
-                });
-
-            modelBuilder.Entity("Maalca.Domain.Entities.GiftCard", b =>
-                {
-                    b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
-                        .WithMany("GiftCards")
-                        .HasForeignKey("AffiliateId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Affiliate");
                 });
 
             modelBuilder.Entity("Maalca.Domain.Entities.InventoryItem", b =>
@@ -1801,11 +1678,7 @@ namespace Maalca.Infrastructure.Migrations
                 {
                     b.Navigation("Appointments");
 
-                    b.Navigation("Campaigns");
-
                     b.Navigation("Customers");
-
-                    b.Navigation("GiftCards");
 
                     b.Navigation("InventoryItems");
 

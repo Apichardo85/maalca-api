@@ -51,6 +51,7 @@ public class OrderService : IOrderService
             ItemsJson = JsonArrayField.Serialize(request.Items),
             Subtotal = request.Subtotal,
             Tax = request.Tax,
+            Tip = request.Tip,
             Total = request.Total,
             Currency = string.IsNullOrWhiteSpace(request.Currency) ? "USD" : request.Currency.ToUpperInvariant(),
             Status = OrderStatus.Pending,
@@ -76,7 +77,10 @@ public class OrderService : IOrderService
             {
                 Currency = order.Currency.ToLowerInvariant(),
                 UnitAmount = (long)Math.Round(i.Price * 100),
-                ProductData = new SessionLineItemPriceDataProductDataOptions { Name = i.Name },
+                ProductData = new SessionLineItemPriceDataProductDataOptions
+                {
+                    Name = string.IsNullOrWhiteSpace(i.Notes) ? i.Name : $"{i.Name} ({i.Notes})",
+                },
             },
         }).ToList();
 
@@ -90,6 +94,20 @@ public class OrderService : IOrderService
                     Currency = order.Currency.ToLowerInvariant(),
                     UnitAmount = (long)Math.Round(request.Tax * 100),
                     ProductData = new SessionLineItemPriceDataProductDataOptions { Name = "Tax" },
+                },
+            });
+        }
+
+        if (request.Tip > 0)
+        {
+            lineItems.Add(new SessionLineItemOptions
+            {
+                Quantity = 1,
+                PriceData = new SessionLineItemPriceDataOptions
+                {
+                    Currency = order.Currency.ToLowerInvariant(),
+                    UnitAmount = (long)Math.Round(request.Tip * 100),
+                    ProductData = new SessionLineItemPriceDataProductDataOptions { Name = "Tip" },
                 },
             });
         }
@@ -124,6 +142,7 @@ public class OrderService : IOrderService
             ItemsJson = JsonArrayField.Serialize(request.Items),
             Subtotal = request.Subtotal,
             Tax = request.Tax,
+            Tip = request.Tip,
             Total = request.Total,
             Currency = string.IsNullOrWhiteSpace(request.Currency) ? "USD" : request.Currency.ToUpperInvariant(),
             // A diferencia de CreateOrderAsync (Pending -> espera Stripe Checkout), el POS entra
@@ -134,6 +153,7 @@ public class OrderService : IOrderService
             PaymentMethod = request.PaymentMethod,
         };
         _db.Orders.Add(order);
+        await DecrementStockAsync(order);
         await _db.SaveChangesAsync();
 
         await _notifications.NotifyOrderConfirmedAsync(order);
@@ -164,6 +184,7 @@ public class OrderService : IOrderService
             ItemsJson = JsonArrayField.Serialize(request.Items),
             Subtotal = request.Subtotal,
             Tax = request.Tax,
+            Tip = request.Tip,
             Total = request.Total,
             Currency = string.IsNullOrWhiteSpace(request.Currency) ? "USD" : request.Currency.ToUpperInvariant(),
             Status = OrderStatus.Pending,
@@ -183,7 +204,10 @@ public class OrderService : IOrderService
             {
                 Currency = order.Currency.ToLowerInvariant(),
                 UnitAmount = (long)Math.Round(i.Price * 100),
-                ProductData = new SessionLineItemPriceDataProductDataOptions { Name = i.Name },
+                ProductData = new SessionLineItemPriceDataProductDataOptions
+                {
+                    Name = string.IsNullOrWhiteSpace(i.Notes) ? i.Name : $"{i.Name} ({i.Notes})",
+                },
             },
         }).ToList();
 
@@ -197,6 +221,20 @@ public class OrderService : IOrderService
                     Currency = order.Currency.ToLowerInvariant(),
                     UnitAmount = (long)Math.Round(request.Tax * 100),
                     ProductData = new SessionLineItemPriceDataProductDataOptions { Name = "Tax" },
+                },
+            });
+        }
+
+        if (request.Tip > 0)
+        {
+            lineItems.Add(new SessionLineItemOptions
+            {
+                Quantity = 1,
+                PriceData = new SessionLineItemPriceDataOptions
+                {
+                    Currency = order.Currency.ToLowerInvariant(),
+                    UnitAmount = (long)Math.Round(request.Tip * 100),
+                    ProductData = new SessionLineItemPriceDataProductDataOptions { Name = "Tip" },
                 },
             });
         }
@@ -281,11 +319,56 @@ public class OrderService : IOrderService
         order.Status = OrderStatus.Paid;
         order.StripePaymentIntentId = paymentIntentId;
         order.UpdatedAt = DateTime.UtcNow;
+        await DecrementStockAsync(order);
         await _db.SaveChangesAsync();
 
         await _notifications.NotifyOrderConfirmedAsync(order);
         // Pedido recién pagado — aparece como "Nuevo" en el Kitchen Display.
         await _realtime.NotifyOrderUpdatedAsync(order.AffiliateId, ToDto(order));
+    }
+
+    /// <summary>
+    /// Descuenta stock real de InventoryItem cuando un pedido pasa a Paid — antes de esto, un
+    /// negocio de Retail podía vender el mismo último producto N veces sin que el sistema se
+    /// enterara (ni Product.Stock ni InventoryItem.Quantity se tocaban en ningún camino de
+    /// creación de Order). Solo afecta ItemId que resuelvan a un InventoryItem real del mismo
+    /// afiliado (Retail) — Product (Restaurant) y Service (Barber/Service) no llevan control de
+    /// stock por diseño, así que sus items simplemente no matchean y no pasa nada. Nunca deja
+    /// Quantity negativo (clamp a 0) para no mostrar stock "negativo" en la UI.
+    /// </summary>
+    private async Task DecrementStockAsync(Order order)
+    {
+        var items = JsonArrayField.Parse<OrderItemDto>(order.ItemsJson);
+        if (items.Count == 0) return;
+
+        var itemIds = items
+            .Select(i => Guid.TryParse(i.ItemId, out var g) ? g : (Guid?)null)
+            .Where(g => g.HasValue)
+            .Select(g => g!.Value)
+            .Distinct()
+            .ToList();
+        if (itemIds.Count == 0) return;
+
+        var inventoryItems = await _db.InventoryItems
+            .Where(inv => inv.AffiliateId == order.AffiliateId && itemIds.Contains(inv.Id))
+            .ToListAsync();
+        if (inventoryItems.Count == 0) return;
+
+        foreach (var item in items)
+        {
+            if (!Guid.TryParse(item.ItemId, out var itemId)) continue;
+            var inv = inventoryItems.FirstOrDefault(i => i.Id == itemId);
+            if (inv is null) continue;
+
+            inv.Quantity = Math.Max(0, inv.Quantity - item.Qty);
+            _db.InventoryMovements.Add(new InventoryMovement
+            {
+                InventoryItemId = inv.Id,
+                Type = "out",
+                Quantity = item.Qty,
+                Notes = $"Venta — Pedido #{order.Id.ToString()[..8]}",
+            });
+        }
     }
 
     private static OrderDto ToDto(Order o) => new(
@@ -302,6 +385,7 @@ public class OrderService : IOrderService
         o.Status.ToString(),
         o.CreatedAt,
         o.Channel,
-        o.PaymentMethod
+        o.PaymentMethod,
+        o.Tip
     );
 }

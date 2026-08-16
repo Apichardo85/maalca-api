@@ -19,8 +19,6 @@ public class AppDbContext : DbContext
     public DbSet<Product> Products => Set<Product>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
     public DbSet<InvoiceItem> InvoiceItems => Set<InvoiceItem>();
-    public DbSet<GiftCard> GiftCards => Set<GiftCard>();
-    public DbSet<Campaign> Campaigns => Set<Campaign>();
     public DbSet<Lead> Leads => Set<Lead>();
     public DbSet<AgentExecution> AgentExecutions => Set<AgentExecution>();
     public DbSet<UserAffiliateMap> UserAffiliateMaps => Set<UserAffiliateMap>();
@@ -86,6 +84,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Currency).HasMaxLength(3).IsRequired();
             entity.Property(e => e.Subtotal).HasPrecision(18, 2);
             entity.Property(e => e.Tax).HasPrecision(18, 2);
+            entity.Property(e => e.Tip).HasPrecision(18, 2);
             entity.Property(e => e.Total).HasPrecision(18, 2);
             entity.Property(e => e.StripeCheckoutSessionId).HasMaxLength(255);
             entity.Property(e => e.StripePaymentIntentId).HasMaxLength(255);
@@ -262,31 +261,6 @@ public class AppDbContext : DbContext
             entity.HasOne(e => e.Invoice)
                   .WithMany(i => i.Items)
                   .HasForeignKey(e => e.InvoiceId)
-                  .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        // GiftCard
-        modelBuilder.Entity<GiftCard>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.HasIndex(e => e.Code).IsUnique();
-            entity.Property(e => e.Code).IsRequired();
-            entity.Property(e => e.InitialAmount).HasPrecision(18, 2);
-            entity.Property(e => e.Balance).HasPrecision(18, 2);
-            entity.HasOne(e => e.Affiliate)
-                  .WithMany(a => a.GiftCards)
-                  .HasForeignKey(e => e.AffiliateId)
-                  .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        // Campaign
-        modelBuilder.Entity<Campaign>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Name).IsRequired();
-            entity.HasOne(e => e.Affiliate)
-                  .WithMany(a => a.Campaigns)
-                  .HasForeignKey(e => e.AffiliateId)
                   .OnDelete(DeleteBehavior.Cascade);
         });
 

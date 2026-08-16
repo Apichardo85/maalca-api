@@ -1,9 +1,14 @@
 namespace Maalca.Application.Common.DTOs;
 
-public record OrderItemDto(string ItemId, string Name, decimal Price, int Qty);
+/// <param name="Notes">
+/// Personalización de esta línea (ej. "sin cebolla, extra queso") — distinto de Order.Notes,
+/// que son instrucciones generales del pedido completo.
+/// </param>
+public record OrderItemDto(string ItemId, string Name, decimal Price, int Qty, string? Notes = null);
 
 /// <param name="SuccessUrl">A dónde vuelve el cliente si el pago se completó (Checkout mode=payment).</param>
 /// <param name="CancelUrl">A dónde vuelve el cliente si canceló el pago.</param>
+/// <param name="Tip">Propina — Restaurante. 0 si el negocio no la ofrece o el cliente no dejó.</param>
 public record CreateOrderRequest(
     IReadOnlyList<OrderItemDto> Items,
     decimal Subtotal,
@@ -15,7 +20,8 @@ public record CreateOrderRequest(
     string? Notes,
     string? Currency,
     string? SuccessUrl,
-    string? CancelUrl
+    string? CancelUrl,
+    decimal Tip = 0
 );
 
 /// <param name="CheckoutUrl">
@@ -39,7 +45,8 @@ public record OrderDto(
     string Status,
     DateTime CreatedAt,
     string Channel = "Online",
-    string? PaymentMethod = null
+    string? PaymentMethod = null,
+    decimal Tip = 0
 );
 
 public record UpdateOrderStatusRequest(string Status);
@@ -60,7 +67,8 @@ public record CreatePosOrderRequest(
     string? CustomerName,
     string? Notes,
     string? Currency,
-    string PaymentMethod
+    string PaymentMethod,
+    decimal Tip = 0
 );
 
 /// <summary>
@@ -81,5 +89,6 @@ public record CreatePosCheckoutRequest(
     string? Notes,
     string? Currency,
     string SuccessUrl,
-    string CancelUrl
+    string CancelUrl,
+    decimal Tip = 0
 );

@@ -83,26 +83,9 @@ public interface IInvoiceService
 {
     Task<PaginatedResponse<Invoice>> GetInvoicesAsync(Guid affiliateId, string? status = null, DateTime? dateFrom = null, DateTime? dateTo = null);
     Task<Invoice?> GetInvoiceAsync(Guid affiliateId, Guid id);
-    Task<Invoice> CreateInvoiceAsync(Guid affiliateId, Invoice invoice);
+    Task<Invoice> CreateInvoiceAsync(Guid affiliateId, Invoice invoice, List<InvoiceItem>? items = null);
     Task<Invoice?> UpdateInvoiceAsync(Guid affiliateId, Guid id, Invoice invoice);
     Task<bool> DeleteInvoiceAsync(Guid affiliateId, Guid id);
-}
-
-public interface IGiftCardService
-{
-    Task<List<GiftCard>> GetGiftCardsAsync(Guid affiliateId, string? status = null);
-    Task<GiftCard?> GetGiftCardAsync(Guid affiliateId, Guid id);
-    Task<GiftCard> CreateGiftCardAsync(Guid affiliateId, GiftCard giftCard);
-    Task<GiftCard?> RedeemGiftCardAsync(Guid affiliateId, Guid id, decimal amount);
-}
-
-public interface ICampaignService
-{
-    Task<List<Campaign>> GetCampaignsAsync(Guid affiliateId, string? status = null);
-    Task<Campaign?> GetCampaignAsync(Guid affiliateId, Guid id);
-    Task<Campaign> CreateCampaignAsync(Guid affiliateId, Campaign campaign);
-    Task<Campaign?> UpdateCampaignAsync(Guid affiliateId, Guid id, Campaign campaign);
-    Task<bool> DeleteCampaignAsync(Guid affiliateId, Guid id);
 }
 
 public interface IMetricsService

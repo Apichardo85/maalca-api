@@ -254,26 +254,34 @@ public class InventoryService : IInventoryService
 public class QueueService : IQueueService
 {
     private readonly AppDbContext _context;
+    private readonly IQueueRealtimeNotifier _realtime;
 
-    public QueueService(AppDbContext context) => _context = context;
+    public QueueService(AppDbContext context, IQueueRealtimeNotifier realtime)
+    {
+        _context = context;
+        _realtime = realtime;
+    }
 
     public async Task<List<QueueEntry>> GetQueueAsync(Guid affiliateId)
-        => await _context.QueueEntries.Where(q => q.AffiliateId == affiliateId && q.Status == "waiting")
+        => await _context.QueueEntries.AsNoTracking()
+            .Where(q => q.AffiliateId == affiliateId && q.Status == "waiting")
+            .Include(q => q.Service).Include(q => q.AssignedTo)
             .OrderBy(q => q.Position).ToListAsync();
 
     public async Task<QueueEntry> AddToQueueAsync(Guid affiliateId, QueueEntry entry)
     {
         var maxPosition = await _context.QueueEntries.Where(q => q.AffiliateId == affiliateId && q.Status == "waiting")
             .MaxAsync(q => (int?)q.Position) ?? 0;
-        
+
         entry.AffiliateId = affiliateId;
         entry.Id = Guid.NewGuid();
         entry.Position = maxPosition + 1;
         entry.Status = "waiting";
         entry.CreatedAt = DateTime.UtcNow;
-        
+
         _context.QueueEntries.Add(entry);
         await _context.SaveChangesAsync();
+        await _realtime.NotifyQueueUpdatedAsync(affiliateId, await GetQueueAsync(affiliateId));
         return entry;
     }
 
@@ -286,6 +294,7 @@ public class QueueService : IQueueService
         if (status == "in_service") entry.CalledAt = DateTime.UtcNow;
         entry.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
+        await _realtime.NotifyQueueUpdatedAsync(affiliateId, await GetQueueAsync(affiliateId));
         return entry;
     }
 }
@@ -422,12 +431,31 @@ public class InvoiceService : IInvoiceService
     public async Task<Invoice?> GetInvoiceAsync(Guid affiliateId, Guid id)
         => await _context.Invoices.Include(i => i.Customer).Include(i => i.Items).FirstOrDefaultAsync(i => i.Id == id && i.AffiliateId == affiliateId);
 
-    public async Task<Invoice> CreateInvoiceAsync(Guid affiliateId, Invoice invoice)
+    public async Task<Invoice> CreateInvoiceAsync(Guid affiliateId, Invoice invoice, List<InvoiceItem>? items = null)
     {
         invoice.AffiliateId = affiliateId;
         invoice.Id = Guid.NewGuid();
         invoice.InvoiceNumber = $"INV-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString()[..8]}";
+        invoice.IssueDate = invoice.IssueDate == default ? DateTime.UtcNow : invoice.IssueDate;
         invoice.CreatedAt = DateTime.UtcNow;
+
+        // Las líneas llegan sueltas (sin InvoiceId todavía, el cliente no lo conoce hasta que
+        // se crea la factura) — el total nunca se confía al request, se recalcula acá para que
+        // no se pueda mandar un Total arbitrario que no cuadre con las líneas reales.
+        if (items is { Count: > 0 })
+        {
+            invoice.Items = items.Select(i => new InvoiceItem
+            {
+                Id = Guid.NewGuid(),
+                Description = i.Description,
+                Quantity = i.Quantity,
+                UnitPrice = i.UnitPrice,
+                Total = i.Quantity * i.UnitPrice,
+            }).ToList();
+            invoice.Subtotal = invoice.Items.Sum(i => i.Total);
+            invoice.Total = invoice.Subtotal + invoice.Tax;
+        }
+
         _context.Invoices.Add(invoice);
         await _context.SaveChangesAsync();
         return invoice;
@@ -455,99 +483,6 @@ public class InvoiceService : IInvoiceService
         var invoice = await _context.Invoices.FirstOrDefaultAsync(i => i.Id == id && i.AffiliateId == affiliateId);
         if (invoice == null) return false;
         _context.Invoices.Remove(invoice);
-        await _context.SaveChangesAsync();
-        return true;
-    }
-}
-
-public class GiftCardService : IGiftCardService
-{
-    private readonly AppDbContext _context;
-
-    public GiftCardService(AppDbContext context) => _context = context;
-
-    public async Task<List<GiftCard>> GetGiftCardsAsync(Guid affiliateId, string? status = null)
-    {
-        var query = _context.GiftCards.Where(g => g.AffiliateId == affiliateId);
-        if (!string.IsNullOrEmpty(status)) query = query.Where(g => g.Status == status);
-        return await query.ToListAsync();
-    }
-
-    public async Task<GiftCard?> GetGiftCardAsync(Guid affiliateId, Guid id)
-        => await _context.GiftCards.FirstOrDefaultAsync(g => g.Id == id && g.AffiliateId == affiliateId);
-
-    public async Task<GiftCard> CreateGiftCardAsync(Guid affiliateId, GiftCard giftCard)
-    {
-        giftCard.AffiliateId = affiliateId;
-        giftCard.Id = Guid.NewGuid();
-        giftCard.Code = Guid.NewGuid().ToString("N").ToUpper()[..16];
-        giftCard.Balance = giftCard.InitialAmount;
-        giftCard.Status = "Active";
-        giftCard.CreatedAt = DateTime.UtcNow;
-        _context.GiftCards.Add(giftCard);
-        await _context.SaveChangesAsync();
-        return giftCard;
-    }
-
-    public async Task<GiftCard?> RedeemGiftCardAsync(Guid affiliateId, Guid id, decimal amount)
-    {
-        var giftCard = await _context.GiftCards.FirstOrDefaultAsync(g => g.Id == id && g.AffiliateId == affiliateId);
-        if (giftCard == null) return null;
-        if (giftCard.Status != "Active" || giftCard.Balance < amount) return null;
-        giftCard.Balance -= amount;
-        if (giftCard.Balance == 0) giftCard.Status = "Redeemed";
-        giftCard.UpdatedAt = DateTime.UtcNow;
-        await _context.SaveChangesAsync();
-        return giftCard;
-    }
-}
-
-public class CampaignService : ICampaignService
-{
-    private readonly AppDbContext _context;
-
-    public CampaignService(AppDbContext context) => _context = context;
-
-    public async Task<List<Campaign>> GetCampaignsAsync(Guid affiliateId, string? status = null)
-    {
-        var query = _context.Campaigns.Where(c => c.AffiliateId == affiliateId);
-        if (!string.IsNullOrEmpty(status)) query = query.Where(c => c.Status == status);
-        return await query.ToListAsync();
-    }
-
-    public async Task<Campaign?> GetCampaignAsync(Guid affiliateId, Guid id)
-        => await _context.Campaigns.FirstOrDefaultAsync(c => c.Id == id && c.AffiliateId == affiliateId);
-
-    public async Task<Campaign> CreateCampaignAsync(Guid affiliateId, Campaign campaign)
-    {
-        campaign.AffiliateId = affiliateId;
-        campaign.Id = Guid.NewGuid();
-        campaign.CreatedAt = DateTime.UtcNow;
-        _context.Campaigns.Add(campaign);
-        await _context.SaveChangesAsync();
-        return campaign;
-    }
-
-    public async Task<Campaign?> UpdateCampaignAsync(Guid affiliateId, Guid id, Campaign campaign)
-    {
-        var existing = await _context.Campaigns.FirstOrDefaultAsync(c => c.Id == id && c.AffiliateId == affiliateId);
-        if (existing == null) return null;
-        existing.Name = campaign.Name;
-        existing.Type = campaign.Type;
-        existing.TargetAudience = campaign.TargetAudience;
-        existing.Content = campaign.Content;
-        existing.Schedule = campaign.Schedule;
-        existing.Status = campaign.Status;
-        existing.UpdatedAt = DateTime.UtcNow;
-        await _context.SaveChangesAsync();
-        return existing;
-    }
-
-    public async Task<bool> DeleteCampaignAsync(Guid affiliateId, Guid id)
-    {
-        var campaign = await _context.Campaigns.FirstOrDefaultAsync(c => c.Id == id && c.AffiliateId == affiliateId);
-        if (campaign == null) return false;
-        _context.Campaigns.Remove(campaign);
         await _context.SaveChangesAsync();
         return true;
     }

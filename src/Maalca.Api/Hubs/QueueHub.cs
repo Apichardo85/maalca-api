@@ -2,6 +2,12 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace Maalca.Api.Hubs;
 
+/// <summary>
+/// Push en tiempo real para la fila de espera (/space/{slug}/queue). Mismo patrón que OrdersHub:
+/// un grupo por afiliado, el cliente se une con su propio Id al conectar. El servidor nunca
+/// escucha comandos del cliente acá — solo empuja "QueueUpdated" desde QueueService cuando
+/// alguien entra a la fila o cambia de estado (ver SignalRQueueRealtimeNotifier).
+/// </summary>
 public class QueueHub : Hub
 {
     public async Task JoinQueueGroup(string affiliateId)
@@ -12,20 +18,5 @@ public class QueueHub : Hub
     public async Task LeaveQueueGroup(string affiliateId)
     {
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, affiliateId);
-    }
-
-    public async Task NotifyQueueUpdate(string affiliateId, object queueData)
-    {
-        await Clients.Group(affiliateId).SendAsync("QueueUpdated", queueData);
-    }
-
-    public async Task NotifyPositionChanged(string affiliateId, string connectionId, int newPosition)
-    {
-        await Clients.Client(connectionId).SendAsync("PositionChanged", newPosition);
-    }
-
-    public async Task NotifyCalled(string affiliateId, string connectionId, string message)
-    {
-        await Clients.Client(connectionId).SendAsync("Called", message);
     }
 }

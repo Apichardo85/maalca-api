@@ -24,6 +24,11 @@ public class Order : BaseEntity
 
     public decimal Subtotal { get; set; }
     public decimal Tax { get; set; }
+    // Propina — Restaurante. Se suma al Total (Total = Subtotal + Tax + Tip) y viaja como línea
+    // aparte en el Checkout de Stripe (mismo patrón que Tax) para que aparezca clara en el recibo
+    // y en el reporte de la cuenta Connect del negocio, en vez de mezclarse en el precio de los
+    // items. 0 por default — nunca obligatoria.
+    public decimal Tip { get; set; } = 0;
     public decimal Total { get; set; }
     public string Currency { get; set; } = "USD";
 

@@ -55,8 +55,7 @@ builder.Services.AddScoped<IQueueService, QueueService>();
 builder.Services.AddScoped<ITeamService, TeamService>();
 builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddScoped<IInvoiceService, InvoiceService>();
-builder.Services.AddScoped<IGiftCardService, GiftCardService>();
-builder.Services.AddScoped<ICampaignService, CampaignService>();
+builder.Services.AddScoped<Maalca.Application.Common.Interfaces.IQueueRealtimeNotifier, Maalca.Api.Hubs.SignalRQueueRealtimeNotifier>();
 builder.Services.AddScoped<IMetricsService, MetricsService>();
 builder.Services.AddScoped<ILeadService, LeadService>();
 builder.Services.AddScoped<IAffiliateMapService, AffiliateMapService>();
@@ -718,21 +717,27 @@ app.MapPost("/api/affiliates/{affiliateId:guid}/inventory/movements", async (IIn
     }
 });
 
-// ============ QUEUE ENDPOINTS ============
-app.MapGet("/api/affiliates/{affiliateId:guid}/queue", async (IQueueService queueService, Guid affiliateId) =>
+// ============ QUEUE ENDPOINTS (fila de espera — walk-ins de Barbería) ============
+app.MapGet("/api/affiliates/{affiliateId:guid}/queue", async (HttpContext ctx, IQueueService queueService, Guid affiliateId) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
     var result = await queueService.GetQueueAsync(affiliateId);
     return Results.Ok(result);
 });
 
-app.MapPost("/api/affiliates/{affiliateId:guid}/queue", async (IQueueService queueService, Guid affiliateId, QueueEntry entry) =>
+app.MapPost("/api/affiliates/{affiliateId:guid}/queue", async (HttpContext ctx, IQueueService queueService, Guid affiliateId, QueueEntry entry) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
     var result = await queueService.AddToQueueAsync(affiliateId, entry);
     return Results.Created($"/api/affiliates/{affiliateId}/queue/{result.Id}", result);
 });
 
-app.MapPatch("/api/affiliates/{affiliateId:guid}/queue/{id:guid}", async (IQueueService queueService, Guid affiliateId, Guid id, string status, Guid? barberId = null) =>
+app.MapPatch("/api/affiliates/{affiliateId:guid}/queue/{id:guid}", async (HttpContext ctx, IQueueService queueService, Guid affiliateId, Guid id, string status, Guid? barberId = null) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
     var result = await queueService.UpdateQueueEntryAsync(affiliateId, id, status, barberId);
     if (result == null)
         return Results.NotFound();
@@ -835,104 +840,67 @@ app.MapDelete("/api/affiliates/{affiliateId:guid}/products/{id:guid}", async (IP
     return Results.NoContent();
 });
 
-// ============ INVOICE ENDPOINTS ============
-app.MapGet("/api/affiliates/{affiliateId:guid}/invoices", async (IInvoiceService invoiceService, Guid affiliateId, string? status = null, DateTime? dateFrom = null, DateTime? dateTo = null) =>
+// ============ INVOICE ENDPOINTS (Servicios/Profesionales — facturar trabajo realizado) ============
+app.MapGet("/api/affiliates/{affiliateId:guid}/invoices", async (HttpContext ctx, IInvoiceService invoiceService, Guid affiliateId, string? status = null, DateTime? dateFrom = null, DateTime? dateTo = null) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
     var result = await invoiceService.GetInvoicesAsync(affiliateId, status, dateFrom, dateTo);
     return Results.Ok(result);
 });
 
-app.MapGet("/api/affiliates/{affiliateId:guid}/invoices/{id:guid}", async (IInvoiceService invoiceService, Guid affiliateId, Guid id) =>
+app.MapGet("/api/affiliates/{affiliateId:guid}/invoices/{id:guid}", async (HttpContext ctx, IInvoiceService invoiceService, Guid affiliateId, Guid id) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
     var result = await invoiceService.GetInvoiceAsync(affiliateId, id);
     if (result == null)
         return Results.NotFound();
     return Results.Ok(result);
 });
 
-app.MapPost("/api/affiliates/{affiliateId:guid}/invoices", async (IInvoiceService invoiceService, Guid affiliateId, Invoice invoice) =>
+// El cliente manda las líneas sueltas (sin InvoiceId, que todavía no existe) — CreateInvoiceRequest
+// las separa de la entidad Invoice en sí para que el servicio recalcule Subtotal/Total a partir
+// de las líneas reales, en vez de confiar en un total que el cliente podría mandar manipulado.
+app.MapPost("/api/affiliates/{affiliateId:guid}/invoices", async (HttpContext ctx, IInvoiceService invoiceService, Guid affiliateId, CreateInvoiceRequest request) =>
 {
-    var result = await invoiceService.CreateInvoiceAsync(affiliateId, invoice);
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    var invoice = new Invoice
+    {
+        CustomerId = request.CustomerId,
+        Tax = request.Tax,
+        DueDate = request.DueDate,
+        Notes = request.Notes,
+    };
+    var items = request.Items
+        .Select(i => new InvoiceItem { Description = i.Description, Quantity = i.Quantity, UnitPrice = i.UnitPrice })
+        .ToList();
+    var result = await invoiceService.CreateInvoiceAsync(affiliateId, invoice, items);
     return Results.Created($"/api/affiliates/{affiliateId}/invoices/{result.Id}", result);
 });
 
-app.MapPut("/api/affiliates/{affiliateId:guid}/invoices/{id:guid}", async (IInvoiceService invoiceService, Guid affiliateId, Guid id, Invoice invoice) =>
+app.MapPut("/api/affiliates/{affiliateId:guid}/invoices/{id:guid}", async (HttpContext ctx, IInvoiceService invoiceService, Guid affiliateId, Guid id, Invoice invoice) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
     var result = await invoiceService.UpdateInvoiceAsync(affiliateId, id, invoice);
     if (result == null)
         return Results.NotFound();
     return Results.Ok(result);
 });
 
-app.MapDelete("/api/affiliates/{affiliateId:guid}/invoices/{id:guid}", async (IInvoiceService invoiceService, Guid affiliateId, Guid id) =>
+app.MapDelete("/api/affiliates/{affiliateId:guid}/invoices/{id:guid}", async (HttpContext ctx, IInvoiceService invoiceService, Guid affiliateId, Guid id) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
     var result = await invoiceService.DeleteInvoiceAsync(affiliateId, id);
-    if (!result)
-        return Results.NotFound();
-    return Results.NoContent();
-});
-
-// ============ GIFT CARD ENDPOINTS ============
-app.MapGet("/api/affiliates/{affiliateId:guid}/giftcards", async (IGiftCardService giftCardService, Guid affiliateId, string? status = null) =>
-{
-    var result = await giftCardService.GetGiftCardsAsync(affiliateId, status);
-    return Results.Ok(result);
-});
-
-app.MapGet("/api/affiliates/{affiliateId:guid}/giftcards/{id:guid}", async (IGiftCardService giftCardService, Guid affiliateId, Guid id) =>
-{
-    var result = await giftCardService.GetGiftCardAsync(affiliateId, id);
-    if (result == null)
-        return Results.NotFound();
-    return Results.Ok(result);
-});
-
-app.MapPost("/api/affiliates/{affiliateId:guid}/giftcards", async (IGiftCardService giftCardService, Guid affiliateId, GiftCard giftCard) =>
-{
-    var result = await giftCardService.CreateGiftCardAsync(affiliateId, giftCard);
-    return Results.Created($"/api/affiliates/{affiliateId}/giftcards/{result.Id}", result);
-});
-
-app.MapPost("/api/affiliates/{affiliateId:guid}/giftcards/{id:guid}/redeem", async (IGiftCardService giftCardService, Guid affiliateId, Guid id, RedeemGiftCardRequest request) =>
-{
-    var result = await giftCardService.RedeemGiftCardAsync(affiliateId, id, request.Amount);
-    if (result == null)
-        return Results.BadRequest(new { error = new { code = "REDEEM_FAILED", message = "Gift card not found, inactive, or insufficient balance" } });
-    return Results.Ok(result);
-});
-
-// ============ CAMPAIGN ENDPOINTS ============
-app.MapGet("/api/affiliates/{affiliateId:guid}/campaigns", async (ICampaignService campaignService, Guid affiliateId, string? status = null) =>
-{
-    var result = await campaignService.GetCampaignsAsync(affiliateId, status);
-    return Results.Ok(result);
-});
-
-app.MapGet("/api/affiliates/{affiliateId:guid}/campaigns/{id:guid}", async (ICampaignService campaignService, Guid affiliateId, Guid id) =>
-{
-    var result = await campaignService.GetCampaignAsync(affiliateId, id);
-    if (result == null)
-        return Results.NotFound();
-    return Results.Ok(result);
-});
-
-app.MapPost("/api/affiliates/{affiliateId:guid}/campaigns", async (ICampaignService campaignService, Guid affiliateId, Campaign campaign) =>
-{
-    var result = await campaignService.CreateCampaignAsync(affiliateId, campaign);
-    return Results.Created($"/api/affiliates/{affiliateId}/campaigns/{result.Id}", result);
-});
-
-app.MapPut("/api/affiliates/{affiliateId:guid}/campaigns/{id:guid}", async (ICampaignService campaignService, Guid affiliateId, Guid id, Campaign campaign) =>
-{
-    var result = await campaignService.UpdateCampaignAsync(affiliateId, id, campaign);
-    if (result == null)
-        return Results.NotFound();
-    return Results.Ok(result);
-});
-
-app.MapDelete("/api/affiliates/{affiliateId:guid}/campaigns/{id:guid}", async (ICampaignService campaignService, Guid affiliateId, Guid id) =>
-{
-    var result = await campaignService.DeleteCampaignAsync(affiliateId, id);
     if (!result)
         return Results.NotFound();
     return Results.NoContent();
@@ -2120,27 +2088,7 @@ using (var scope = app.Services.CreateScope())
         db.Invoices.AddRange(invoices);
         db.SaveChanges();
 
-        // --- Gift Cards ---
-        var giftCards = new[]
-        {
-            new GiftCard { Id = Guid.NewGuid(), AffiliateId = pegoteId, Code = "PEGOTE-GIFT-001", InitialAmount = 50.00m, Balance = 50.00m, RecipientEmail = "amigo@email.com", Message = "Feliz cumpleaños", Status = "Active", ExpiresAt = today.AddMonths(6) },
-            new GiftCard { Id = Guid.NewGuid(), AffiliateId = pegoteId, Code = "PEGOTE-GIFT-002", InitialAmount = 100.00m, Balance = 35.00m, RecipientEmail = "regalo@email.com", Message = "Disfruta tu corte", Status = "Active", ExpiresAt = today.AddMonths(3) },
-            new GiftCard { Id = Guid.NewGuid(), AffiliateId = pegoteId, Code = "PEGOTE-GIFT-003", InitialAmount = 25.00m, Balance = 0.00m, Status = "Redeemed" },
-        };
-        db.GiftCards.AddRange(giftCards);
-        db.SaveChanges();
-
-        // --- Campaigns ---
-        var campaigns = new[]
-        {
-            new Campaign { Id = Guid.NewGuid(), AffiliateId = pegoteId, Name = "Promo Semana Santa", Type = "email", TargetAudience = "Todos los clientes", Content = "20% de descuento en corte premium durante Semana Santa", Status = "Sent", Schedule = today.AddDays(-10) },
-            new Campaign { Id = Guid.NewGuid(), AffiliateId = pegoteId, Name = "Lanzamiento Aceite Barba", Type = "sms", TargetAudience = "Clientes con barba", Content = "Nuevo aceite para barba disponible — pruébalo gratis con tu próximo corte", Status = "Draft" },
-            new Campaign { Id = Guid.NewGuid(), AffiliateId = pegoteId, Name = "Referidos Julio", Type = "email", TargetAudience = "Clientes activos", Content = "Trae un amigo y ambos reciben 15% de descuento", Status = "Scheduled", Schedule = today.AddDays(5) },
-        };
-        db.Campaigns.AddRange(campaigns);
-        db.SaveChanges();
-
-        app.Logger.LogInformation("Seeded {Affiliates} affiliates, {Users} users, and Pegote demo data (customers, services, team, products, inventory, appointments, invoices, giftcards, campaigns)", affiliates.Length, users.Length);
+        app.Logger.LogInformation("Seeded {Affiliates} affiliates, {Users} users, and Pegote demo data (customers, services, team, products, inventory, appointments, invoices)", affiliates.Length, users.Length);
     }
 }
 
