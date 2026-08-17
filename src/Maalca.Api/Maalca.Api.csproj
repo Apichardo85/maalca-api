@@ -22,8 +22,4 @@
     <ProjectReference Include="..\Maalca.Infrastructure\Maalca.Infrastructure.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="Claude\" />
-  </ItemGroup>
-
 </Project>
