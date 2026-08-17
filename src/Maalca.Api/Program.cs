@@ -261,6 +261,27 @@ app.MapPatch("/api/ops/affiliates/{affiliateId:guid}/modules", async (
     }
 });
 
+// Crea un afiliado de prueba sin dueño, para que el equipo de MaalCa lo configure y lo envíe
+// a un cliente prospecto. No pasa por OnboardAsync (que ata el Affiliate al usuario autenticado
+// como Owner) — usa CreateTrialAsync, que corre la misma validación/seed de catálogo demo pero
+// no crea ningún UserAffiliateMap. El admin lo configura vía impersonación (ya funciona sin
+// owner) y, si el cliente lo quiere, se le invita como Owner desde /space/{slug}/equipo.
+app.MapPost("/api/ops/affiliates/trial", async (HttpContext ctx, IOnboardingService onboardingService, OnboardingRequest request) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+
+    try
+    {
+        var result = await onboardingService.CreateTrialAsync(request);
+        return Results.Created($"/api/public/affiliates/{result.Slug}", result);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+});
+
 app.MapPost("/api/ops/impersonate/{affiliateId:guid}", async (HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId) =>
 {
     if (ctx.User.FindFirst("platform_admin")?.Value != "true")

@@ -23,13 +23,56 @@ public class OnboardingService : IOnboardingService
 
     public async Task<OnboardingResponse> OnboardAsync(string supabaseUserId, string email, OnboardingRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.Name) ||
-            request.Name.Length < 2 || request.Name.Length > 100)
-            throw new ArgumentException("Name must be between 2 and 100 characters.");
-
         var existingMaps = await _mapService.GetMapsForUserAsync(supabaseUserId);
         if (existingMaps.Count > 0)
             throw new InvalidOperationException("User already has an affiliate.");
+
+        await using var tx = await _db.Database.BeginTransactionAsync();
+        try
+        {
+            var (affiliate, response) = await CreateAffiliateCoreAsync(request);
+
+            await _mapService.CreateMapAsync(supabaseUserId, email, affiliate.Id, AffiliateRole.Owner);
+
+            await tx.CommitAsync();
+            return response;
+        }
+        catch
+        {
+            await tx.RollbackAsync();
+            throw;
+        }
+    }
+
+    public async Task<OnboardingResponse> CreateTrialAsync(OnboardingRequest request)
+    {
+        await using var tx = await _db.Database.BeginTransactionAsync();
+        try
+        {
+            var (_, response) = await CreateAffiliateCoreAsync(request);
+            // Sin CreateMapAsync — queda sin dueño hasta que se invite a alguien como Owner
+            // desde /space/{slug}/equipo, o el admin lo reclame ahí mismo.
+            await tx.CommitAsync();
+            return response;
+        }
+        catch
+        {
+            await tx.RollbackAsync();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Validación + creación del Affiliate + seed de catálogo demo, compartido entre
+    /// OnboardAsync (dueño = usuario que llama) y CreateTrialAsync (sin dueño). No abre ni
+    /// cierra la transacción — eso lo maneja el caller, para que cada uno controle qué más
+    /// entra en el commit (ej. CreateMapAsync en OnboardAsync).
+    /// </summary>
+    private async Task<(Affiliate Affiliate, OnboardingResponse Response)> CreateAffiliateCoreAsync(OnboardingRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Name) ||
+            request.Name.Length < 2 || request.Name.Length > 100)
+            throw new ArgumentException("Name must be between 2 and 100 characters.");
 
         if (!Enum.TryParse<BusinessType>(request.BusinessType, ignoreCase: true, out var businessType))
             throw new ArgumentException($"Invalid BusinessType: {request.BusinessType}");
@@ -39,48 +82,37 @@ public class OnboardingService : IOnboardingService
 
         var slug = await GenerateUniqueSlugAsync(request.Name);
 
-        await using var tx = await _db.Database.BeginTransactionAsync();
-        try
+        var affiliate = new Affiliate
         {
-            var affiliate = new Affiliate
-            {
-                Name = request.Name,
-                Description = request.Description?.Trim(),
-                WhatsApp = request.WhatsApp?.Trim(),
-                BusinessType = businessType,
-                Slug = slug,
-                Plan = Plan.Free,
-                PlanStatus = PlanStatus.Active,
-                Published = true,
-                PrimaryColor = request.PrimaryColor?.Trim(),
-                LogoUrl = request.LogoUrl?.Trim()
-            };
+            Name = request.Name,
+            Description = request.Description?.Trim(),
+            WhatsApp = request.WhatsApp?.Trim(),
+            BusinessType = businessType,
+            Slug = slug,
+            Plan = Plan.Free,
+            PlanStatus = PlanStatus.Active,
+            Published = true,
+            PrimaryColor = request.PrimaryColor?.Trim(),
+            LogoUrl = request.LogoUrl?.Trim()
+        };
 
-            _db.Affiliates.Add(affiliate);
-            await _db.SaveChangesAsync();
+        _db.Affiliates.Add(affiliate);
+        await _db.SaveChangesAsync();
 
-            SeedDemoCatalog(affiliate.Id, businessType);
-            await _db.SaveChangesAsync();
+        SeedDemoCatalog(affiliate.Id, businessType);
+        await _db.SaveChangesAsync();
 
-            if (!string.IsNullOrWhiteSpace(affiliate.WhatsApp))
-                await _canalService.CreateAsync(affiliate.Id,
-                    new CreateCanalRequest("WhatsApp", "Manual", affiliate.WhatsApp));
+        if (!string.IsNullOrWhiteSpace(affiliate.WhatsApp))
+            await _canalService.CreateAsync(affiliate.Id,
+                new CreateCanalRequest("WhatsApp", "Manual", affiliate.WhatsApp));
 
-            await _mapService.CreateMapAsync(supabaseUserId, email, affiliate.Id, AffiliateRole.Owner);
+        var response = new OnboardingResponse(
+            affiliate.Id, affiliate.Name, affiliate.Slug!,
+            affiliate.BusinessType.ToString(),
+            affiliate.Description, affiliate.WhatsApp,
+            affiliate.PrimaryColor, affiliate.LogoUrl);
 
-            await tx.CommitAsync();
-
-            return new OnboardingResponse(
-                affiliate.Id, affiliate.Name, affiliate.Slug!,
-                affiliate.BusinessType.ToString(),
-                affiliate.Description, affiliate.WhatsApp,
-                affiliate.PrimaryColor, affiliate.LogoUrl);
-        }
-        catch
-        {
-            await tx.RollbackAsync();
-            throw;
-        }
+        return (affiliate, response);
     }
 
     private void SeedDemoCatalog(Guid affiliateId, BusinessType businessType)
