@@ -86,10 +86,16 @@ public class PublicBookingService : IPublicBookingService
             if (!validStaff)
                 throw new ArgumentException("El miembro del personal seleccionado no está disponible.");
 
+            // request.Date llega con Kind=Unspecified (fecha "bare" del front) — Npgsql 8+ no
+            // permite compararlo contra la columna timestamptz sin forzar Kind=Utc primero,
+            // igual que en el Create de abajo. Sin esto el chequeo de conflicto tronaba con
+            // ArgumentException y CADA reserva pública de cita devolvía 400. Bug real reportado
+            // en producción 2026-08-17 — bloqueaba toda la Agenda pública (Barbería/Servicios).
+            var requestDateUtc = DateTime.SpecifyKind(request.Date.Date, DateTimeKind.Utc);
             var conflict = await _db.Appointments.AnyAsync(a =>
                 a.AffiliateId == affiliate.Id &&
                 a.AssignedToId == assignedToId &&
-                a.Date.Date == request.Date.Date &&
+                a.Date.Date == requestDateUtc &&
                 a.Time == request.Time &&
                 a.Status != "Cancelled");
             if (conflict)
