@@ -50,6 +50,7 @@ builder.Services.AddScoped<IAffiliateService, AffiliateService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddScoped<IAppointmentService, AppointmentService>();
 builder.Services.AddScoped<ITableReservationService, TableReservationService>();
+builder.Services.AddScoped<ITimeBlockService, TimeBlockService>();
 builder.Services.AddScoped<IServiceService, ServiceService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<IQueueService, QueueService>();
@@ -606,6 +607,115 @@ app.MapDelete("/api/affiliates/{affiliateId:guid}/appointments/{id:guid}", async
     if (ctx.User.FindFirst("role")?.Value == "Staff")
         return Results.Forbid();
     var result = await appointmentService.DeleteAppointmentAsync(affiliateId, id);
+    if (!result)
+        return Results.NotFound();
+    return Results.NoContent();
+});
+
+// ============ INTERNAL: RECORDATORIOS DE CITAS (task #193) ============
+// Server-to-server, dirección inversa a OrderNotificationService (acá maalca-web LLAMA a
+// maalca-api, no al revés) — mismo secreto compartido (INTERNAL_NOTIFICATIONS_SECRET) porque
+// ambos procesos ya confían en él para el flujo de Order. maalca-web (cron) pide qué citas
+// necesitan recordatorio, manda el correo con Resend (misma infraestructura que ya usa para
+// Orders/invites), y confirma acá para no volver a mandarlo en el próximo barrido.
+bool ValidInternalSecret(HttpContext ctx)
+{
+    var configured = Environment.GetEnvironmentVariable("INTERNAL_NOTIFICATIONS_SECRET");
+    if (string.IsNullOrWhiteSpace(configured)) return false;
+    var provided = ctx.Request.Headers["X-Internal-Secret"].ToString();
+    return provided == configured;
+}
+
+app.MapGet("/api/internal/appointments/due-reminders", async (HttpContext ctx, AppDbContext db, int withinMinutes = 180) =>
+{
+    if (!ValidInternalSecret(ctx)) return Results.Unauthorized();
+
+    var now = DateTime.UtcNow;
+    var horizon = now.AddMinutes(Math.Clamp(withinMinutes, 5, 1440));
+    var today = now.Date;
+
+    // Se trae el universo de "hoy, no recordada, no cancelada, con email" y se filtra por hora
+    // en memoria — Time es un string "HH:mm" (ver Appointment.cs), no se puede comparar en SQL
+    // sin parsear, y el volumen por afiliado/día es chico.
+    var candidates = await db.Appointments
+        .AsNoTracking()
+        .Where(a =>
+            a.Date.Date == today &&
+            a.ReminderSentAt == null &&
+            a.Status != "Cancelled" && a.Status != "Completed" && a.Status != "NoShow")
+        .Include(a => a.Affiliate)
+        .Include(a => a.Customer)
+        .Include(a => a.Service)
+        .Include(a => a.AssignedTo)
+        .ToListAsync();
+
+    var due = candidates
+        .Where(a => !string.IsNullOrWhiteSpace(a.Customer?.Email))
+        .Select(a =>
+        {
+            var parts = a.Time.Split(':');
+            if (parts.Length != 2 || !int.TryParse(parts[0], out var h) || !int.TryParse(parts[1], out var m))
+                return (appt: a, when: (DateTime?)null);
+            var when = DateTime.SpecifyKind(a.Date.Date, DateTimeKind.Utc).AddHours(h).AddMinutes(m);
+            return (appt: a, when: (DateTime?)when);
+        })
+        .Where(x => x.when.HasValue && x.when.Value > now && x.when.Value <= horizon)
+        .Select(x => new
+        {
+            id = x.appt.Id,
+            affiliateName = x.appt.Affiliate?.Name ?? "",
+            affiliateSlug = x.appt.Affiliate?.Slug ?? "",
+            customerName = x.appt.Customer?.Name ?? "",
+            customerEmail = x.appt.Customer?.Email,
+            serviceName = x.appt.Service?.Name ?? "",
+            date = x.appt.Date,
+            time = x.appt.Time,
+            staffName = x.appt.AssignedTo?.Name,
+        })
+        .ToList();
+
+    return Results.Ok(due);
+});
+
+app.MapPost("/api/internal/appointments/{id:guid}/mark-reminded", async (HttpContext ctx, AppDbContext db, Guid id) =>
+{
+    if (!ValidInternalSecret(ctx)) return Results.Unauthorized();
+
+    var appt = await db.Appointments.FirstOrDefaultAsync(a => a.Id == id);
+    if (appt is null) return Results.NotFound();
+    appt.ReminderSentAt = DateTime.UtcNow;
+    await db.SaveChangesAsync();
+    return Results.NoContent();
+});
+
+// ============ TIME BLOCK ENDPOINTS (Agenda — bloqueo de horario, task #192) ============
+app.MapGet("/api/affiliates/{affiliateId:guid}/time-blocks", async (HttpContext ctx, ITimeBlockService timeBlockService, Guid affiliateId, DateTime? from = null, DateTime? to = null) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    var result = await timeBlockService.GetTimeBlocksAsync(affiliateId, from, to);
+    return Results.Ok(result);
+});
+
+app.MapPost("/api/affiliates/{affiliateId:guid}/time-blocks", async (HttpContext ctx, ITimeBlockService timeBlockService, Guid affiliateId, TimeBlock block) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    if (string.IsNullOrWhiteSpace(block.StartTime) || string.IsNullOrWhiteSpace(block.EndTime))
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = "StartTime/EndTime son requeridos." } });
+    var result = await timeBlockService.CreateTimeBlockAsync(affiliateId, block);
+    return Results.Created($"/api/affiliates/{affiliateId}/time-blocks/{result.Id}", result);
+});
+
+app.MapDelete("/api/affiliates/{affiliateId:guid}/time-blocks/{id:guid}", async (HttpContext ctx, ITimeBlockService timeBlockService, Guid affiliateId, Guid id) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    var result = await timeBlockService.DeleteTimeBlockAsync(affiliateId, id);
     if (!result)
         return Results.NotFound();
     return Results.NoContent();

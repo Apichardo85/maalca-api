@@ -90,7 +90,75 @@ public class PublicBookingService : IPublicBookingService
             .GroupBy(a => a.StaffId)
             .ToDictionary(g => g.Key.ToString(), g => g.Select(a => a.Time).Distinct().ToList());
 
+        // Task #192 — bloqueos manuales de horario (almuerzo, ausencias) se mezclan en el mismo
+        // dict de "ocupado" que las citas reales, para que el front no tenga que saber que
+        // existen dos fuentes distintas de indisponibilidad — un slot bloqueado se ve exactamente
+        // igual que uno con cita ya agendada.
+        var blocks = await _db.TimeBlocks
+            .Where(b => b.AffiliateId == affiliate.Id && b.Date.Date == dateUtc)
+            .Select(b => new { b.StaffId, b.StartTime, b.EndTime })
+            .ToListAsync();
+
+        if (blocks.Count > 0)
+        {
+            var staffWideBlocks = blocks.Where(b => b.StaffId is null).ToList();
+            List<Guid> allStaffIds = new();
+            if (staffWideBlocks.Count > 0)
+            {
+                allStaffIds = await _db.TeamMembers
+                    .Where(t => t.AffiliateId == affiliate.Id && t.IsActive)
+                    .Select(t => t.Id)
+                    .ToListAsync();
+            }
+
+            foreach (var block in blocks)
+            {
+                var slots = ExpandBlockToSlots(block.StartTime, block.EndTime);
+                var targetStaffIds = block.StaffId.HasValue ? new List<Guid> { block.StaffId.Value } : allStaffIds;
+                foreach (var staffId in targetStaffIds)
+                {
+                    var key = staffId.ToString();
+                    if (!busyByStaff.TryGetValue(key, out var list))
+                    {
+                        list = new List<string>();
+                        busyByStaff[key] = list;
+                    }
+                    foreach (var slot in slots)
+                        if (!list.Contains(slot)) list.Add(slot);
+                }
+            }
+        }
+
         return new PublicBusyTimesDto(busyByStaff);
+    }
+
+    // Convierte un rango HH:mm-HH:mm en la misma grilla de 30 min que usa generateTimeSlots()
+    // del lado del front, para que un bloqueo de "12:00 a 13:00" tache exactamente los slots
+    // "12:00" y "12:30" — sin esto, comparar el rango contra un solo string de hora exacta
+    // dejaría pasar reservas que caen dentro del bloqueo pero no coinciden con StartTime.
+    private static List<string> ExpandBlockToSlots(string startTime, string endTime)
+    {
+        var slots = new List<string>();
+        if (!TryParseHm(startTime, out var startMins) || !TryParseHm(endTime, out var endMins))
+            return slots;
+        for (var mins = startMins - (startMins % 30); mins < endMins; mins += 30)
+        {
+            if (mins < 0) continue;
+            var h = mins / 60;
+            var m = mins % 60;
+            slots.Add($"{h:D2}:{m:D2}");
+        }
+        return slots;
+    }
+
+    private static bool TryParseHm(string value, out int minutes)
+    {
+        minutes = 0;
+        var parts = value.Split(':');
+        if (parts.Length != 2) return false;
+        if (!int.TryParse(parts[0], out var h) || !int.TryParse(parts[1], out var m)) return false;
+        minutes = h * 60 + m;
+        return true;
     }
 
     public async Task<PublicAppointmentResultDto> CreatePublicAppointmentAsync(string affiliateSlug, CreatePublicAppointmentRequest request)

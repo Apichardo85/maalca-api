@@ -125,6 +125,50 @@ public class AppointmentService : IAppointmentService
     }
 }
 
+/// <summary>Task #192 — bloqueo manual de horario, ver TimeBlock.cs.</summary>
+public class TimeBlockService : ITimeBlockService
+{
+    private readonly AppDbContext _context;
+
+    public TimeBlockService(AppDbContext context) => _context = context;
+
+    public async Task<List<TimeBlock>> GetTimeBlocksAsync(Guid affiliateId, DateTime? from = null, DateTime? to = null)
+    {
+        IQueryable<TimeBlock> query = _context.TimeBlocks.AsNoTracking()
+            .Where(b => b.AffiliateId == affiliateId);
+
+        if (from.HasValue)
+            query = query.Where(b => b.Date.Date >= from.Value.Date);
+        if (to.HasValue)
+            query = query.Where(b => b.Date.Date <= to.Value.Date);
+
+        return await query.OrderBy(b => b.Date).ThenBy(b => b.StartTime).ToListAsync();
+    }
+
+    public async Task<TimeBlock> CreateTimeBlockAsync(Guid affiliateId, TimeBlock block)
+    {
+        block.AffiliateId = affiliateId;
+        block.Id = Guid.NewGuid();
+        block.CreatedAt = DateTime.UtcNow;
+        // Misma razón de siempre: fecha "bare" del front deserializa Kind=Unspecified, la
+        // columna es timestamptz.
+        block.Date = DateTime.SpecifyKind(block.Date.Date, DateTimeKind.Utc);
+
+        _context.TimeBlocks.Add(block);
+        await _context.SaveChangesAsync();
+        return block;
+    }
+
+    public async Task<bool> DeleteTimeBlockAsync(Guid affiliateId, Guid id)
+    {
+        var block = await _context.TimeBlocks.FirstOrDefaultAsync(b => b.Id == id && b.AffiliateId == affiliateId);
+        if (block is null) return false;
+        _context.TimeBlocks.Remove(block);
+        await _context.SaveChangesAsync();
+        return true;
+    }
+}
+
 public class TableReservationService : ITableReservationService
 {
     private readonly AppDbContext _context;

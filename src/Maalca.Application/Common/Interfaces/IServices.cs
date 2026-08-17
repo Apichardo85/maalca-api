@@ -111,6 +111,14 @@ public interface IPublicBookingService
 /// CRUD de reservas de mesa para el dashboard — separado de IAppointmentService a propósito.
 /// Ver TableReservation.cs.
 /// </summary>
+/// <summary>Task #192 — bloqueo manual de horario, ver TimeBlock.cs.</summary>
+public interface ITimeBlockService
+{
+    Task<List<TimeBlock>> GetTimeBlocksAsync(Guid affiliateId, DateTime? from = null, DateTime? to = null);
+    Task<TimeBlock> CreateTimeBlockAsync(Guid affiliateId, TimeBlock block);
+    Task<bool> DeleteTimeBlockAsync(Guid affiliateId, Guid id);
+}
+
 public interface ITableReservationService
 {
     Task<PaginatedResponse<TableReservation>> GetReservationsAsync(Guid affiliateId, DateTime? date = null, string? status = null, int page = 1);
