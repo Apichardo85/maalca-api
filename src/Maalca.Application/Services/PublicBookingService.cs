@@ -58,6 +58,41 @@ public class PublicBookingService : IPublicBookingService
             .ToListAsync();
     }
 
+    /// <summary>
+    /// Task #189 — el front pedía esto recién al confirmar (409 "Ese horario ya no está
+    /// disponible"), obligando al cliente a rellenar todo el form para descubrir el choque.
+    /// Ahora el front puede pedir esto apenas se elige fecha+profesional y ocultar los slots
+    /// ya tomados del grid de horas, igual que ya oculta los que caen fuera del horario del
+    /// negocio (generateTimeSlots).
+    /// </summary>
+    public async Task<PublicBusyTimesDto?> GetPublicBusyTimesAsync(string affiliateSlug, DateTime date)
+    {
+        var affiliate = await _db.Affiliates
+            .Where(a => a.Slug == affiliateSlug && a.Published)
+            .Select(a => new { a.Id })
+            .FirstOrDefaultAsync();
+        if (affiliate is null) return null;
+
+        // Misma razón de siempre: la fecha "bare" que llega por query string deserializa con
+        // Kind=Unspecified y la columna es timestamptz.
+        var dateUtc = DateTime.SpecifyKind(date.Date, DateTimeKind.Utc);
+
+        var busy = await _db.Appointments
+            .Where(a =>
+                a.AffiliateId == affiliate.Id &&
+                a.Date.Date == dateUtc &&
+                a.Status != "Cancelled" &&
+                a.AssignedToId != null)
+            .Select(a => new { StaffId = a.AssignedToId!.Value, a.Time })
+            .ToListAsync();
+
+        var busyByStaff = busy
+            .GroupBy(a => a.StaffId)
+            .ToDictionary(g => g.Key.ToString(), g => g.Select(a => a.Time).Distinct().ToList());
+
+        return new PublicBusyTimesDto(busyByStaff);
+    }
+
     public async Task<PublicAppointmentResultDto> CreatePublicAppointmentAsync(string affiliateSlug, CreatePublicAppointmentRequest request)
     {
         var affiliate = await _db.Affiliates

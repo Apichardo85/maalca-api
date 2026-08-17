@@ -23,6 +23,15 @@ public record CreatePublicAppointmentRequest(
 public record PublicAppointmentResultDto(Guid Id, DateTime Date, string Time, string Status);
 
 /// <summary>
+/// Horarios ya ocupados para una fecha dada, agrupados por miembro del personal (AssignedToId
+/// como string porque el front lo usa como clave de mapa; "any" no existe acá — el front decide
+/// cuándo tratar un slot como ocupado para la opción "cualquiera disponible" combinando todas las
+/// listas). Ver task #189: antes el front no sabía nada de esto y el usuario descubría el
+/// choque recién al confirmar (409).
+/// </summary>
+public record PublicBusyTimesDto(Dictionary<string, List<string>> BusyByStaff);
+
+/// <summary>
 /// Reserva de mesa pública — deliberadamente distinta de CreatePublicAppointmentRequest: no pide
 /// ServiceId ni AssignedToId, pide cuántas personas. Ver TableReservation.cs.
 /// </summary>

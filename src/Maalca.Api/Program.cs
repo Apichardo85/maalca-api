@@ -1894,6 +1894,19 @@ app.MapGet("/api/public/affiliates/{slug}/services", async (IPublicBookingServic
 })
 .AllowAnonymous();
 
+app.MapGet("/api/public/affiliates/{slug}/busy-times", async (
+    IPublicBookingService bookingService, string slug, DateTime date, HttpResponse response) =>
+{
+    var result = await bookingService.GetPublicBusyTimesAsync(slug, date);
+    if (result == null)
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
+    // Sin cache-control largo: esto cambia cada vez que alguien reserva y queremos que el
+    // próximo visitante vea el slot recién tomado, no una copia de hace un minuto.
+    response.Headers.CacheControl = "public, max-age=5";
+    return Results.Ok(result);
+})
+.AllowAnonymous();
+
 app.MapPost("/api/public/affiliates/{slug}/appointments", async (
     IPublicBookingService bookingService, string slug, CreatePublicAppointmentRequest request) =>
 {

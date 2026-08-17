@@ -102,6 +102,7 @@ public interface IPublicBookingService
 {
     Task<List<PublicTeamMemberDto>?> GetPublicTeamAsync(string affiliateSlug);
     Task<List<PublicServiceDto>?> GetPublicServicesAsync(string affiliateSlug);
+    Task<PublicBusyTimesDto?> GetPublicBusyTimesAsync(string affiliateSlug, DateTime date);
     Task<PublicAppointmentResultDto> CreatePublicAppointmentAsync(string affiliateSlug, CreatePublicAppointmentRequest request);
     Task<PublicTableReservationResultDto> CreatePublicTableReservationAsync(string affiliateSlug, CreatePublicTableReservationRequest request);
 }
