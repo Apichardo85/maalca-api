@@ -17,7 +17,7 @@ public static class ModuleCatalog
     {
         "catalog", "page", "metrics", "staff", "appointments",
         "orders", "kitchen", "pos", "board", "billing",
-        "invoices", "queue", "reservations",
+        "invoices", "queue", "reservations", "proposals",
     };
 
     public static string[] FilterActive(string? modules)

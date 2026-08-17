@@ -169,6 +169,86 @@ public class TimeBlockService : ITimeBlockService
     }
 }
 
+/// <summary>Task #194 — propuestas de servicio con aceptación pública, ver Proposal.cs.</summary>
+public class ProposalService : IProposalService
+{
+    private readonly AppDbContext _context;
+
+    public ProposalService(AppDbContext context) => _context = context;
+
+    public async Task<List<Proposal>> GetProposalsAsync(Guid affiliateId)
+        => await _context.Proposals.AsNoTracking()
+            .Where(p => p.AffiliateId == affiliateId)
+            .OrderByDescending(p => p.CreatedAt)
+            .ToListAsync();
+
+    public async Task<Proposal> CreateProposalAsync(Guid affiliateId, Proposal proposal)
+    {
+        proposal.AffiliateId = affiliateId;
+        proposal.Id = Guid.NewGuid();
+        proposal.Token = Guid.NewGuid();
+        proposal.Status = "Draft";
+        proposal.CreatedAt = DateTime.UtcNow;
+        if (proposal.ExpiresAt.HasValue)
+            proposal.ExpiresAt = DateTime.SpecifyKind(proposal.ExpiresAt.Value.Date, DateTimeKind.Utc);
+
+        _context.Proposals.Add(proposal);
+        await _context.SaveChangesAsync();
+        return proposal;
+    }
+
+    // "Enviar" acá no manda un correo real (a diferencia de invites/reminders) — el dueño copia
+    // el link público (/propuesta/{token}) y lo comparte por donde prefiera (WhatsApp, email
+    // propio, etc.). Solo marca el estado para que el cliente pueda aceptarla; antes de esto
+    // AcceptPublicProposalAsync la rechaza por seguir en Draft.
+    public async Task<Proposal?> SendProposalAsync(Guid affiliateId, Guid id)
+    {
+        var proposal = await _context.Proposals.FirstOrDefaultAsync(p => p.Id == id && p.AffiliateId == affiliateId);
+        if (proposal is null) return null;
+        proposal.Status = "Sent";
+        proposal.SentAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        return proposal;
+    }
+
+    public async Task<bool> DeleteProposalAsync(Guid affiliateId, Guid id)
+    {
+        var proposal = await _context.Proposals.FirstOrDefaultAsync(p => p.Id == id && p.AffiliateId == affiliateId);
+        if (proposal is null) return false;
+        _context.Proposals.Remove(proposal);
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<Proposal?> GetPublicProposalAsync(Guid token)
+        => await _context.Proposals.AsNoTracking()
+            .Include(p => p.Affiliate)
+            .FirstOrDefaultAsync(p => p.Token == token);
+
+    public async Task<Proposal> AcceptPublicProposalAsync(Guid token, string signedByName)
+    {
+        var proposal = await _context.Proposals.FirstOrDefaultAsync(p => p.Token == token);
+        if (proposal is null)
+            throw new KeyNotFoundException();
+        if (proposal.Status != "Sent")
+            throw new InvalidOperationException("Esta propuesta ya no está disponible para aceptar.");
+        if (proposal.ExpiresAt.HasValue && proposal.ExpiresAt.Value < DateTime.UtcNow)
+        {
+            proposal.Status = "Expired";
+            await _context.SaveChangesAsync();
+            throw new InvalidOperationException("Esta propuesta expiró.");
+        }
+        if (string.IsNullOrWhiteSpace(signedByName))
+            throw new ArgumentException("El nombre es requerido para aceptar.");
+
+        proposal.Status = "Accepted";
+        proposal.AcceptedAt = DateTime.UtcNow;
+        proposal.AcceptedByName = signedByName.Trim();
+        await _context.SaveChangesAsync();
+        return proposal;
+    }
+}
+
 public class TableReservationService : ITableReservationService
 {
     private readonly AppDbContext _context;

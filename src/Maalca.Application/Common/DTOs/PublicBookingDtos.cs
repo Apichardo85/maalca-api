@@ -46,3 +46,9 @@ public record CreatePublicTableReservationRequest(
 );
 
 public record PublicTableReservationResultDto(Guid Id, DateTime Date, string Time, int PartySize, string Status);
+
+/// <summary>
+/// Aceptación pública de una propuesta (task #194) — el cliente solo escribe su nombre, no es
+/// una firma dibujada/certificada. Ver ProposalService.AcceptPublicProposalAsync.
+/// </summary>
+public record AcceptProposalRequest(string SignedByName);

@@ -119,6 +119,17 @@ public interface ITimeBlockService
     Task<bool> DeleteTimeBlockAsync(Guid affiliateId, Guid id);
 }
 
+/// <summary>Task #194 — propuestas de servicio con aceptación pública, ver Proposal.cs.</summary>
+public interface IProposalService
+{
+    Task<List<Proposal>> GetProposalsAsync(Guid affiliateId);
+    Task<Proposal> CreateProposalAsync(Guid affiliateId, Proposal proposal);
+    Task<Proposal?> SendProposalAsync(Guid affiliateId, Guid id);
+    Task<bool> DeleteProposalAsync(Guid affiliateId, Guid id);
+    Task<Proposal?> GetPublicProposalAsync(Guid token);
+    Task<Proposal> AcceptPublicProposalAsync(Guid token, string signedByName);
+}
+
 public interface ITableReservationService
 {
     Task<PaginatedResponse<TableReservation>> GetReservationsAsync(Guid affiliateId, DateTime? date = null, string? status = null, int page = 1);

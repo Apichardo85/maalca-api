@@ -51,6 +51,7 @@ builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddScoped<IAppointmentService, AppointmentService>();
 builder.Services.AddScoped<ITableReservationService, TableReservationService>();
 builder.Services.AddScoped<ITimeBlockService, TimeBlockService>();
+builder.Services.AddScoped<IProposalService, ProposalService>();
 builder.Services.AddScoped<IServiceService, ServiceService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<IQueueService, QueueService>();
@@ -720,6 +721,91 @@ app.MapDelete("/api/affiliates/{affiliateId:guid}/time-blocks/{id:guid}", async 
         return Results.NotFound();
     return Results.NoContent();
 });
+
+// ============ PROPOSAL ENDPOINTS (Servicios/Profesional — task #194) ============
+app.MapGet("/api/affiliates/{affiliateId:guid}/proposals", async (HttpContext ctx, IProposalService proposalService, Guid affiliateId) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    var result = await proposalService.GetProposalsAsync(affiliateId);
+    return Results.Ok(result);
+});
+
+app.MapPost("/api/affiliates/{affiliateId:guid}/proposals", async (HttpContext ctx, IProposalService proposalService, Guid affiliateId, Proposal proposal) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    if (string.IsNullOrWhiteSpace(proposal.CustomerName) || string.IsNullOrWhiteSpace(proposal.Title))
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = "Cliente y título son requeridos." } });
+    var result = await proposalService.CreateProposalAsync(affiliateId, proposal);
+    return Results.Created($"/api/affiliates/{affiliateId}/proposals/{result.Id}", result);
+});
+
+app.MapPost("/api/affiliates/{affiliateId:guid}/proposals/{id:guid}/send", async (HttpContext ctx, IProposalService proposalService, Guid affiliateId, Guid id) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    var result = await proposalService.SendProposalAsync(affiliateId, id);
+    if (result == null) return Results.NotFound();
+    return Results.Ok(result);
+});
+
+app.MapDelete("/api/affiliates/{affiliateId:guid}/proposals/{id:guid}", async (HttpContext ctx, IProposalService proposalService, Guid affiliateId, Guid id) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    var result = await proposalService.DeleteProposalAsync(affiliateId, id);
+    if (!result) return Results.NotFound();
+    return Results.NoContent();
+});
+
+app.MapGet("/api/public/proposals/{token:guid}", async (IProposalService proposalService, Guid token) =>
+{
+    var result = await proposalService.GetPublicProposalAsync(token);
+    if (result == null)
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Propuesta no encontrada." } });
+    return Results.Ok(new
+    {
+        businessName = result.Affiliate?.Name ?? "",
+        title = result.Title,
+        description = result.Description,
+        amount = result.Amount,
+        currency = result.Currency,
+        status = result.Status,
+        expiresAt = result.ExpiresAt,
+        acceptedAt = result.AcceptedAt,
+        acceptedByName = result.AcceptedByName,
+    });
+})
+.AllowAnonymous();
+
+app.MapPost("/api/public/proposals/{token:guid}/accept", async (IProposalService proposalService, Guid token, AcceptProposalRequest request) =>
+{
+    try
+    {
+        var result = await proposalService.AcceptPublicProposalAsync(token, request.SignedByName);
+        return Results.Ok(new { status = result.Status, acceptedAt = result.AcceptedAt, acceptedByName = result.AcceptedByName });
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Propuesta no encontrada." } });
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.Conflict(new { error = new { code = "NOT_AVAILABLE", message = ex.Message } });
+    }
+})
+.AllowAnonymous();
 
 // ============ TABLE RESERVATION ENDPOINTS (Restaurante) ============
 // Separado a propósito de /appointments — ver TableReservation.cs.

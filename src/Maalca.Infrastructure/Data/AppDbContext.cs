@@ -34,6 +34,7 @@ public class AppDbContext : DbContext
     public DbSet<ScreenAd> ScreenAds => Set<ScreenAd>();
     public DbSet<Screen> Screens => Set<Screen>();
     public DbSet<TimeBlock> TimeBlocks => Set<TimeBlock>();
+    public DbSet<Proposal> Proposals => Set<Proposal>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -178,6 +179,21 @@ public class AppDbContext : DbContext
                   .HasForeignKey(e => e.AffiliateId)
                   .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.AffiliateId, e.Date });
+        });
+
+        // Proposal
+        modelBuilder.Entity<Proposal>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.CustomerName).IsRequired();
+            entity.Property(e => e.Title).IsRequired();
+            entity.Property(e => e.Amount).HasPrecision(18, 2);
+            entity.Property(e => e.Currency).HasMaxLength(3).IsRequired();
+            entity.HasIndex(e => e.Token).IsUnique();
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         // TimeBlock
