@@ -100,7 +100,16 @@ builder.Services.AddSingleton<SupabaseJwksCache>();
 builder.Services.AddSingleton<SupabaseTokenVerifier>();
 
 builder.Services.AddControllers();
-builder.Services.AddSignalR();
+// AddJsonProtocol con IgnoreCycles — red de seguridad de fondo: el pipeline HTTP normal ya está
+// protegido (ConfigureHttpJsonOptions arriba), pero SignalR trae su propio JsonSerializerOptions
+// independiente que por default SÍ tira JsonException ante un ciclo de referencia EF. Bug real
+// encontrado en QueueHub (ver comentario en PublicBookingService.CreatePublicQueueEntryAsync) —
+// esto evita que la misma clase de bug tumbe silenciosamente un broadcast de OrdersHub/QueueHub
+// en el futuro si algún query nuevo deja pasar un ciclo.
+builder.Services.AddSignalR().AddJsonProtocol(options =>
+{
+    options.PayloadSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+});
 
 builder.Services.AddCors(options =>
 {

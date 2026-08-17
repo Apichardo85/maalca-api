@@ -285,7 +285,18 @@ public class PublicBookingService : IPublicBookingService
 
     public async Task<PublicQueueEntryResultDto> CreatePublicQueueEntryAsync(string affiliateSlug, CreatePublicQueueEntryRequest request)
     {
+        // AsNoTracking() — bug real en producción (2026-08-17): sin esto, este Affiliate queda
+        // trackeado en el mismo AppDbContext donde QueueService.AddToQueueAsync hace
+        // _context.QueueEntries.Add(entry); EF hace fix-up automático (entry.Affiliate = affiliate,
+        // affiliate.QueueEntries incluye entry) creando un ciclo vivo. GetQueueAsync().Include(Service)
+        // hace que ese QueueEntry (con Service.Affiliate poblado indirectamente) se mande tal cual
+        // por SignalR a NotifyQueueUpdatedAsync — que a diferencia del pipeline HTTP normal (protegido
+        // por ReferenceHandler.IgnoreCycles en Program.cs) usa el serializador default de SignalR, que
+        // no ignora ciclos y tira JsonException a mitad de request → 500 sin body, "no pudimos
+        // agregarte a la fila" genérico en el front. Los demás métodos públicos de este archivo ya
+        // proyectan a DTOs (nunca cargan la entidad completa) por la misma razón.
         var affiliate = await _db.Affiliates
+            .AsNoTracking()
             .FirstOrDefaultAsync(a => a.Slug == affiliateSlug && a.Published);
         if (affiliate is null)
             throw new KeyNotFoundException();
