@@ -154,11 +154,22 @@ public class AffiliateService : IAffiliateService
             affiliate.Horario = JsonArrayField.Serialize(request.Horario);
         }
 
+        if (request.SectionVisibility != null)
+        {
+            // Merge, no reemplazo — el front manda solo la clave que cambió, así una request
+            // vieja/desactualizada nunca revive una sección que se había apagado por separado.
+            var current = JsonDictField.Parse(affiliate.SectionVisibility);
+            foreach (var (key, value) in request.SectionVisibility)
+                current[key] = value;
+            affiliate.SectionVisibility = JsonDictField.Serialize(current);
+        }
+
         await _context.SaveChangesAsync();
 
         return new AffiliateContentDto(
             JsonArrayField.Parse<ProcessStepDto>(affiliate.ProcessSteps),
             JsonArrayField.Parse<FaqItemDto>(affiliate.Faq),
-            JsonArrayField.Parse<HorarioEntryDto>(affiliate.Horario));
+            JsonArrayField.Parse<HorarioEntryDto>(affiliate.Horario),
+            JsonDictField.Parse(affiliate.SectionVisibility));
     }
 }

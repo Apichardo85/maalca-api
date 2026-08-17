@@ -105,6 +105,9 @@ public interface IPublicBookingService
     Task<PublicBusyTimesDto?> GetPublicBusyTimesAsync(string affiliateSlug, DateTime date);
     Task<PublicAppointmentResultDto> CreatePublicAppointmentAsync(string affiliateSlug, CreatePublicAppointmentRequest request);
     Task<PublicTableReservationResultDto> CreatePublicTableReservationAsync(string affiliateSlug, CreatePublicTableReservationRequest request);
+    /// <summary>Walk-in "Ahora mismo" desde la página pública — crea un QueueEntry (Channel="web"),
+    /// no un Appointment. Solo tiene sentido para Barbería hoy (única con módulo "queue").</summary>
+    Task<PublicQueueEntryResultDto> CreatePublicQueueEntryAsync(string affiliateSlug, CreatePublicQueueEntryRequest request);
 }
 
 /// <summary>

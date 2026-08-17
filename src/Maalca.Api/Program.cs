@@ -2147,6 +2147,25 @@ app.MapPost("/api/public/affiliates/{slug}/appointments", async (
 })
 .AllowAnonymous();
 
+app.MapPost("/api/public/affiliates/{slug}/queue", async (
+    IPublicBookingService bookingService, string slug, CreatePublicQueueEntryRequest request) =>
+{
+    try
+    {
+        var result = await bookingService.CreatePublicQueueEntryAsync(slug, request);
+        return Results.Ok(result);
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+})
+.AllowAnonymous();
+
 app.MapPost("/api/public/affiliates/{slug}/reservations", async (
     IPublicBookingService bookingService, string slug, CreatePublicTableReservationRequest request) =>
 {

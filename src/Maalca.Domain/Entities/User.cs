@@ -46,6 +46,12 @@ public class Affiliate : BaseEntity
     public string? Faq { get; set; }
     public string? Horario { get; set; }
 
+    // Visibilidad explícita por sección opcional de la página pública — independiente de si
+    // tiene contenido, para que el dueño pueda ocultar una sección sin borrar lo que escribió.
+    // JSON string: { "processSteps": true, "gallery": true, ... }. Clave ausente = visible
+    // (default true), así secciones nuevas no requieren backfill. Ver SectionVisibilityDto.
+    public string? SectionVisibility { get; set; }
+
     // IANA timezone id (e.g. "America/New_York"), set explicitly per affiliate — never inferred.
     public string? Timezone { get; set; }
 

@@ -52,3 +52,16 @@ public record PublicTableReservationResultDto(Guid Id, DateTime Date, string Tim
 /// una firma dibujada/certificada. Ver ProposalService.AcceptPublicProposalAsync.
 /// </summary>
 public record AcceptProposalRequest(string SignedByName);
+
+/// <summary>
+/// Walk-in "Ahora mismo" — sin fecha/hora, entra directo a la Fila (QueueEntry, no Appointment).
+/// ServiceId es opcional a propósito: el cliente puede no saber qué corte quiere todavía.
+/// </summary>
+public record CreatePublicQueueEntryRequest(
+    string CustomerName,
+    string? CustomerPhone,
+    Guid? ServiceId,
+    string? Notes
+);
+
+public record PublicQueueEntryResultDto(Guid Id, int Position, string Status);

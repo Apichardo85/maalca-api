@@ -19,10 +19,12 @@ namespace Maalca.Application.Services;
 public class PublicBookingService : IPublicBookingService
 {
     private readonly AppDbContext _db;
+    private readonly IQueueService _queueService;
 
-    public PublicBookingService(AppDbContext db)
+    public PublicBookingService(AppDbContext db, IQueueService queueService)
     {
         _db = db;
+        _queueService = queueService;
     }
 
     public async Task<List<PublicTeamMemberDto>?> GetPublicTeamAsync(string affiliateSlug)
@@ -279,5 +281,43 @@ public class PublicBookingService : IPublicBookingService
         await _db.SaveChangesAsync();
 
         return new PublicTableReservationResultDto(reservation.Id, reservation.Date, reservation.Time, reservation.PartySize, reservation.Status);
+    }
+
+    public async Task<PublicQueueEntryResultDto> CreatePublicQueueEntryAsync(string affiliateSlug, CreatePublicQueueEntryRequest request)
+    {
+        var affiliate = await _db.Affiliates
+            .FirstOrDefaultAsync(a => a.Slug == affiliateSlug && a.Published);
+        if (affiliate is null)
+            throw new KeyNotFoundException();
+
+        // La Fila hoy solo existe para Barbería (módulo "queue", ver ModuleCatalog) — un walk-in
+        // público de otro tipo de negocio no tendría dónde aterrizar en el dashboard.
+        if (affiliate.BusinessType != Domain.Enums.BusinessType.Barber)
+            throw new ArgumentException("La fila de espera solo está disponible para barbería.");
+
+        if (string.IsNullOrWhiteSpace(request.CustomerName))
+            throw new ArgumentException("El nombre es requerido.");
+
+        if (request.ServiceId is Guid serviceId)
+        {
+            var validService = await _db.Services
+                .AnyAsync(s => s.Id == serviceId && s.AffiliateId == affiliate.Id && s.IsActive);
+            if (!validService)
+                throw new ArgumentException("Servicio no encontrado.");
+        }
+
+        // Reusa AddToQueueAsync (mismo cálculo de Position + notificación realtime al dashboard)
+        // en vez de duplicar la lógica — el walk-in público y el que agrega el staff manualmente
+        // desde /space/{slug}/queue terminan en la misma fila, mismo orden.
+        var entry = await _queueService.AddToQueueAsync(affiliate.Id, new QueueEntry
+        {
+            DisplayName = request.CustomerName.Trim(),
+            Phone = request.CustomerPhone?.Trim(),
+            ServiceId = request.ServiceId,
+            Notes = request.Notes,
+            Channel = "web",
+        });
+
+        return new PublicQueueEntryResultDto(entry.Id, entry.Position, entry.Status);
     }
 }

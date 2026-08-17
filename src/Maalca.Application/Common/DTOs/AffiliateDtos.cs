@@ -63,13 +63,17 @@ public record AffiliatePublicProfileDto(
 public record UpdateAffiliateContentRequest(
     List<ProcessStepDto>? ProcessSteps,
     List<FaqItemDto>? Faq,
-    List<HorarioEntryDto>? Horario
+    List<HorarioEntryDto>? Horario,
+    // Clave ausente = visible (default true) — solo se manda cuando el dueño explícitamente
+    // prende/apaga una sección, nunca un objeto completo reconstruido desde cero.
+    Dictionary<string, bool>? SectionVisibility = null
 );
 
 public record AffiliateContentDto(
     IReadOnlyList<ProcessStepDto> ProcessSteps,
     IReadOnlyList<FaqItemDto> Faq,
-    IReadOnlyList<HorarioEntryDto> Horario
+    IReadOnlyList<HorarioEntryDto> Horario,
+    IReadOnlyDictionary<string, bool> SectionVisibility
 );
 
 public record AffiliateEventRequest(

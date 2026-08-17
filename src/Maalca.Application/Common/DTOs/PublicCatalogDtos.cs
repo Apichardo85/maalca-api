@@ -20,7 +20,10 @@ public record AffiliatePublicDto(
     List<FaqItemDto> Faq,
     List<HorarioEntryDto> Horario,
     string? Timezone,
-    string Currency = "USD"   // "USD" | "DOP" — cómo el negocio muestra sus precios
+    string Currency = "USD",   // "USD" | "DOP" — cómo el negocio muestra sus precios
+    // Clave ausente = visible (default true). Las plantillas ya ocultan una sección sin
+    // contenido; esto es un apagador explícito adicional, independiente del contenido.
+    IReadOnlyDictionary<string, bool>? SectionVisibility = null
 );
 
 public record FeaturedAffiliateDto(

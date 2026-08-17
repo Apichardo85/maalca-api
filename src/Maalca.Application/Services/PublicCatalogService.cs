@@ -161,7 +161,8 @@ public class PublicCatalogService : IPublicCatalogService
             JsonArrayField.Parse<FaqItemDto>(a.Faq),
             JsonArrayField.Parse<HorarioEntryDto>(a.Horario),
             a.Timezone,
-            a.Currency);
+            a.Currency,
+            JsonDictField.Parse(a.SectionVisibility));
     }
 
     // Single source of truth for what each plan unlocks — flip a value here to change it
