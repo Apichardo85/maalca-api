@@ -162,7 +162,8 @@ public class PublicCatalogService : IPublicCatalogService
             JsonArrayField.Parse<HorarioEntryDto>(a.Horario),
             a.Timezone,
             a.Currency,
-            JsonDictField.Parse(a.SectionVisibility));
+            JsonDictField.Parse(a.SectionVisibility),
+            JsonArrayField.Parse<string>(a.GalleryImages));
     }
 
     // Single source of truth for what each plan unlocks — flip a value here to change it

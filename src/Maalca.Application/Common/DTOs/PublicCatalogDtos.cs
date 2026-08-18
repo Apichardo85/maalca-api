@@ -23,7 +23,9 @@ public record AffiliatePublicDto(
     string Currency = "USD",   // "USD" | "DOP" — cómo el negocio muestra sus precios
     // Clave ausente = visible (default true). Las plantillas ya ocultan una sección sin
     // contenido; esto es un apagador explícito adicional, independiente del contenido.
-    IReadOnlyDictionary<string, bool>? SectionVisibility = null
+    IReadOnlyDictionary<string, bool>? SectionVisibility = null,
+    // Solo fotos (URLs), sin caption — máximo 12.
+    IReadOnlyList<string>? GalleryImages = null
 );
 
 public record FeaturedAffiliateDto(

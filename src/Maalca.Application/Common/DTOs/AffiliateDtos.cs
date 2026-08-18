@@ -66,14 +66,17 @@ public record UpdateAffiliateContentRequest(
     List<HorarioEntryDto>? Horario,
     // Clave ausente = visible (default true) — solo se manda cuando el dueño explícitamente
     // prende/apaga una sección, nunca un objeto completo reconstruido desde cero.
-    Dictionary<string, bool>? SectionVisibility = null
+    Dictionary<string, bool>? SectionVisibility = null,
+    // Solo fotos (URLs), sin caption — máximo 12, validado en AffiliateService.
+    List<string>? GalleryImages = null
 );
 
 public record AffiliateContentDto(
     IReadOnlyList<ProcessStepDto> ProcessSteps,
     IReadOnlyList<FaqItemDto> Faq,
     IReadOnlyList<HorarioEntryDto> Horario,
-    IReadOnlyDictionary<string, bool> SectionVisibility
+    IReadOnlyDictionary<string, bool> SectionVisibility,
+    IReadOnlyList<string> GalleryImages
 );
 
 public record AffiliateEventRequest(

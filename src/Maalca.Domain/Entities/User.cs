@@ -46,6 +46,10 @@ public class Affiliate : BaseEntity
     public string? Faq { get; set; }
     public string? Horario { get; set; }
 
+    // Galería de fotos de la página pública — solo fotos, sin texto/caption por diseño.
+    // JSON string: array de URLs (string), máximo 12. Parseado con JsonArrayField<string>.
+    public string? GalleryImages { get; set; }
+
     // Visibilidad explícita por sección opcional de la página pública — independiente de si
     // tiene contenido, para que el dueño pueda ocultar una sección sin borrar lo que escribió.
     // JSON string: { "processSteps": true, "gallery": true, ... }. Clave ausente = visible

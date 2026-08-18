@@ -164,12 +164,27 @@ public class AffiliateService : IAffiliateService
             affiliate.SectionVisibility = JsonDictField.Serialize(current);
         }
 
+        if (request.GalleryImages != null)
+        {
+            if (request.GalleryImages.Count > 12)
+                throw new ArgumentException("GalleryImages: máximo 12 fotos.");
+            foreach (var url in request.GalleryImages)
+            {
+                if (string.IsNullOrWhiteSpace(url))
+                    throw new ArgumentException("GalleryImages: url is required.");
+                if (url.Length > 2000)
+                    throw new ArgumentException("GalleryImages: url must be at most 2000 characters.");
+            }
+            affiliate.GalleryImages = JsonArrayField.Serialize(request.GalleryImages);
+        }
+
         await _context.SaveChangesAsync();
 
         return new AffiliateContentDto(
             JsonArrayField.Parse<ProcessStepDto>(affiliate.ProcessSteps),
             JsonArrayField.Parse<FaqItemDto>(affiliate.Faq),
             JsonArrayField.Parse<HorarioEntryDto>(affiliate.Horario),
-            JsonDictField.Parse(affiliate.SectionVisibility));
+            JsonDictField.Parse(affiliate.SectionVisibility),
+            JsonArrayField.Parse<string>(affiliate.GalleryImages));
     }
 }
