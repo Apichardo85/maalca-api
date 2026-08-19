@@ -9,8 +9,13 @@ namespace Maalca.Application.Services;
 public class AppointmentService : IAppointmentService
 {
     private readonly AppDbContext _context;
+    private readonly ICustomerService _customerService;
 
-    public AppointmentService(AppDbContext context) => _context = context;
+    public AppointmentService(AppDbContext context, ICustomerService customerService)
+    {
+        _context = context;
+        _customerService = customerService;
+    }
 
     public async Task<PaginatedResponse<Appointment>> GetAppointmentsAsync(Guid affiliateId, DateTime? date = null, string? status = null, int page = 1)
     {
@@ -93,6 +98,7 @@ public class AppointmentService : IAppointmentService
                 throw new InvalidOperationException("Ese horario ya no está disponible — elige otro.");
         }
 
+        var previousStatus = existing.Status;
         existing.CustomerId = appointment.CustomerId;
         existing.ServiceId = appointment.ServiceId;
         existing.Date = newDate;
@@ -102,6 +108,12 @@ public class AppointmentService : IAppointmentService
         existing.AssignedToId = appointment.AssignedToId;
         existing.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
+
+        // Tarea #245 — solo al transicionar A Completed (no en cada guardado de una cita que ya
+        // estaba Completed), para no inflar TotalVisits con cada edición menor.
+        if (previousStatus != "Completed" && existing.Status == "Completed")
+            await _customerService.MarkVisitCompletedAsync(existing.CustomerId);
+
         return existing;
     }
 
@@ -109,9 +121,14 @@ public class AppointmentService : IAppointmentService
     {
         var appointment = await _context.Appointments.FirstOrDefaultAsync(a => a.Id == id && a.AffiliateId == affiliateId);
         if (appointment == null) return null;
+        var previousStatus = appointment.Status;
         appointment.Status = status;
         appointment.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
+
+        if (previousStatus != "Completed" && appointment.Status == "Completed")
+            await _customerService.MarkVisitCompletedAsync(appointment.CustomerId);
+
         return appointment;
     }
 
@@ -173,8 +190,13 @@ public class TimeBlockService : ITimeBlockService
 public class ProposalService : IProposalService
 {
     private readonly AppDbContext _context;
+    private readonly ICustomerService _customerService;
 
-    public ProposalService(AppDbContext context) => _context = context;
+    public ProposalService(AppDbContext context, ICustomerService customerService)
+    {
+        _context = context;
+        _customerService = customerService;
+    }
 
     public async Task<List<Proposal>> GetProposalsAsync(Guid affiliateId)
         => await _context.Proposals.AsNoTracking()
@@ -191,6 +213,11 @@ public class ProposalService : IProposalService
         proposal.CreatedAt = DateTime.UtcNow;
         if (proposal.ExpiresAt.HasValue)
             proposal.ExpiresAt = DateTime.SpecifyKind(proposal.ExpiresAt.Value.Date, DateTimeKind.Utc);
+
+        // Tarea #244 — si el negocio dejó un teléfono, vincula (o crea) el Customer para que,
+        // si el prospecto convierte, su historial no arranque de cero.
+        var customer = await _customerService.ResolveOrCreateCustomerAsync(affiliateId, proposal.CustomerName, proposal.CustomerPhone);
+        proposal.CustomerId = customer?.Id;
 
         _context.Proposals.Add(proposal);
         await _context.SaveChangesAsync();
@@ -252,8 +279,13 @@ public class ProposalService : IProposalService
 public class TableReservationService : ITableReservationService
 {
     private readonly AppDbContext _context;
+    private readonly ICustomerService _customerService;
 
-    public TableReservationService(AppDbContext context) => _context = context;
+    public TableReservationService(AppDbContext context, ICustomerService customerService)
+    {
+        _context = context;
+        _customerService = customerService;
+    }
 
     public async Task<PaginatedResponse<TableReservation>> GetReservationsAsync(Guid affiliateId, DateTime? date = null, string? status = null, int page = 1)
     {
@@ -286,6 +318,14 @@ public class TableReservationService : ITableReservationService
         reservation.Date = DateTime.SpecifyKind(reservation.Date.Date, DateTimeKind.Utc);
         if (reservation.PartySize < 1) reservation.PartySize = 1;
 
+        // Tarea #244 — cubre la reserva creada por el staff desde el dashboard; el flujo público
+        // (PublicBookingService) ya resuelve el suyo antes de llegar acá.
+        if (reservation.CustomerId is null)
+        {
+            var customer = await _customerService.ResolveOrCreateCustomerAsync(affiliateId, reservation.CustomerName, reservation.CustomerPhone);
+            reservation.CustomerId = customer?.Id;
+        }
+
         _context.TableReservations.Add(reservation);
         await _context.SaveChangesAsync();
         return reservation;
@@ -296,6 +336,7 @@ public class TableReservationService : ITableReservationService
         var existing = await _context.TableReservations.FirstOrDefaultAsync(r => r.Id == id && r.AffiliateId == affiliateId);
         if (existing == null) return null;
 
+        var previousStatus = existing.Status;
         existing.CustomerName = reservation.CustomerName;
         existing.CustomerPhone = reservation.CustomerPhone;
         existing.CustomerEmail = reservation.CustomerEmail;
@@ -306,6 +347,10 @@ public class TableReservationService : ITableReservationService
         existing.Notes = reservation.Notes;
         existing.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
+
+        if (previousStatus != "Completed" && existing.Status == "Completed" && existing.CustomerId.HasValue)
+            await _customerService.MarkVisitCompletedAsync(existing.CustomerId.Value);
+
         return existing;
     }
 
@@ -313,9 +358,14 @@ public class TableReservationService : ITableReservationService
     {
         var reservation = await _context.TableReservations.FirstOrDefaultAsync(r => r.Id == id && r.AffiliateId == affiliateId);
         if (reservation == null) return null;
+        var previousStatus = reservation.Status;
         reservation.Status = status;
         reservation.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
+
+        if (previousStatus != "Completed" && reservation.Status == "Completed" && reservation.CustomerId.HasValue)
+            await _customerService.MarkVisitCompletedAsync(reservation.CustomerId.Value);
+
         return reservation;
     }
 
@@ -459,11 +509,13 @@ public class QueueService : IQueueService
 {
     private readonly AppDbContext _context;
     private readonly IQueueRealtimeNotifier _realtime;
+    private readonly ICustomerService _customerService;
 
-    public QueueService(AppDbContext context, IQueueRealtimeNotifier realtime)
+    public QueueService(AppDbContext context, IQueueRealtimeNotifier realtime, ICustomerService customerService)
     {
         _context = context;
         _realtime = realtime;
+        _customerService = customerService;
     }
 
     public async Task<List<QueueEntry>> GetQueueAsync(Guid affiliateId)
@@ -483,6 +535,12 @@ public class QueueService : IQueueService
         entry.Status = "waiting";
         entry.CreatedAt = DateTime.UtcNow;
 
+        // Tarea #244 — cubre tanto el walk-in público (PublicBookingService) como el que agrega
+        // el staff manualmente desde /space/{slug}/queue, ambos pasan por acá. Sin teléfono no
+        // hay con qué deduplicar (Phone es opcional en QueueEntry).
+        var customer = await _customerService.ResolveOrCreateCustomerAsync(affiliateId, entry.DisplayName, entry.Phone);
+        entry.CustomerId = customer?.Id;
+
         _context.QueueEntries.Add(entry);
         await _context.SaveChangesAsync();
         await _realtime.NotifyQueueUpdatedAsync(affiliateId, await GetQueueAsync(affiliateId));
@@ -493,12 +551,17 @@ public class QueueService : IQueueService
     {
         var entry = await _context.QueueEntries.FirstOrDefaultAsync(q => q.Id == id && q.AffiliateId == affiliateId);
         if (entry == null) return null;
+        var previousStatus = entry.Status;
         entry.Status = status;
         if (barberId.HasValue) entry.AssignedToId = barberId;
         if (status == "in_service") entry.CalledAt = DateTime.UtcNow;
         entry.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
         await _realtime.NotifyQueueUpdatedAsync(affiliateId, await GetQueueAsync(affiliateId));
+
+        if (previousStatus != "completed" && entry.Status == "completed" && entry.CustomerId.HasValue)
+            await _customerService.MarkVisitCompletedAsync(entry.CustomerId.Value);
+
         return entry;
     }
 }

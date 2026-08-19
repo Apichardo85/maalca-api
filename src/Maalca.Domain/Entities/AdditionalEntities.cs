@@ -64,10 +64,15 @@ public class QueueEntry : BaseEntity
     public string Status { get; set; } = "waiting"; // waiting, in_service, completed, no_show
     public Guid? AssignedToId { get; set; }
     public DateTime? CalledAt { get; set; }
+    // CRM (tarea #244) — resuelto/creado automáticamente por teléfono al entrar a la fila, igual
+    // que Appointment. Nullable porque Phone es opcional acá (a diferencia de Appointment) — sin
+    // teléfono no hay forma de deduplicar contra un Customer existente.
+    public Guid? CustomerId { get; set; }
 
     public Affiliate? Affiliate { get; set; }
     public Service? Service { get; set; }
     public TeamMember? AssignedTo { get; set; }
+    public Customer? Customer { get; set; }
 }
 
 public class Product : AuditableEntity

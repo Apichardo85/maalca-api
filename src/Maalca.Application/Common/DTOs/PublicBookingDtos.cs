@@ -17,10 +17,31 @@ public record CreatePublicAppointmentRequest(
     string Time,
     string CustomerName,
     string CustomerPhone,
-    string? Notes
+    string? Notes,
+    // Tarea #247 — opcional a propósito (el flujo público nunca lo pidió, no queremos volverlo
+    // obligatorio de golpe): si viene, se dispara el correo de confirmación con el link de
+    // autogestión; si no, la cita se crea igual, solo sin correo.
+    string? CustomerEmail = null
 );
 
-public record PublicAppointmentResultDto(Guid Id, DateTime Date, string Time, string Status);
+public record PublicAppointmentResultDto(Guid Id, DateTime Date, string Time, string Status, Guid Token);
+
+/// <summary>
+/// Tarea #246 — vista pública de una cita por Token, para la página "gestiona tu cita"
+/// (/cita/{token}), sin login. Proyectado a DTO por la misma razón que el resto de este
+/// archivo: nunca exponer la entidad completa (Notes internas, IDs de otras tablas, etc.)
+/// </summary>
+public record PublicAppointmentManageDto(
+    Guid Token,
+    string BusinessName,
+    string ServiceName,
+    string? StaffName,
+    DateTime Date,
+    string Time,
+    string Status
+);
+
+public record ReschedulePublicAppointmentRequest(DateTime Date, string Time);
 
 /// <summary>
 /// Horarios ya ocupados para una fecha dada, agrupados por miembro del personal (AssignedToId

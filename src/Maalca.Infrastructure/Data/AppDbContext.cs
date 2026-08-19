@@ -168,9 +168,12 @@ public class AppDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(e => e.AssignedToId)
                   .OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(e => e.Token).IsUnique();
         });
 
-        // TableReservation — sin FK a Customer a propósito, ver comentario en la entidad.
+        // TableReservation — CustomerName/Phone/Email siguen siendo la fuente de verdad del
+        // request público (ver comentario en la entidad); CustomerId (tarea #244) es un vínculo
+        // opcional agregado después para acumular historial, no reemplaza esos campos.
         modelBuilder.Entity<TableReservation>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -178,6 +181,10 @@ public class AppDbContext : DbContext
                   .WithMany(a => a.TableReservations)
                   .HasForeignKey(e => e.AffiliateId)
                   .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Customer)
+                  .WithMany()
+                  .HasForeignKey(e => e.CustomerId)
+                  .OnDelete(DeleteBehavior.SetNull);
             entity.HasIndex(e => new { e.AffiliateId, e.Date });
         });
 
@@ -194,6 +201,10 @@ public class AppDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(e => e.AffiliateId)
                   .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Customer)
+                  .WithMany()
+                  .HasForeignKey(e => e.CustomerId)
+                  .OnDelete(DeleteBehavior.SetNull);
         });
 
         // TimeBlock
@@ -264,6 +275,10 @@ public class AppDbContext : DbContext
             entity.HasOne(e => e.AssignedTo)
                   .WithMany()
                   .HasForeignKey(e => e.AssignedToId)
+                  .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(e => e.Customer)
+                  .WithMany()
+                  .HasForeignKey(e => e.CustomerId)
                   .OnDelete(DeleteBehavior.SetNull);
         });
 

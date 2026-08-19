@@ -20,11 +20,15 @@ public class PublicBookingService : IPublicBookingService
 {
     private readonly AppDbContext _db;
     private readonly IQueueService _queueService;
+    private readonly ICustomerService _customerService;
+    private readonly IAppointmentNotificationService _appointmentNotifications;
 
-    public PublicBookingService(AppDbContext db, IQueueService queueService)
+    public PublicBookingService(AppDbContext db, IQueueService queueService, ICustomerService customerService, IAppointmentNotificationService appointmentNotifications)
     {
         _db = db;
         _queueService = queueService;
+        _customerService = customerService;
+        _appointmentNotifications = appointmentNotifications;
     }
 
     public async Task<List<PublicTeamMemberDto>?> GetPublicTeamAsync(string affiliateSlug)
@@ -208,25 +212,14 @@ public class PublicBookingService : IPublicBookingService
         }
 
         // Reusa el Customer si ya existe uno con el mismo teléfono para este afiliado (evita
-        // duplicar clientes recurrentes que reservan varias veces), si no lo crea.
-        var customer = await _db.Customers.FirstOrDefaultAsync(c =>
-            c.AffiliateId == affiliate.Id && c.Phone == request.CustomerPhone);
-        if (customer is null)
-        {
-            customer = new Customer
-            {
-                AffiliateId = affiliate.Id,
-                Name = request.CustomerName,
-                Phone = request.CustomerPhone,
-            };
-            _db.Customers.Add(customer);
-            await _db.SaveChangesAsync();
-        }
+        // duplicar clientes recurrentes que reservan varias veces), si no lo crea. Tarea #244:
+        // ahora centralizado en CustomerService, reusado también por Queue/Reservations/Proposals.
+        var customer = await _customerService.ResolveOrCreateCustomerAsync(affiliate.Id, request.CustomerName, request.CustomerPhone);
 
         var appointment = new Appointment
         {
             AffiliateId = affiliate.Id,
-            CustomerId = customer.Id,
+            CustomerId = customer!.Id,
             ServiceId = service.Id,
             AssignedToId = request.AssignedToId,
             // El front manda una fecha "bare" (yyyy-MM-dd, sin hora/offset), que System.Text.Json
@@ -242,7 +235,29 @@ public class PublicBookingService : IPublicBookingService
         _db.Appointments.Add(appointment);
         await _db.SaveChangesAsync();
 
-        return new PublicAppointmentResultDto(appointment.Id, appointment.Date, appointment.Time, appointment.Status);
+        // Tarea #247 — si el visitante dejó su email en el widget público, se le envía la
+        // confirmación con el link de autogestión. CustomerEmail no se guarda en la cita (el
+        // dato "oficial" de contacto vive en Customer) — se lee del request y, si Customer no
+        // tenía email todavía, se lo completamos ahora (no pisa uno que ya existía).
+        if (!string.IsNullOrWhiteSpace(request.CustomerEmail) && string.IsNullOrWhiteSpace(customer.Email))
+        {
+            customer.Email = request.CustomerEmail;
+            await _db.SaveChangesAsync();
+        }
+
+        if (!string.IsNullOrWhiteSpace(customer.Email))
+        {
+            string? staffName = null;
+            if (request.AssignedToId is Guid staffId)
+                staffName = (await _db.TeamMembers.AsNoTracking().FirstOrDefaultAsync(t => t.Id == staffId))?.Name;
+
+            // Se espera (no fire-and-forget) — tarea #135 ya mostró que un fire-and-forget se
+            // corta a mitad de camino en el runtime serverless de Railway. El servicio de abajo
+            // ya atrapa sus propios errores y nunca tumba la reserva si el correo falla.
+            await _appointmentNotifications.NotifyAppointmentBookedAsync(appointment, customer, affiliate.Name, affiliateSlug, service.Name, staffName);
+        }
+
+        return new PublicAppointmentResultDto(appointment.Id, appointment.Date, appointment.Time, appointment.Status, appointment.Token);
     }
 
     public async Task<PublicTableReservationResultDto> CreatePublicTableReservationAsync(string affiliateSlug, CreatePublicTableReservationRequest request)
@@ -263,9 +278,14 @@ public class PublicBookingService : IPublicBookingService
         if (request.PartySize < 1)
             throw new ArgumentException("El número de personas debe ser al menos 1.");
 
+        // Tarea #244 — mismo dedup por teléfono que Appointment, para que un comensal recurrente
+        // acumule sus reservas en el mismo Customer que sus citas/visitas a la fila.
+        var reservationCustomer = await _customerService.ResolveOrCreateCustomerAsync(affiliate.Id, request.CustomerName, request.CustomerPhone);
+
         var reservation = new TableReservation
         {
             AffiliateId = affiliate.Id,
+            CustomerId = reservationCustomer?.Id,
             CustomerName = request.CustomerName,
             CustomerPhone = request.CustomerPhone,
             CustomerEmail = request.CustomerEmail,
@@ -330,5 +350,87 @@ public class PublicBookingService : IPublicBookingService
         });
 
         return new PublicQueueEntryResultDto(entry.Id, entry.Position, entry.Status);
+    }
+
+    // ── Tarea #246: "gestiona tu cita" sin login, por Token ──────────────────────────────
+    // Mismo criterio que el resto de este archivo: AsNoTracking + proyección a DTO (nunca la
+    // entidad completa), por la misma razón de ciclos de serialización documentada arriba.
+
+    public async Task<PublicAppointmentManageDto?> GetPublicAppointmentByTokenAsync(Guid token)
+    {
+        var appt = await _db.Appointments.AsNoTracking()
+            .Include(a => a.Affiliate).Include(a => a.Service).Include(a => a.AssignedTo)
+            .FirstOrDefaultAsync(a => a.Token == token);
+        if (appt is null) return null;
+
+        return new PublicAppointmentManageDto(
+            appt.Token, appt.Affiliate?.Name ?? "", appt.Service?.Name ?? "",
+            appt.AssignedTo?.Name, appt.Date, appt.Time, appt.Status);
+    }
+
+    public async Task<PublicAppointmentManageDto> ConfirmPublicAppointmentAsync(Guid token)
+    {
+        var appt = await _db.Appointments.Include(a => a.Affiliate).Include(a => a.Service).Include(a => a.AssignedTo)
+            .FirstOrDefaultAsync(a => a.Token == token);
+        if (appt is null) throw new KeyNotFoundException();
+        if (appt.Status != "Scheduled")
+            throw new InvalidOperationException("Esta cita ya no se puede confirmar.");
+
+        appt.Status = "Confirmed";
+        appt.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        return new PublicAppointmentManageDto(appt.Token, appt.Affiliate?.Name ?? "", appt.Service?.Name ?? "", appt.AssignedTo?.Name, appt.Date, appt.Time, appt.Status);
+    }
+
+    public async Task<PublicAppointmentManageDto> CancelPublicAppointmentAsync(Guid token)
+    {
+        var appt = await _db.Appointments.Include(a => a.Affiliate).Include(a => a.Service).Include(a => a.AssignedTo)
+            .FirstOrDefaultAsync(a => a.Token == token);
+        if (appt is null) throw new KeyNotFoundException();
+        if (appt.Status is "Completed" or "Cancelled")
+            throw new InvalidOperationException("Esta cita ya no se puede cancelar.");
+
+        appt.Status = "Cancelled";
+        appt.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        return new PublicAppointmentManageDto(appt.Token, appt.Affiliate?.Name ?? "", appt.Service?.Name ?? "", appt.AssignedTo?.Name, appt.Date, appt.Time, appt.Status);
+    }
+
+    public async Task<PublicAppointmentManageDto> ReschedulePublicAppointmentAsync(Guid token, DateTime date, string time)
+    {
+        var appt = await _db.Appointments.Include(a => a.Affiliate).Include(a => a.Service).Include(a => a.AssignedTo)
+            .FirstOrDefaultAsync(a => a.Token == token);
+        if (appt is null) throw new KeyNotFoundException();
+        if (appt.Status is "Completed" or "Cancelled")
+            throw new InvalidOperationException("Esta cita ya no se puede reagendar.");
+        if (string.IsNullOrWhiteSpace(time))
+            throw new ArgumentException("La hora es requerida.");
+        if (date.Date < DateTime.UtcNow.Date)
+            throw new ArgumentException("La fecha no puede ser en el pasado.");
+
+        var dateUtc = DateTime.SpecifyKind(date.Date, DateTimeKind.Utc);
+
+        if (appt.AssignedToId is Guid assignedToId)
+        {
+            var conflict = await _db.Appointments.AnyAsync(a =>
+                a.Id != appt.Id &&
+                a.AffiliateId == appt.AffiliateId &&
+                a.AssignedToId == assignedToId &&
+                a.Date.Date == dateUtc &&
+                a.Time == time &&
+                a.Status != "Cancelled");
+            if (conflict)
+                throw new InvalidOperationException("Ese horario ya no está disponible — elige otro.");
+        }
+
+        appt.Date = dateUtc;
+        appt.Time = time;
+        appt.Status = "Scheduled"; // vuelve a pedir confirmación tras reagendar
+        appt.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        return new PublicAppointmentManageDto(appt.Token, appt.Affiliate?.Name ?? "", appt.Service?.Name ?? "", appt.AssignedTo?.Name, appt.Date, appt.Time, appt.Status);
     }
 }

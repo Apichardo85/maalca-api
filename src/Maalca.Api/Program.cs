@@ -73,6 +73,7 @@ builder.Services.AddScoped<IInteractionEventService, InteractionEventService>();
 builder.Services.AddScoped<IStripeBillingService, StripeBillingService>();
 builder.Services.AddScoped<IStripeConnectService, StripeConnectService>();
 builder.Services.AddScoped<IOrderNotificationService, OrderNotificationService>();
+builder.Services.AddScoped<IAppointmentNotificationService, AppointmentNotificationService>();
 builder.Services.AddScoped<Maalca.Application.Common.Interfaces.IOrderRealtimeNotifier, Maalca.Api.Hubs.SignalROrderRealtimeNotifier>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IScreenAdService, ScreenAdService>();
@@ -563,6 +564,52 @@ app.MapDelete("/api/affiliates/{affiliateId:guid}/customers/{id:guid}", async (H
     return Results.NoContent();
 });
 
+// Tarea #249 — historial real de un cliente para la pantalla /space/{slug}/clientes: junta
+// Appointments/Invoices (vínculo desde siempre) + QueueEntries/TableReservations/Proposals
+// (vínculo agregado en la tarea #244). Proyectado a DTO anónimo — mismo criterio que el resto
+// del archivo, nunca cargar la entidad completa con sus navegaciones.
+app.MapGet("/api/affiliates/{affiliateId:guid}/customers/{id:guid}/history", async (HttpContext ctx, AppDbContext db, Guid affiliateId, Guid id) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+
+    var customer = await db.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id && c.AffiliateId == affiliateId);
+    if (customer is null) return Results.NotFound();
+
+    var appointments = await db.Appointments.AsNoTracking()
+        .Where(a => a.AffiliateId == affiliateId && a.CustomerId == id)
+        .Include(a => a.Service).Include(a => a.AssignedTo)
+        .OrderByDescending(a => a.Date).ThenByDescending(a => a.Time)
+        .Select(a => new { a.Id, a.Date, a.Time, a.Status, serviceName = a.Service != null ? a.Service.Name : null, staffName = a.AssignedTo != null ? a.AssignedTo.Name : null })
+        .ToListAsync();
+
+    var invoices = await db.Invoices.AsNoTracking()
+        .Where(i => i.AffiliateId == affiliateId && i.CustomerId == id)
+        .OrderByDescending(i => i.IssueDate)
+        .Select(i => new { i.Id, i.InvoiceNumber, i.Total, i.Status, i.IssueDate })
+        .ToListAsync();
+
+    var reservations = await db.TableReservations.AsNoTracking()
+        .Where(r => r.AffiliateId == affiliateId && r.CustomerId == id)
+        .OrderByDescending(r => r.Date)
+        .Select(r => new { r.Id, r.Date, r.Time, r.PartySize, r.Status })
+        .ToListAsync();
+
+    var queueVisits = await db.QueueEntries.AsNoTracking()
+        .Where(q => q.AffiliateId == affiliateId && q.CustomerId == id)
+        .OrderByDescending(q => q.CreatedAt)
+        .Select(q => new { q.Id, q.CreatedAt, q.Status, q.Channel })
+        .ToListAsync();
+
+    var proposals = await db.Proposals.AsNoTracking()
+        .Where(p => p.AffiliateId == affiliateId && p.CustomerId == id)
+        .OrderByDescending(p => p.CreatedAt)
+        .Select(p => new { p.Id, p.Title, p.Amount, p.Currency, p.Status })
+        .ToListAsync();
+
+    return Results.Ok(new { customer, appointments, invoices, reservations, queueVisits, proposals });
+});
+
 // ============ APPOINTMENT ENDPOINTS (dashboard — agenda manual del negocio; el flujo de
 // reserva público, cuando exista, va a ser un endpoint /api/public/... aparte, no este) ============
 app.MapGet("/api/affiliates/{affiliateId:guid}/appointments", async (HttpContext ctx, IAppointmentService appointmentService, Guid affiliateId, DateTime? date = null, string? status = null, int page = 1) =>
@@ -702,6 +749,7 @@ app.MapGet("/api/internal/appointments/due-reminders", async (HttpContext ctx, A
             date = x.appt.Date,
             time = x.appt.Time,
             staffName = x.appt.AssignedTo?.Name,
+            token = x.appt.Token,
         })
         .ToList();
 
@@ -2190,6 +2238,73 @@ app.MapPost("/api/public/affiliates/{slug}/reservations", async (
     catch (ArgumentException ex)
     {
         return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+})
+.AllowAnonymous();
+
+// ============ Tarea #246 — "Gestiona tu cita" público, sin login, por Token ============
+// Mismo criterio de seguridad que /api/public/proposals/{token}: la posesión del GUID (no
+// adivinable, viaja en el link del correo) es la autenticación.
+app.MapGet("/api/public/appointments/{token:guid}", async (IPublicBookingService bookingService, Guid token) =>
+{
+    var result = await bookingService.GetPublicAppointmentByTokenAsync(token);
+    if (result is null)
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Cita no encontrada." } });
+    return Results.Ok(result);
+})
+.AllowAnonymous();
+
+app.MapPost("/api/public/appointments/{token:guid}/confirm", async (IPublicBookingService bookingService, Guid token) =>
+{
+    try
+    {
+        return Results.Ok(await bookingService.ConfirmPublicAppointmentAsync(token));
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Cita no encontrada." } });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.Conflict(new { error = new { code = "INVALID_STATE", message = ex.Message } });
+    }
+})
+.AllowAnonymous();
+
+app.MapPost("/api/public/appointments/{token:guid}/cancel", async (IPublicBookingService bookingService, Guid token) =>
+{
+    try
+    {
+        return Results.Ok(await bookingService.CancelPublicAppointmentAsync(token));
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Cita no encontrada." } });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.Conflict(new { error = new { code = "INVALID_STATE", message = ex.Message } });
+    }
+})
+.AllowAnonymous();
+
+app.MapPost("/api/public/appointments/{token:guid}/reschedule", async (IPublicBookingService bookingService, Guid token, ReschedulePublicAppointmentRequest request) =>
+{
+    try
+    {
+        return Results.Ok(await bookingService.ReschedulePublicAppointmentAsync(token, request.Date, request.Time));
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Cita no encontrada." } });
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.Conflict(new { error = new { code = "SLOT_TAKEN", message = ex.Message } });
     }
 })
 .AllowAnonymous();

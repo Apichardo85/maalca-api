@@ -31,6 +31,10 @@ public class Proposal : AuditableEntity
     public string? AcceptedByName { get; set; }
     public DateTime? ExpiresAt { get; set; }
     public string? Notes { get; set; }
+    // CRM (tarea #244) — resuelto/creado por teléfono cuando el negocio la crea, si trae
+    // CustomerPhone. Nullable: una propuesta a un prospecto sin teléfono aún no puede vincularse.
+    public Guid? CustomerId { get; set; }
 
     public Affiliate? Affiliate { get; set; }
+    public Customer? Customer { get; set; }
 }

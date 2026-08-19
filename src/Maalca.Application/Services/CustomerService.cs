@@ -89,4 +89,39 @@ public class CustomerService : ICustomerService
         await _context.SaveChangesAsync();
         return true;
     }
+
+    // Tarea #244 — centraliza el patrón que antes vivía inline en
+    // PublicBookingService.CreatePublicAppointmentAsync (dedup por AffiliateId+Phone). Ahora lo
+    // reusan Queue/Reservations/Proposals para que las visitas de un mismo cliente, sin importar
+    // por qué módulo entraron, se acumulen en el mismo registro.
+    public async Task<Customer?> ResolveOrCreateCustomerAsync(Guid affiliateId, string name, string? phone)
+    {
+        if (string.IsNullOrWhiteSpace(phone)) return null;
+
+        var customer = await _context.Customers.FirstOrDefaultAsync(c =>
+            c.AffiliateId == affiliateId && c.Phone == phone);
+        if (customer is not null) return customer;
+
+        customer = new Customer
+        {
+            AffiliateId = affiliateId,
+            Name = string.IsNullOrWhiteSpace(name) ? phone : name,
+            Phone = phone,
+        };
+        _context.Customers.Add(customer);
+        await _context.SaveChangesAsync();
+        return customer;
+    }
+
+    // Tarea #245 — sin esto, TotalVisits/LastVisit se quedan en 0/null para siempre y la
+    // pantalla de Clientes no dice nada que el negocio no supiera ya.
+    public async Task MarkVisitCompletedAsync(Guid customerId)
+    {
+        var customer = await _context.Customers.FirstOrDefaultAsync(c => c.Id == customerId);
+        if (customer is null) return;
+        customer.TotalVisits += 1;
+        customer.LastVisit = DateTime.UtcNow;
+        customer.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+    }
 }

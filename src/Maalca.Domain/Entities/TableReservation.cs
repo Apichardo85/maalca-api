@@ -27,6 +27,12 @@ public class TableReservation : AuditableEntity
     // Requested (pública, sin confirmar aún) / Confirmed / Seated / Completed / Cancelled / NoShow
     public string Status { get; set; } = "Requested";
     public string? Notes { get; set; }
+    // CRM (tarea #244) — resuelto/creado por teléfono, igual que Appointment. Los campos de
+    // arriba (CustomerName/Phone/Email) se quedan intactos por compatibilidad con el diseño
+    // original de este archivo (comentario histórico más abajo) — esto solo agrega el vínculo
+    // para que las visitas se acumulen en Customer.TotalVisits cuando aplica.
+    public Guid? CustomerId { get; set; }
 
     public Affiliate? Affiliate { get; set; }
+    public Customer? Customer { get; set; }
 }

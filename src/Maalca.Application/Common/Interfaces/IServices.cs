@@ -23,6 +23,18 @@ public interface ICustomerService
     Task<Customer> CreateCustomerAsync(Guid affiliateId, Customer customer);
     Task<Customer?> UpdateCustomerAsync(Guid affiliateId, Guid id, Customer customer);
     Task<bool> DeleteCustomerAsync(Guid affiliateId, Guid id);
+
+    /// <summary>
+    /// Tarea #244 — dedup por AffiliateId+Phone, mismo patrón que ya usaba
+    /// PublicBookingService.CreatePublicAppointmentAsync antes de esta tarea (ahora centralizado
+    /// acá para que Queue/Reservations/Proposals lo reusen también). Sin teléfono no hay forma de
+    /// deduplicar, así que devuelve null.
+    /// </summary>
+    Task<Customer?> ResolveOrCreateCustomerAsync(Guid affiliateId, string name, string? phone);
+
+    /// <summary>Tarea #245 — incrementa TotalVisits y marca LastVisit cuando una cita/fila/reserva
+    /// vinculada a este cliente llega a "Completed"/"completed".</summary>
+    Task MarkVisitCompletedAsync(Guid customerId);
 }
 
 public interface IAppointmentService
@@ -108,6 +120,13 @@ public interface IPublicBookingService
     /// <summary>Walk-in "Ahora mismo" desde la página pública — crea un QueueEntry (Channel="web"),
     /// no un Appointment. Solo tiene sentido para Barbería hoy (única con módulo "queue").</summary>
     Task<PublicQueueEntryResultDto> CreatePublicQueueEntryAsync(string affiliateSlug, CreatePublicQueueEntryRequest request);
+
+    /// <summary>Tarea #246 — "gestiona tu cita" sin login, por Appointment.Token. Mismo patrón
+    /// que Proposal.Token/GetPublicProposalAsync.</summary>
+    Task<PublicAppointmentManageDto?> GetPublicAppointmentByTokenAsync(Guid token);
+    Task<PublicAppointmentManageDto> ConfirmPublicAppointmentAsync(Guid token);
+    Task<PublicAppointmentManageDto> CancelPublicAppointmentAsync(Guid token);
+    Task<PublicAppointmentManageDto> ReschedulePublicAppointmentAsync(Guid token, DateTime date, string time);
 }
 
 /// <summary>
