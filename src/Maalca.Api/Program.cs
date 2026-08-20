@@ -2081,7 +2081,7 @@ app.MapGet("/api/space/{slug}", async (
             affiliate.PlanStatus.ToString(),
             affiliate.WhatsApp, affiliate.PrimaryColor,
             affiliate.DescriptionEn,
-            canales, ModuleCatalog.FilterActive(affiliate.ModulosActivos),
+            canales, ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()),
             JsonArrayField.Parse<ProcessStepDto>(affiliate.ProcessSteps),
             JsonArrayField.Parse<FaqItemDto>(affiliate.Faq),
             JsonArrayField.Parse<HorarioEntryDto>(affiliate.Horario),
