@@ -518,9 +518,16 @@ public class QueueService : IQueueService
         _customerService = customerService;
     }
 
+    // Bug real reportado en producción (2026-08-19): "waiting" solo traía a los que esperan
+    // turno, así que QueueContent.tsx nunca recibía las entradas "in_service" — la sección
+    // "Atendiendo ahora" (con el botón Completar) nunca tenía datos para mostrar, tanto en el
+    // fetch inicial como en el broadcast de SignalR (NotifyQueueUpdatedAsync llama a este mismo
+    // método). Resultado: al tocar "Llamar" la persona simplemente desaparecía de la pantalla en
+    // vez de pasar a "Atendiendo ahora". El frontend ya filtra por status para las dos secciones
+    // (waiting/in_service) — solo hacía falta que el backend le mandara ambas.
     public async Task<List<QueueEntry>> GetQueueAsync(Guid affiliateId)
         => await _context.QueueEntries.AsNoTracking()
-            .Where(q => q.AffiliateId == affiliateId && q.Status == "waiting")
+            .Where(q => q.AffiliateId == affiliateId && (q.Status == "waiting" || q.Status == "in_service"))
             .Include(q => q.Service).Include(q => q.AssignedTo)
             .OrderBy(q => q.Position).ToListAsync();
 
