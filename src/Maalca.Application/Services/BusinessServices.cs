@@ -3,6 +3,8 @@ using Maalca.Application.Common.Interfaces;
 using Maalca.Domain.Entities;
 using Maalca.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Stripe;
+using Stripe.Checkout;
 
 namespace Maalca.Application.Services;
 
@@ -684,8 +686,13 @@ public class ProductService : IProductService
 public class InvoiceService : IInvoiceService
 {
     private readonly AppDbContext _context;
+    private readonly IInvoiceNotificationService _notifications;
 
-    public InvoiceService(AppDbContext context) => _context = context;
+    public InvoiceService(AppDbContext context, IInvoiceNotificationService notifications)
+    {
+        _context = context;
+        _notifications = notifications;
+    }
 
     public async Task<PaginatedResponse<Invoice>> GetInvoicesAsync(Guid affiliateId, string? status = null, DateTime? dateFrom = null, DateTime? dateTo = null)
     {
@@ -759,6 +766,111 @@ public class InvoiceService : IInvoiceService
         _context.Invoices.Remove(invoice);
         await _context.SaveChangesAsync();
         return true;
+    }
+
+    // Mismo patrón que OrderService.CreatePosCheckoutAsync: Checkout Session en modo "payment",
+    // ejecutada con el header Stripe-Account de la cuenta conectada del afiliado (direct charge —
+    // el dinero entra directo a la cuenta del afiliado, MaalCa nunca la toca). Las líneas salen de
+    // Invoice.Items (ya recalculados y persistidos en CreateInvoiceAsync), nunca de un total suelto
+    // que mande el cliente.
+    public async Task<string?> CreateInvoiceCheckoutAsync(Guid affiliateId, Guid invoiceId, string successUrl, string cancelUrl)
+    {
+        var invoice = await _context.Invoices
+            .Include(i => i.Affiliate)
+            .Include(i => i.Customer)
+            .Include(i => i.Items)
+            .FirstOrDefaultAsync(i => i.Id == invoiceId && i.AffiliateId == affiliateId);
+        if (invoice is null || invoice.Affiliate is null) return null;
+
+        var affiliate = invoice.Affiliate;
+        if (!affiliate.StripeConnectChargesEnabled || string.IsNullOrEmpty(affiliate.StripeConnectAccountId))
+            throw new InvalidOperationException("Conecta Stripe en Configuración antes de cobrar esta factura.");
+
+        var currency = string.IsNullOrWhiteSpace(affiliate.Currency) ? "USD" : affiliate.Currency.ToUpperInvariant();
+
+        StripeConfiguration.ApiKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY") ?? "";
+        var requestOptions = new RequestOptions { StripeAccount = affiliate.StripeConnectAccountId };
+
+        List<SessionLineItemOptions> lineItems;
+        if (invoice.Items is { Count: > 0 })
+        {
+            lineItems = invoice.Items.Select(i => new SessionLineItemOptions
+            {
+                Quantity = i.Quantity,
+                PriceData = new SessionLineItemPriceDataOptions
+                {
+                    Currency = currency.ToLowerInvariant(),
+                    UnitAmount = (long)Math.Round(i.UnitPrice * 100),
+                    ProductData = new SessionLineItemPriceDataProductDataOptions { Name = i.Description },
+                },
+            }).ToList();
+
+            if (invoice.Tax > 0)
+            {
+                lineItems.Add(new SessionLineItemOptions
+                {
+                    Quantity = 1,
+                    PriceData = new SessionLineItemPriceDataOptions
+                    {
+                        Currency = currency.ToLowerInvariant(),
+                        UnitAmount = (long)Math.Round(invoice.Tax * 100),
+                        ProductData = new SessionLineItemPriceDataProductDataOptions { Name = "Tax" },
+                    },
+                });
+            }
+        }
+        else
+        {
+            // Factura sin líneas detalladas (dato viejo o editada a mano) — un solo renglón con el
+            // Total ya calculado, para no dejar el cobro sin poder generarse.
+            lineItems = new List<SessionLineItemOptions>
+            {
+                new SessionLineItemOptions
+                {
+                    Quantity = 1,
+                    PriceData = new SessionLineItemPriceDataOptions
+                    {
+                        Currency = currency.ToLowerInvariant(),
+                        UnitAmount = (long)Math.Round(invoice.Total * 100),
+                        ProductData = new SessionLineItemPriceDataProductDataOptions { Name = $"Factura {invoice.InvoiceNumber}" },
+                    },
+                },
+            };
+        }
+
+        var session = await new SessionService().CreateAsync(new SessionCreateOptions
+        {
+            Mode = "payment",
+            LineItems = lineItems,
+            SuccessUrl = successUrl,
+            CancelUrl = cancelUrl,
+            ClientReferenceId = invoice.Id.ToString(),
+        }, requestOptions);
+
+        invoice.StripeCheckoutSessionId = session.Id;
+        invoice.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        if (invoice.Customer is not null)
+            await _notifications.NotifyInvoicePaymentLinkAsync(invoice, invoice.Customer, affiliate.Name, currency, session.Url);
+
+        return session.Url;
+    }
+
+    public async Task ConfirmFromWebhookAsync(string checkoutSessionId, string? paymentIntentId)
+    {
+        // Busca por StripeCheckoutSessionId, no por Id de factura — el webhook solo trae el id de
+        // la Session de Stripe (ver StripeConnectService.HandleWebhookEventAsync).
+        var invoice = await _context.Invoices.FirstOrDefaultAsync(i => i.StripeCheckoutSessionId == checkoutSessionId);
+        // Solo actúa si sigue pendiente de cobro — evita pisar un "Marcar pagada" manual ya
+        // aplicado, o reprocesar una factura ya cancelada.
+        if (invoice is null || (invoice.Status != "Pending" && invoice.Status != "Overdue")) return;
+
+        invoice.Status = "Paid";
+        invoice.PaidDate = DateTime.UtcNow;
+        invoice.StripePaymentIntentId = paymentIntentId;
+        invoice.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
     }
 }
 

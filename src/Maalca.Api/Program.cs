@@ -74,6 +74,7 @@ builder.Services.AddScoped<IStripeBillingService, StripeBillingService>();
 builder.Services.AddScoped<IStripeConnectService, StripeConnectService>();
 builder.Services.AddScoped<IOrderNotificationService, OrderNotificationService>();
 builder.Services.AddScoped<IAppointmentNotificationService, AppointmentNotificationService>();
+builder.Services.AddScoped<IInvoiceNotificationService, InvoiceNotificationService>();
 builder.Services.AddScoped<Maalca.Application.Common.Interfaces.IOrderRealtimeNotifier, Maalca.Api.Hubs.SignalROrderRealtimeNotifier>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IScreenAdService, ScreenAdService>();
@@ -1245,6 +1246,31 @@ app.MapDelete("/api/affiliates/{affiliateId:guid}/invoices/{id:guid}", async (Ht
     if (!result)
         return Results.NotFound();
     return Results.NoContent();
+});
+
+// Pago real por Stripe Connect (direct charge en la cuenta del afiliado) — genera un Checkout
+// Session hospedado y devuelve la URL para copiar/mandar por WhatsApp o email (ver
+// InvoiceNotificationService). "Marcar pagada" manual sigue existiendo aparte (PUT de arriba),
+// para cash/transferencia/Zelle.
+app.MapPost("/api/affiliates/{affiliateId:guid}/invoices/{id:guid}/checkout", async (
+    HttpContext ctx, IInvoiceService invoiceService, Guid affiliateId, Guid id, CreateInvoiceCheckoutRequest request) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+
+    try
+    {
+        var checkoutUrl = await invoiceService.CreateInvoiceCheckoutAsync(affiliateId, id, request.SuccessUrl, request.CancelUrl);
+        if (checkoutUrl is null)
+            return Results.NotFound();
+        return Results.Ok(new { checkoutUrl });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.Conflict(new { error = new { code = "CONFLICT", message = ex.Message } });
+    }
 });
 
 // ============ METRICS ENDPOINTS ============

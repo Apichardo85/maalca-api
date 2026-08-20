@@ -127,6 +127,13 @@ public class Invoice : AuditableEntity
     public DateTime? PaidDate { get; set; }
     public string? Notes { get; set; }
 
+    // Pago real por Stripe Connect (checkout hospedado, direct charge en la cuenta del afiliado —
+    // mismo patrón que Order.StripeCheckoutSessionId/StripePaymentIntentId). Nulos hasta que se
+    // genera un link de cobro desde el dashboard; "Marcar pagada" manual (cash/transferencia/Zelle)
+    // sigue sin tocarlos, es un camino independiente.
+    public string? StripeCheckoutSessionId { get; set; }
+    public string? StripePaymentIntentId { get; set; }
+
     public Affiliate? Affiliate { get; set; }
     public Customer? Customer { get; set; }
     public ICollection<InvoiceItem> Items { get; set; } = new List<InvoiceItem>();

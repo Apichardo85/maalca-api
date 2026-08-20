@@ -98,6 +98,19 @@ public interface IInvoiceService
     Task<Invoice> CreateInvoiceAsync(Guid affiliateId, Invoice invoice, List<InvoiceItem>? items = null);
     Task<Invoice?> UpdateInvoiceAsync(Guid affiliateId, Guid id, Invoice invoice);
     Task<bool> DeleteInvoiceAsync(Guid affiliateId, Guid id);
+
+    /// <summary>
+    /// Genera un link de cobro real (Stripe Checkout, direct charge en la cuenta conectada del
+    /// afiliado) para una factura existente — igual patrón que OrderService.CreatePosCheckoutAsync.
+    /// "Marcar pagada" manual (cash/transferencia/Zelle) sigue existiendo aparte, sin tocar esto.
+    /// Null si la factura no existe; lanza InvalidOperationException si el afiliado no tiene
+    /// Stripe Connect activo (mensaje pensado para mostrarse tal cual al usuario).
+    /// </summary>
+    Task<string?> CreateInvoiceCheckoutAsync(Guid affiliateId, Guid invoiceId, string successUrl, string cancelUrl);
+
+    /// <summary>Confirma el pago desde el webhook de Stripe Connect (checkout.session.completed) —
+    /// fuente de verdad real, ver StripeConnectService.HandleWebhookEventAsync.</summary>
+    Task ConfirmFromWebhookAsync(string checkoutSessionId, string? paymentIntentId);
 }
 
 public interface IMetricsService

@@ -86,3 +86,10 @@ public class CreateInvoiceRequest
     public string? Notes { get; set; }
     public List<CreateInvoiceItemRequest> Items { get; set; } = new();
 }
+
+/// <summary>Pago real de factura (Stripe Connect) — ver InvoiceService.CreateInvoiceCheckoutAsync.</summary>
+public class CreateInvoiceCheckoutRequest
+{
+    public string SuccessUrl { get; set; } = string.Empty;
+    public string CancelUrl { get; set; } = string.Empty;
+}
