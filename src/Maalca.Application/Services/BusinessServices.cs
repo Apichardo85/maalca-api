@@ -3,10 +3,15 @@ using Maalca.Application.Common.Interfaces;
 using Maalca.Domain.Entities;
 using Maalca.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
-using Stripe;
-using Stripe.Checkout;
 
 namespace Maalca.Application.Services;
+
+// Nota: este archivo deliberadamente NO tiene `using Stripe;`/`using Stripe.Checkout;` a nivel de
+// archivo — Stripe.Invoice/Stripe.Product/Stripe.InvoiceItem colisionan (CS0104, ambiguous
+// reference) con las entidades de dominio del mismo nombre que ya viven en TODO este archivo
+// (ProductService, InvoiceService y compañía). Los tipos de Stripe usados en
+// InvoiceService.CreateInvoiceCheckoutAsync están totalmente calificados (Stripe.XxxOptions) en
+// vez de importados, a propósito.
 
 public class AppointmentService : IAppointmentService
 {
@@ -788,33 +793,33 @@ public class InvoiceService : IInvoiceService
 
         var currency = string.IsNullOrWhiteSpace(affiliate.Currency) ? "USD" : affiliate.Currency.ToUpperInvariant();
 
-        StripeConfiguration.ApiKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY") ?? "";
-        var requestOptions = new RequestOptions { StripeAccount = affiliate.StripeConnectAccountId };
+        Stripe.StripeConfiguration.ApiKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY") ?? "";
+        var requestOptions = new Stripe.RequestOptions { StripeAccount = affiliate.StripeConnectAccountId };
 
-        List<SessionLineItemOptions> lineItems;
+        List<Stripe.Checkout.SessionLineItemOptions> lineItems;
         if (invoice.Items is { Count: > 0 })
         {
-            lineItems = invoice.Items.Select(i => new SessionLineItemOptions
+            lineItems = invoice.Items.Select(i => new Stripe.Checkout.SessionLineItemOptions
             {
                 Quantity = i.Quantity,
-                PriceData = new SessionLineItemPriceDataOptions
+                PriceData = new Stripe.Checkout.SessionLineItemPriceDataOptions
                 {
                     Currency = currency.ToLowerInvariant(),
                     UnitAmount = (long)Math.Round(i.UnitPrice * 100),
-                    ProductData = new SessionLineItemPriceDataProductDataOptions { Name = i.Description },
+                    ProductData = new Stripe.Checkout.SessionLineItemPriceDataProductDataOptions { Name = i.Description },
                 },
             }).ToList();
 
             if (invoice.Tax > 0)
             {
-                lineItems.Add(new SessionLineItemOptions
+                lineItems.Add(new Stripe.Checkout.SessionLineItemOptions
                 {
                     Quantity = 1,
-                    PriceData = new SessionLineItemPriceDataOptions
+                    PriceData = new Stripe.Checkout.SessionLineItemPriceDataOptions
                     {
                         Currency = currency.ToLowerInvariant(),
                         UnitAmount = (long)Math.Round(invoice.Tax * 100),
-                        ProductData = new SessionLineItemPriceDataProductDataOptions { Name = "Tax" },
+                        ProductData = new Stripe.Checkout.SessionLineItemPriceDataProductDataOptions { Name = "Tax" },
                     },
                 });
             }
@@ -823,22 +828,22 @@ public class InvoiceService : IInvoiceService
         {
             // Factura sin líneas detalladas (dato viejo o editada a mano) — un solo renglón con el
             // Total ya calculado, para no dejar el cobro sin poder generarse.
-            lineItems = new List<SessionLineItemOptions>
+            lineItems = new List<Stripe.Checkout.SessionLineItemOptions>
             {
-                new SessionLineItemOptions
+                new Stripe.Checkout.SessionLineItemOptions
                 {
                     Quantity = 1,
-                    PriceData = new SessionLineItemPriceDataOptions
+                    PriceData = new Stripe.Checkout.SessionLineItemPriceDataOptions
                     {
                         Currency = currency.ToLowerInvariant(),
                         UnitAmount = (long)Math.Round(invoice.Total * 100),
-                        ProductData = new SessionLineItemPriceDataProductDataOptions { Name = $"Factura {invoice.InvoiceNumber}" },
+                        ProductData = new Stripe.Checkout.SessionLineItemPriceDataProductDataOptions { Name = $"Factura {invoice.InvoiceNumber}" },
                     },
                 },
             };
         }
 
-        var session = await new SessionService().CreateAsync(new SessionCreateOptions
+        var session = await new Stripe.Checkout.SessionService().CreateAsync(new Stripe.Checkout.SessionCreateOptions
         {
             Mode = "payment",
             LineItems = lineItems,
