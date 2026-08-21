@@ -18,6 +18,7 @@ public static class ModuleCatalog
         "catalog", "page", "metrics", "staff", "appointments",
         "orders", "kitchen", "pos", "board", "billing",
         "invoices", "queue", "reservations", "proposals",
+        "inventory",
     };
 
     // Espejo de businessTypes/excludeBusinessTypes en maalca-web/src/lib/module-catalog.ts --
@@ -37,6 +38,7 @@ public static class ModuleCatalog
         ["invoices"] = new[] { "service", "professional" },
         ["reservations"] = new[] { "restaurant" },
         ["proposals"] = new[] { "service", "professional" },
+        ["inventory"] = new[] { "restaurant", "retail" },
     };
     private static readonly string[] AppointmentsExcludedBusinessTypes = { "retail", "creator", "publisher", "restaurant" };
 

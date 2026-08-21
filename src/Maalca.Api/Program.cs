@@ -1010,44 +1010,67 @@ app.MapDelete("/api/affiliates/{affiliateId:guid}/services/{id:guid}", async (IS
 }).RequireAuthorization();
 
 // ============ INVENTORY ENDPOINTS ============
-app.MapGet("/api/affiliates/{affiliateId:guid}/inventory", async (IInventoryService inventoryService, Guid affiliateId, string? category = null, string? status = null, int page = 1) =>
+// Antes sin ningún chequeo de pertenencia (igual que /team antes del fix) — mismo gating que el
+// resto de /api/affiliates/{id}/...: lectura exige ser el afiliado activo del usuario; escritura
+// además exige no ser rol Staff.
+app.MapGet("/api/affiliates/{affiliateId:guid}/inventory", async (HttpContext ctx, IInventoryService inventoryService, Guid affiliateId, string? category = null, string? status = null, int page = 1) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
     var result = await inventoryService.GetInventoryAsync(affiliateId, category, status, page);
     return Results.Ok(result);
 });
 
-app.MapGet("/api/affiliates/{affiliateId:guid}/inventory/{id:guid}", async (IInventoryService inventoryService, Guid affiliateId, Guid id) =>
+app.MapGet("/api/affiliates/{affiliateId:guid}/inventory/{id:guid}", async (HttpContext ctx, IInventoryService inventoryService, Guid affiliateId, Guid id) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
     var result = await inventoryService.GetInventoryItemAsync(affiliateId, id);
     if (result == null)
         return Results.NotFound();
     return Results.Ok(result);
 });
 
-app.MapPost("/api/affiliates/{affiliateId:guid}/inventory", async (IInventoryService inventoryService, Guid affiliateId, InventoryItem item) =>
+app.MapPost("/api/affiliates/{affiliateId:guid}/inventory", async (HttpContext ctx, IInventoryService inventoryService, Guid affiliateId, InventoryItem item) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
     var result = await inventoryService.CreateInventoryItemAsync(affiliateId, item);
     return Results.Created($"/api/affiliates/{affiliateId}/inventory/{result.Id}", result);
 });
 
-app.MapPut("/api/affiliates/{affiliateId:guid}/inventory/{id:guid}", async (IInventoryService inventoryService, Guid affiliateId, Guid id, InventoryItem item) =>
+app.MapPut("/api/affiliates/{affiliateId:guid}/inventory/{id:guid}", async (HttpContext ctx, IInventoryService inventoryService, Guid affiliateId, Guid id, InventoryItem item) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
     var result = await inventoryService.UpdateInventoryItemAsync(affiliateId, id, item);
     if (result == null)
         return Results.NotFound();
     return Results.Ok(result);
 });
 
-app.MapDelete("/api/affiliates/{affiliateId:guid}/inventory/{id:guid}", async (IInventoryService inventoryService, Guid affiliateId, Guid id) =>
+app.MapDelete("/api/affiliates/{affiliateId:guid}/inventory/{id:guid}", async (HttpContext ctx, IInventoryService inventoryService, Guid affiliateId, Guid id) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
     var result = await inventoryService.DeleteInventoryItemAsync(affiliateId, id);
     if (!result)
         return Results.NotFound();
     return Results.NoContent();
 });
 
-app.MapPost("/api/affiliates/{affiliateId:guid}/inventory/movements", async (IInventoryService inventoryService, Guid affiliateId, InventoryMovement movement) =>
+app.MapPost("/api/affiliates/{affiliateId:guid}/inventory/movements", async (HttpContext ctx, IInventoryService inventoryService, Guid affiliateId, InventoryMovement movement) =>
 {
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
     try
     {
         var result = await inventoryService.CreateMovementAsync(affiliateId, movement);
