@@ -2142,7 +2142,9 @@ app.MapGet("/api/space/{slug}", async (
             CanalesConfigured: canales.Count > 0,
             LinkShared: completedKeys.Contains(MilestoneKeys.LinkShared)),
         kpis,
-        userMap.Role.ToString()));
+        userMap.Role.ToString(),
+        userMap.IsImpersonation,
+        userMap.ImpersonationExpiresAt));
 });
 
 // ============ AFFILIATE SLUG RESOLVER ============

@@ -6,7 +6,12 @@ public record SpaceResponse(
     int ProductCount,
     ProgressDto Progress,
     KpisDto Kpis,
-    string Role
+    string Role,
+    // Sesión de soporte (impersonation, ver PlatformAdminService.StartImpersonationAsync) —
+    // el frontend usa esto para mostrar el banner "modo soporte" y el botón de salida real
+    // dentro de /space, en vez de obligar a volver a /ops escribiendo la URL a mano.
+    bool IsImpersonation = false,
+    DateTime? ImpersonationExpiresAt = null
 );
 
 public record BusinessDto(
