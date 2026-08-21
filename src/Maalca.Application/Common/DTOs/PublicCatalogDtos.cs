@@ -54,7 +54,8 @@ public record CatalogItemDto(
     bool? Featured = null,                      // Product only
     bool? Popular = null,                       // Product only
     string? VideoUrl = null,                    // Product only — Menu Board Fase 9 Etapa A
-    IReadOnlyList<string>? Images = null        // Product/Service/InventoryItem — galería completa; Images[0] == ImageUrl
+    IReadOnlyList<string>? Images = null,       // Product/Service/InventoryItem — galería completa; Images[0] == ImageUrl
+    string? NameEn = null                       // Product/Service/InventoryItem — nombre en inglés, fallback a Name si null
 );
 
 public record PlanCapabilitiesDto(

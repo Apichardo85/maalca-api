@@ -16,7 +16,8 @@ public record CreateCatalogItemRequest(
     bool? Featured = null,                      // Product only
     bool? Popular = null,                       // Product only
     string? VideoUrl = null,                    // Product only — Menu Board Fase 9 Etapa A
-    IReadOnlyList<string>? Images = null        // Galería completa (orden = orden de visualización); Images[0] pasa a ser ImageUrl
+    IReadOnlyList<string>? Images = null,       // Galería completa (orden = orden de visualización); Images[0] pasa a ser ImageUrl
+    string? NameEn = null                       // Product/Service/InventoryItem — nombre en inglés, fallback a Name si null
 );
 
 public record UpdateCatalogItemRequest(
@@ -37,7 +38,8 @@ public record UpdateCatalogItemRequest(
     bool? Featured = null,                      // Product only
     bool? Popular = null,                       // Product only
     string? VideoUrl = null,                    // Product only — Menu Board Fase 9 Etapa A
-    IReadOnlyList<string>? Images = null        // null = no tocar la galería; [] = vaciarla; lista = reemplazarla entera
+    IReadOnlyList<string>? Images = null,       // null = no tocar la galería; [] = vaciarla; lista = reemplazarla entera
+    string? NameEn = null                       // Product/Service/InventoryItem — nombre en inglés, fallback a Name si null
 );
 
 // Receta (ProductIngredient) — Product (plato) -> InventoryItem (ingrediente) + cantidad consumida

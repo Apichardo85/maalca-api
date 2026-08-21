@@ -24,6 +24,7 @@ public class InventoryItem : AuditableEntity
 {
     public Guid AffiliateId { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string? NameEn { get; set; }
     public string? Description { get; set; }
     public string? DescriptionEn { get; set; }
     public string? Category { get; set; }
@@ -96,6 +97,7 @@ public class Product : AuditableEntity
 {
     public Guid AffiliateId { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string? NameEn { get; set; }
     public string? Description { get; set; }
     public string? Category { get; set; }
     public decimal Price { get; set; }

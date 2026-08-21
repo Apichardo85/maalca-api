@@ -6,6 +6,7 @@ public class Service : AuditableEntity
 {
     public Guid AffiliateId { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string? NameEn { get; set; }
     public string? Description { get; set; }
     public string? DescriptionEn { get; set; }
     public decimal Price { get; set; }

@@ -220,6 +220,7 @@ public class CatalogCrudService : ICatalogCrudService
 
         var wasDemo = product.IsDemo;
         if (request.Name is not null) product.Name = request.Name;
+        if (request.NameEn is not null) product.NameEn = request.NameEn;
         if (request.Description is not null) product.Description = request.Description;
         if (request.Category is not null) product.Category = request.Category;
         if (request.Price.HasValue) product.Price = request.Price.Value;
@@ -248,6 +249,7 @@ public class CatalogCrudService : ICatalogCrudService
 
         var wasDemo = service.IsDemo;
         if (request.Name is not null) service.Name = request.Name;
+        if (request.NameEn is not null) service.NameEn = request.NameEn;
         if (request.Description is not null) service.Description = request.Description;
         if (request.Category is not null) service.Category = request.Category;
         if (request.Price.HasValue) service.Price = request.Price.Value;
@@ -277,6 +279,7 @@ public class CatalogCrudService : ICatalogCrudService
 
         var wasDemo = item.IsDemo;
         if (request.Name is not null) item.Name = request.Name;
+        if (request.NameEn is not null) item.NameEn = request.NameEn;
         if (request.Description is not null) item.Description = request.Description;
         if (request.Category is not null) item.Category = request.Category;
         if (request.Price.HasValue) item.UnitPrice = request.Price.Value;
@@ -303,6 +306,7 @@ public class CatalogCrudService : ICatalogCrudService
         {
             AffiliateId = affiliateId,
             Name = request.Name,
+            NameEn = request.NameEn,
             Description = request.Description,
             Price = request.Price,
             Category = request.Category,
@@ -333,6 +337,7 @@ public class CatalogCrudService : ICatalogCrudService
         {
             AffiliateId = affiliateId,
             Name = request.Name,
+            NameEn = request.NameEn,
             Description = request.Description,
             DescriptionEn = request.DescriptionEn,
             Price = request.Price,
@@ -360,6 +365,7 @@ public class CatalogCrudService : ICatalogCrudService
         {
             AffiliateId = affiliateId,
             Name = request.Name,
+            NameEn = request.NameEn,
             Description = request.Description,
             DescriptionEn = request.DescriptionEn,
             UnitPrice = request.Price,
