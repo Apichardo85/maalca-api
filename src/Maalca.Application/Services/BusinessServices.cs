@@ -510,6 +510,56 @@ public class InventoryService : IInventoryService
         await _context.SaveChangesAsync();
         return movement;
     }
+
+    public async Task<List<RecipeItemDto>> GetRecipeAsync(Guid affiliateId, Guid productId)
+    {
+        var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == productId && p.AffiliateId == affiliateId);
+        if (product == null) return new List<RecipeItemDto>();
+
+        return await _context.ProductIngredients
+            .Where(pi => pi.ProductId == productId)
+            .Include(pi => pi.InventoryItem)
+            .Where(pi => pi.InventoryItem != null)
+            .Select(pi => new RecipeItemDto(pi.InventoryItemId, pi.InventoryItem!.Name, pi.Quantity))
+            .ToListAsync();
+    }
+
+    public async Task<List<RecipeItemDto>> SetRecipeAsync(Guid affiliateId, Guid productId, List<RecipeItemInput> items)
+    {
+        var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == productId && p.AffiliateId == affiliateId);
+        if (product == null)
+            throw new InvalidOperationException("Product not found");
+
+        // Validar que todos los InventoryItem pertenezcan al mismo afiliado — evita que un dueño
+        // enlace, sea por error o manipulando el request, un ingrediente de otro negocio.
+        var itemIds = items.Select(i => i.InventoryItemId).Distinct().ToList();
+        var validIds = await _context.InventoryItems
+            .Where(inv => inv.AffiliateId == affiliateId && itemIds.Contains(inv.Id))
+            .Select(inv => inv.Id)
+            .ToListAsync();
+        var invalid = itemIds.Except(validIds).ToList();
+        if (invalid.Count > 0)
+            throw new InvalidOperationException("One or more inventory items were not found for this affiliate");
+
+        var existing = await _context.ProductIngredients.Where(pi => pi.ProductId == productId).ToListAsync();
+        _context.ProductIngredients.RemoveRange(existing);
+
+        var now = DateTime.UtcNow;
+        foreach (var item in items)
+        {
+            _context.ProductIngredients.Add(new ProductIngredient
+            {
+                Id = Guid.NewGuid(),
+                ProductId = productId,
+                InventoryItemId = item.InventoryItemId,
+                Quantity = item.Quantity,
+                CreatedAt = now,
+            });
+        }
+
+        await _context.SaveChangesAsync();
+        return await GetRecipeAsync(affiliateId, productId);
+    }
 }
 
 public class QueueService : IQueueService

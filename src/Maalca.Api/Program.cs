@@ -1082,6 +1082,34 @@ app.MapPost("/api/affiliates/{affiliateId:guid}/inventory/movements", async (Htt
     }
 });
 
+// ============ RECETA (ProductIngredient) — Restaurante: Dish -> [InventoryItem, cantidad] ============
+// Mismo gating que /inventory: lectura exige ser el afiliado activo, escritura además exige no
+// ser Staff. Reemplazo total por PUT — el editor de plato siempre manda la receta completa.
+app.MapGet("/api/affiliates/{affiliateId:guid}/products/{productId:guid}/ingredients", async (HttpContext ctx, IInventoryService inventoryService, Guid affiliateId, Guid productId) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    var result = await inventoryService.GetRecipeAsync(affiliateId, productId);
+    return Results.Ok(result);
+});
+
+app.MapPut("/api/affiliates/{affiliateId:guid}/products/{productId:guid}/ingredients", async (HttpContext ctx, IInventoryService inventoryService, Guid affiliateId, Guid productId, SetRecipeRequest request) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    try
+    {
+        var result = await inventoryService.SetRecipeAsync(affiliateId, productId, request.Items.ToList());
+        return Results.Ok(result);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_OPERATION", message = ex.Message } });
+    }
+});
+
 // ============ QUEUE ENDPOINTS (fila de espera — walk-ins de Barbería) ============
 app.MapGet("/api/affiliates/{affiliateId:guid}/queue", async (HttpContext ctx, IQueueService queueService, Guid affiliateId) =>
 {

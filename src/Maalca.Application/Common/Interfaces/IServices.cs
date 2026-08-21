@@ -64,6 +64,12 @@ public interface IInventoryService
     Task<InventoryItem?> UpdateInventoryItemAsync(Guid affiliateId, Guid id, InventoryItem item);
     Task<bool> DeleteInventoryItemAsync(Guid affiliateId, Guid id);
     Task<InventoryMovement> CreateMovementAsync(Guid affiliateId, InventoryMovement movement);
+
+    // Receta (Restaurante) — Product (plato) -> [InventoryItem, cantidad]. Reemplazo total de la
+    // lista por PUT (no PATCH incremental) — más simple para el editor de plato, que siempre manda
+    // el estado completo de la receta.
+    Task<List<RecipeItemDto>> GetRecipeAsync(Guid affiliateId, Guid productId);
+    Task<List<RecipeItemDto>> SetRecipeAsync(Guid affiliateId, Guid productId, List<RecipeItemInput> items);
 }
 
 public interface IQueueService

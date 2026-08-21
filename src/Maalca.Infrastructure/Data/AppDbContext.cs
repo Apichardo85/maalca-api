@@ -15,6 +15,7 @@ public class AppDbContext : DbContext
     public DbSet<TeamMember> TeamMembers => Set<TeamMember>();
     public DbSet<InventoryItem> InventoryItems => Set<InventoryItem>();
     public DbSet<InventoryMovement> InventoryMovements => Set<InventoryMovement>();
+    public DbSet<ProductIngredient> ProductIngredients => Set<ProductIngredient>();
     public DbSet<QueueEntry> QueueEntries => Set<QueueEntry>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
@@ -205,6 +206,22 @@ public class AppDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(e => e.CustomerId)
                   .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ProductIngredient (receta: Product -> InventoryItem + cantidad)
+        modelBuilder.Entity<ProductIngredient>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Quantity).HasPrecision(18, 3);
+            entity.HasOne(e => e.Product)
+                  .WithMany()
+                  .HasForeignKey(e => e.ProductId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.InventoryItem)
+                  .WithMany()
+                  .HasForeignKey(e => e.InventoryItemId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.ProductId, e.InventoryItemId }).IsUnique();
         });
 
         // TimeBlock

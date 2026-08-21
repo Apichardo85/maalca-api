@@ -39,3 +39,21 @@ public record UpdateCatalogItemRequest(
     string? VideoUrl = null,                    // Product only — Menu Board Fase 9 Etapa A
     IReadOnlyList<string>? Images = null        // null = no tocar la galería; [] = vaciarla; lista = reemplazarla entera
 );
+
+// Receta (ProductIngredient) — Product (plato) -> InventoryItem (ingrediente) + cantidad consumida
+// por unidad vendida. InventoryItemName/Unit viajan de vuelta solo para pintar la UI sin un
+// segundo round-trip; en el PUT solo se leen InventoryItemId/Quantity.
+public record RecipeItemDto(
+    Guid InventoryItemId,
+    string InventoryItemName,
+    decimal Quantity
+);
+
+public record SetRecipeRequest(
+    IReadOnlyList<RecipeItemInput> Items
+);
+
+public record RecipeItemInput(
+    Guid InventoryItemId,
+    decimal Quantity
+);

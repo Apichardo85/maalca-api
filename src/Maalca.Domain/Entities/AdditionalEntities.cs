@@ -51,6 +51,23 @@ public class InventoryMovement : BaseEntity
     public InventoryItem? InventoryItem { get; set; }
 }
 
+/// <summary>
+/// Receta: cuanto de un InventoryItem (ingrediente crudo, ej. "Arroz") consume UNA unidad
+/// vendida de un Product (plato de Restaurante, ej. "Arroz con Pollo"). Sin esto, Product y
+/// InventoryItem viven en universos separados -- vender un plato nunca tocaba el stock de
+/// ningun ingrediente (a diferencia de Retail, donde Catalogo=InventoryItem son la misma fila).
+/// OrderService.DecrementStockAsync la usa para resolver el descuento real al vender un plato.
+/// </summary>
+public class ProductIngredient : BaseEntity
+{
+    public Guid ProductId { get; set; }
+    public Guid InventoryItemId { get; set; }
+    public decimal Quantity { get; set; } = 1;
+
+    public Product? Product { get; set; }
+    public InventoryItem? InventoryItem { get; set; }
+}
+
 public class QueueEntry : BaseEntity
 {
     public Guid AffiliateId { get; set; }

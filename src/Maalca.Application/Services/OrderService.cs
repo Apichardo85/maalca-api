@@ -349,10 +349,10 @@ public class OrderService : IOrderService
             .ToList();
         if (itemIds.Count == 0) return;
 
+        // Camino directo (Retail): el Catálogo ES InventoryItem, misma fila/Id (task #175).
         var inventoryItems = await _db.InventoryItems
             .Where(inv => inv.AffiliateId == order.AffiliateId && itemIds.Contains(inv.Id))
             .ToListAsync();
-        if (inventoryItems.Count == 0) return;
 
         foreach (var item in items)
         {
@@ -368,6 +368,45 @@ public class OrderService : IOrderService
                 Quantity = item.Qty,
                 Notes = $"Venta — Pedido #{order.Id.ToString()[..8]}",
             });
+        }
+
+        // Camino de receta (Restaurante): itemId es un Product (plato), no un InventoryItem
+        // directo — se resuelve vía ProductIngredient a los ingredientes reales y se descuenta
+        // Quantity(receta) x cantidad vendida. Sin esto un plato nunca tocaba ningún ingrediente
+        // (task #291/#292 — la causa concreta de "el módulo de inventario es una mierda" para
+        // Restaurante, a diferencia de Retail arriba).
+        var recipeLines = await _db.ProductIngredients
+            .Where(pi => itemIds.Contains(pi.ProductId))
+            .ToListAsync();
+        if (recipeLines.Count == 0) return;
+
+        var ingredientIds = recipeLines.Select(pi => pi.InventoryItemId).Distinct().ToList();
+        var ingredientItems = await _db.InventoryItems
+            .Where(inv => inv.AffiliateId == order.AffiliateId && ingredientIds.Contains(inv.Id))
+            .ToListAsync();
+
+        foreach (var item in items)
+        {
+            if (!Guid.TryParse(item.ItemId, out var productId)) continue;
+            foreach (var line in recipeLines.Where(pi => pi.ProductId == productId))
+            {
+                var inv = ingredientItems.FirstOrDefault(i => i.Id == line.InventoryItemId);
+                if (inv is null) continue;
+
+                // InventoryItem.Quantity es int; la receta es decimal (ej. 0.5 kg por plato) —
+                // redondeamos hacia arriba para no sub-descontar el ingrediente real.
+                var consumed = (int)Math.Ceiling(line.Quantity * item.Qty);
+                if (consumed <= 0) continue;
+
+                inv.Quantity = Math.Max(0, inv.Quantity - consumed);
+                _db.InventoryMovements.Add(new InventoryMovement
+                {
+                    InventoryItemId = inv.Id,
+                    Type = "out",
+                    Quantity = consumed,
+                    Notes = $"Venta (receta) — Pedido #{order.Id.ToString()[..8]}",
+                });
+            }
         }
     }
 
