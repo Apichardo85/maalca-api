@@ -256,6 +256,31 @@ app.MapPatch("/api/ops/affiliates/{affiliateId:guid}", async (
     }
 });
 
+app.MapPatch("/api/ops/affiliates/{affiliateId:guid}/plan", async (
+    HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId, SetAffiliatePlanRequest request) =>
+{
+    // Cambiar el tier de un negocio es una acción financiera — mismo gate que publicar/suspender:
+    // solo Owner, no Support.
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    if (ctx.User.FindFirst("platform_role")?.Value != nameof(PlatformAdminRole.Owner))
+        return Results.Forbid();
+
+    try
+    {
+        var result = await opsService.SetAffiliatePlanAsync(affiliateId, request.Plan);
+        return Results.Ok(result);
+    }
+    catch (InvalidOperationException ex) when (ex.Message.Contains("no existe"))
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = ex.Message } });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_PLAN", message = ex.Message } });
+    }
+});
+
 // Control de módulos por afiliado (MaalCa converge lo que da el plan + overrides manuales) —
 // no es tan destructivo como publicar/suspender, así que cualquier admin de plataforma puede
 // tocarlo (no solo Owner), igual que las lecturas de overview/affiliates.

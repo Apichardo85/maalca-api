@@ -36,6 +36,12 @@ public record ImpersonationSessionDto(Guid AffiliateId, string Slug, string Name
 
 public record SetAffiliateStatusRequest(bool? Published, bool? Active);
 
+/// <summary>Cambio manual de tier desde /ops — MaalCa puede mover un negocio de Gratis a
+/// Emprendedor/Enterprise (o al revés) sin pasar por Stripe, ej. cortesía, negociación directa,
+/// o corregir un caso donde el pago no sincronizó. Acción de Owner únicamente (igual que
+/// publicar/suspender) por su impacto financiero.</summary>
+public record SetAffiliatePlanRequest(string Plan);
+
 /// <summary>Info del propio admin autenticado — reemplaza el antiguo { isPlatformAdmin: bool } de /api/me/admin-status.</summary>
 public record MyAdminStatusDto(bool IsPlatformAdmin, string? Role);
 

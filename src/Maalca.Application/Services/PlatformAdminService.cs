@@ -157,6 +157,45 @@ public class PlatformAdminService : IPlatformAdminService
     }
 
     /// <summary>
+    /// Cambio manual de tier desde /ops (Free/Entrepreneur/Enterprise), al margen de Stripe —
+    /// para cortesías, negociación directa, o corregir un caso donde el pago no sincronizó.
+    /// </summary>
+    public async Task<PlatformAffiliateSummaryDto> SetAffiliatePlanAsync(Guid affiliateId, string plan)
+    {
+        var affiliate = await _context.Affiliates.FindAsync(affiliateId)
+            ?? throw new InvalidOperationException("Ese negocio no existe.");
+
+        if (!Enum.TryParse<Plan>(plan, ignoreCase: true, out var parsedPlan))
+            throw new InvalidOperationException($"Tier inválido: '{plan}'.");
+
+        affiliate.Plan = parsedPlan;
+        affiliate.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        var since30d = DateTime.UtcNow.AddDays(-30);
+        var orders30d = await _context.Orders.CountAsync(o => o.AffiliateId == affiliateId && o.CreatedAt >= since30d);
+
+        var alerts = new List<string>();
+        var now = DateTime.UtcNow;
+        if (affiliate.Plan == Plan.Entrepreneur && !affiliate.StripeConnectChargesEnabled)
+            alerts.Add("Sin conectar pagos");
+        if (affiliate.Plan == Plan.Entrepreneur && orders30d == 0 && affiliate.CreatedAt < now.AddDays(-30))
+            alerts.Add("Sin pedidos en 30 días");
+        if (!affiliate.Published && affiliate.CreatedAt < now.AddDays(-7))
+            alerts.Add("Sin publicar");
+        if (!affiliate.IsActive)
+            alerts.Add("Suspendido");
+        if (affiliate.PlanStatus == PlanStatus.PastDue)
+            alerts.Add("Pago atrasado");
+
+        return new PlatformAffiliateSummaryDto(
+            affiliate.Id, affiliate.Name, affiliate.Slug ?? "", affiliate.BusinessType.ToString(),
+            affiliate.Plan.ToString(), affiliate.PlanStatus.ToString(), affiliate.Published, affiliate.IsActive,
+            affiliate.CreatedAt, orders30d, affiliate.StripeConnectChargesEnabled, alerts, affiliate.LogoUrl,
+            ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()).ToList());
+    }
+
+    /// <summary>
     /// Control de módulos por afiliado (MaalCa, no el plan, es la autoridad final acá) — guarda
     /// el override explícito de Affiliate.ModulosActivos. Lista vacía se guarda como "" (no
     /// null): eso marca "explícitamente ningún módulo", distinto de nunca haberlo tocado (null),

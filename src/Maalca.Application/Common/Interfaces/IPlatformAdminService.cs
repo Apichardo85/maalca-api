@@ -33,6 +33,10 @@ public interface IPlatformAdminService
     /// encima de lo que el plan normalmente daría.</summary>
     Task<PlatformAffiliateSummaryDto> SetAffiliateModulesAsync(Guid affiliateId, List<string> modules);
 
+    /// <summary>Cambio manual de tier (Free/Entrepreneur/Enterprise) desde /ops — al margen de
+    /// Stripe, para cortesías, negociaciones directas o corregir un pago que no sincronizó.</summary>
+    Task<PlatformAffiliateSummaryDto> SetAffiliatePlanAsync(Guid affiliateId, string plan);
+
     Task<ImpersonationSessionDto> StartImpersonationAsync(string adminSupabaseUserId, string adminEmail, Guid affiliateId);
     Task EndImpersonationAsync(string adminSupabaseUserId);
 
