@@ -473,7 +473,11 @@ public class InventoryService : IInventoryService
         // Búsqueda por nombre (case-insensitive) y filtro "solo stock bajo" — antes solo existían
         // category/status, así que un negocio con más de 20 items (una sola página) no tenía
         // forma de encontrar un item específico sin pasar de página a página.
-        if (!string.IsNullOrEmpty(search)) query = query.Where(i => EF.Functions.ILike(i.Name, $"%{search}%"));
+        if (!string.IsNullOrEmpty(search))
+            query = query.Where(i =>
+                EF.Functions.ILike(i.Name, $"%{search}%") ||
+                (i.Barcode != null && EF.Functions.ILike(i.Barcode, $"%{search}%")) ||
+                (i.InternalCode != null && EF.Functions.ILike(i.InternalCode, $"%{search}%")));
         if (lowStock == true) query = query.Where(i => i.Quantity <= i.MinStock);
         var total = await query.CountAsync();
         var data = await query.OrderBy(i => i.Name).Skip((page - 1) * 20).Take(20).ToListAsync();
@@ -488,6 +492,11 @@ public class InventoryService : IInventoryService
         item.AffiliateId = affiliateId;
         item.Id = Guid.NewGuid();
         item.CreatedAt = DateTime.UtcNow;
+        // Siempre queda un código interno, tenga o no Barcode de fábrica — así el negocio puede
+        // identificar el item aunque el producto no venga con UPC/EAN propio.
+        if (string.IsNullOrWhiteSpace(item.InternalCode))
+            item.InternalCode = $"INT-{item.Id.ToString()[..8].ToUpperInvariant()}";
+        item.Barcode = string.IsNullOrWhiteSpace(item.Barcode) ? null : item.Barcode.Trim();
         _context.InventoryItems.Add(item);
         await _context.SaveChangesAsync();
         return item;
@@ -505,6 +514,8 @@ public class InventoryService : IInventoryService
         existing.UnitPrice = item.UnitPrice;
         existing.Unit = string.IsNullOrWhiteSpace(item.Unit) ? existing.Unit : item.Unit;
         existing.Status = item.Status;
+        existing.Barcode = string.IsNullOrWhiteSpace(item.Barcode) ? null : item.Barcode.Trim();
+        // InternalCode nunca se pisa desde el form — es fijo desde que se crea el item.
         existing.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
         return existing;
@@ -1144,18 +1155,20 @@ public class InvoiceService : IInvoiceService
 {
     private readonly AppDbContext _context;
     private readonly IInvoiceNotificationService _notifications;
+    private readonly IAuditLogService _audit;
 
-    public InvoiceService(AppDbContext context, IInvoiceNotificationService notifications)
+    public InvoiceService(AppDbContext context, IInvoiceNotificationService notifications, IAuditLogService audit)
     {
         _context = context;
         _notifications = notifications;
+        _audit = audit;
     }
 
     public async Task<PaginatedResponse<Invoice>> GetInvoicesAsync(Guid affiliateId, string? status = null, DateTime? dateFrom = null, DateTime? dateTo = null)
     {
         var baseQuery = _context.Invoices.Where(i => i.AffiliateId == affiliateId);
         
-        IQueryable<Invoice> query = baseQuery.Include(i => i.Customer);
+        IQueryable<Invoice> query = baseQuery.Include(i => i.Customer).Include(i => i.Items);
 
         if (!string.IsNullOrEmpty(status)) query = query.Where(i => i.Status == status);
         if (dateFrom.HasValue) query = query.Where(i => i.IssueDate >= dateFrom.Value);
@@ -1169,7 +1182,7 @@ public class InvoiceService : IInvoiceService
     public async Task<Invoice?> GetInvoiceAsync(Guid affiliateId, Guid id)
         => await _context.Invoices.Include(i => i.Customer).Include(i => i.Items).FirstOrDefaultAsync(i => i.Id == id && i.AffiliateId == affiliateId);
 
-    public async Task<Invoice> CreateInvoiceAsync(Guid affiliateId, Invoice invoice, List<InvoiceItem>? items = null)
+    public async Task<Invoice> CreateInvoiceAsync(Guid affiliateId, Invoice invoice, List<InvoiceItem>? items = null, Guid? replacesInvoiceId = null, string? actorId = null, string? actorName = null)
     {
         invoice.AffiliateId = affiliateId;
         invoice.Id = Guid.NewGuid();
@@ -1203,15 +1216,34 @@ public class InvoiceService : IInvoiceService
             invoice.Total = invoice.Subtotal + invoice.Tax;
         }
 
+        // Factura de corrección — enlazada en ambos sentidos a la que reemplaza, sin tocar el
+        // documento original (ver VoidInvoiceAsync). replacesInvoiceId ya viene validado (mismo
+        // afiliado) desde el endpoint.
+        Invoice? replaced = null;
+        if (replacesInvoiceId.HasValue)
+        {
+            replaced = await _context.Invoices.FirstOrDefaultAsync(i => i.Id == replacesInvoiceId.Value && i.AffiliateId == affiliateId);
+            if (replaced != null)
+                invoice.ReplacesInvoiceId = replaced.Id;
+        }
+
         _context.Invoices.Add(invoice);
+        if (replaced != null)
+            replaced.ReplacedByInvoiceId = invoice.Id;
         await _context.SaveChangesAsync();
+
+        await _audit.LogAsync(affiliateId, "invoice.created", "Invoice", invoice.Id,
+            $"Factura {invoice.InvoiceNumber} creada por {invoice.Total:C}" + (replaced != null ? $" (corrige {replaced.InvoiceNumber})" : ""),
+            actorId, actorName);
+
         return invoice;
     }
 
-    public async Task<Invoice?> UpdateInvoiceAsync(Guid affiliateId, Guid id, Invoice invoice)
+    public async Task<Invoice?> UpdateInvoiceAsync(Guid affiliateId, Guid id, Invoice invoice, string? actorId = null, string? actorName = null)
     {
         var existing = await _context.Invoices.FirstOrDefaultAsync(i => i.Id == id && i.AffiliateId == affiliateId);
         if (existing == null) return null;
+        var wasPaid = existing.Status == "Paid";
         existing.CustomerId = invoice.CustomerId;
         existing.Subtotal = invoice.Subtotal;
         existing.Tax = invoice.Tax;
@@ -1222,6 +1254,11 @@ public class InvoiceService : IInvoiceService
         existing.Notes = invoice.Notes;
         existing.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
+
+        if (!wasPaid && existing.Status == "Paid")
+            await _audit.LogAsync(affiliateId, "invoice.paid", "Invoice", existing.Id,
+                $"Factura {existing.InvoiceNumber} marcada como pagada ({existing.Total:C})", actorId, actorName);
+
         return existing;
     }
 
@@ -1234,12 +1271,35 @@ public class InvoiceService : IInvoiceService
         return true;
     }
 
+    // Anular en vez de editar/borrar — Invoice es un documento financiero, el original queda
+    // intacto para efectos fiscales. Para "corregir" algo, el dueño anula esta y crea una nueva
+    // factura pasando replacesInvoiceId (ver CreateInvoiceAsync), que queda enlazada en ambos
+    // sentidos con ReplacesInvoiceId/ReplacedByInvoiceId.
+    public async Task<Invoice?> VoidInvoiceAsync(Guid affiliateId, Guid id, string reason, string? actorId = null, string? actorName = null)
+    {
+        var invoice = await _context.Invoices.FirstOrDefaultAsync(i => i.Id == id && i.AffiliateId == affiliateId);
+        if (invoice == null) return null;
+        if (invoice.Status == "Cancelled")
+            throw new InvalidOperationException("Esta factura ya está anulada.");
+
+        invoice.Status = "Cancelled";
+        invoice.VoidedAt = DateTime.UtcNow;
+        invoice.VoidReason = reason;
+        invoice.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        await _audit.LogAsync(affiliateId, "invoice.voided", "Invoice", invoice.Id,
+            $"Factura {invoice.InvoiceNumber} anulada: {reason}", actorId, actorName);
+
+        return invoice;
+    }
+
     // Mismo patrón que OrderService.CreatePosCheckoutAsync: Checkout Session en modo "payment",
     // ejecutada con el header Stripe-Account de la cuenta conectada del afiliado (direct charge —
     // el dinero entra directo a la cuenta del afiliado, MaalCa nunca la toca). Las líneas salen de
     // Invoice.Items (ya recalculados y persistidos en CreateInvoiceAsync), nunca de un total suelto
     // que mande el cliente.
-    public async Task<string?> CreateInvoiceCheckoutAsync(Guid affiliateId, Guid invoiceId, string successUrl, string cancelUrl)
+    public async Task<string?> CreateInvoiceCheckoutAsync(Guid affiliateId, Guid invoiceId, string successUrl, string cancelUrl, string? actorId = null, string? actorName = null)
     {
         var invoice = await _context.Invoices
             .Include(i => i.Affiliate)
@@ -1320,6 +1380,9 @@ public class InvoiceService : IInvoiceService
         if (invoice.Customer is not null)
             await _notifications.NotifyInvoicePaymentLinkAsync(invoice, invoice.Customer, affiliate.Name, currency, session.Url);
 
+        await _audit.LogAsync(affiliateId, "invoice.checkout_link_created", "Invoice", invoice.Id,
+            $"Link de cobro generado para {invoice.InvoiceNumber}", actorId, actorName);
+
         return session.Url;
     }
 
@@ -1337,6 +1400,66 @@ public class InvoiceService : IInvoiceService
         invoice.StripePaymentIntentId = paymentIntentId;
         invoice.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
+
+        // Sin actorId/actorName acá — el webhook lo dispara Stripe, no un usuario logueado.
+        await _audit.LogAsync(invoice.AffiliateId, "invoice.paid", "Invoice", invoice.Id,
+            $"Factura {invoice.InvoiceNumber} pagada por Stripe ({invoice.Total:C})", null, "Stripe (webhook)");
+    }
+}
+
+public class AuditLogService : IAuditLogService
+{
+    private readonly AppDbContext _context;
+
+    public AuditLogService(AppDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task LogAsync(Guid? affiliateId, string action, string entityType, Guid? entityId, string description, string? actorId = null, string? actorName = null, object? metadata = null)
+    {
+        try
+        {
+            _context.AuditLogEntries.Add(new AuditLogEntry
+            {
+                AffiliateId = affiliateId,
+                ActorId = actorId,
+                ActorName = actorName,
+                Action = action,
+                EntityType = entityType,
+                EntityId = entityId,
+                Description = description,
+                MetadataJson = metadata != null ? System.Text.Json.JsonSerializer.Serialize(metadata) : null,
+            });
+            await _context.SaveChangesAsync();
+        }
+        catch
+        {
+            // El audit log nunca debe tumbar la operación real que dispara el log — se traga
+            // el error. Si Postgres está caído, ya hay problemas mayores que este log perdido.
+        }
+    }
+
+    public async Task<PaginatedResponse<AuditLogEntry>> GetLogsAsync(Guid affiliateId, string? entityType = null, Guid? entityId = null, int page = 1, int pageSize = 50)
+    {
+        var query = _context.AuditLogEntries.Where(a => a.AffiliateId == affiliateId);
+        if (!string.IsNullOrEmpty(entityType)) query = query.Where(a => a.EntityType == entityType);
+        if (entityId.HasValue) query = query.Where(a => a.EntityId == entityId.Value);
+
+        var total = await query.CountAsync();
+        var data = await query
+            .OrderByDescending(a => a.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PaginatedResponse<AuditLogEntry>
+        {
+            Data = data,
+            Total = total,
+            Page = page,
+            TotalPages = (int)Math.Ceiling(total / (double)pageSize),
+        };
     }
 }
 

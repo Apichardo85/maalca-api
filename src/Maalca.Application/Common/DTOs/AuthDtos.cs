@@ -85,6 +85,14 @@ public class CreateInvoiceRequest
     public DateTime? DueDate { get; set; }
     public string? Notes { get; set; }
     public List<CreateInvoiceItemRequest> Items { get; set; } = new();
+    /// <summary>Si esta factura corrige una anulada, el id de la original — quedan enlazadas
+    /// en ambos sentidos (ver InvoiceService.CreateInvoiceAsync).</summary>
+    public Guid? ReplacesInvoiceId { get; set; }
+}
+
+public class VoidInvoiceRequest
+{
+    public string Reason { get; set; } = string.Empty;
 }
 
 /// <summary>Pago real de factura (Stripe Connect) — ver InvoiceService.CreateInvoiceCheckoutAsync.</summary>

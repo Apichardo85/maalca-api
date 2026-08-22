@@ -22,6 +22,7 @@ public class AppDbContext : DbContext
     public DbSet<Product> Products => Set<Product>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
     public DbSet<InvoiceItem> InvoiceItems => Set<InvoiceItem>();
+    public DbSet<AuditLogEntry> AuditLogEntries => Set<AuditLogEntry>();
     public DbSet<TableReservation> TableReservations => Set<TableReservation>();
     public DbSet<Lead> Leads => Set<Lead>();
     public DbSet<AgentExecution> AgentExecutions => Set<AgentExecution>();
