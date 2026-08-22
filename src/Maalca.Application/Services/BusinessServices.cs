@@ -1172,6 +1172,15 @@ public class InvoiceService : IInvoiceService
         invoice.IssueDate = invoice.IssueDate == default ? DateTime.UtcNow : invoice.IssueDate;
         invoice.CreatedAt = DateTime.UtcNow;
 
+        // Mismo motivo de siempre (Appointment.Date, TableReservation.Date, Proposal.ExpiresAt): el
+        // <input type="date"> del front manda una fecha "bare" (sin hora/zona) que deserializa con
+        // DateTimeKind.Unspecified, y la columna es timestamptz -- Npgsql rechaza escribir ahí un
+        // DateTime Unspecified y el guardado fallaba en silencio cada vez que se ponía vencimiento.
+        if (invoice.DueDate.HasValue)
+            invoice.DueDate = DateTime.SpecifyKind(invoice.DueDate.Value, DateTimeKind.Utc);
+        if (invoice.PaidDate.HasValue)
+            invoice.PaidDate = DateTime.SpecifyKind(invoice.PaidDate.Value, DateTimeKind.Utc);
+
         // Las líneas llegan sueltas (sin InvoiceId todavía, el cliente no lo conoce hasta que
         // se crea la factura) — el total nunca se confía al request, se recalcula acá para que
         // no se pueda mandar un Total arbitrario que no cuadre con las líneas reales.
@@ -1203,8 +1212,8 @@ public class InvoiceService : IInvoiceService
         existing.Tax = invoice.Tax;
         existing.Total = invoice.Total;
         existing.Status = invoice.Status;
-        existing.DueDate = invoice.DueDate;
-        existing.PaidDate = invoice.PaidDate;
+        existing.DueDate = invoice.DueDate.HasValue ? DateTime.SpecifyKind(invoice.DueDate.Value, DateTimeKind.Utc) : null;
+        existing.PaidDate = invoice.PaidDate.HasValue ? DateTime.SpecifyKind(invoice.PaidDate.Value, DateTimeKind.Utc) : null;
         existing.Notes = invoice.Notes;
         existing.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
