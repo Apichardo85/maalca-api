@@ -465,11 +465,16 @@ public class InventoryService : IInventoryService
 
     public InventoryService(AppDbContext context) => _context = context;
 
-    public async Task<PaginatedResponse<InventoryItem>> GetInventoryAsync(Guid affiliateId, string? category = null, string? status = null, int page = 1)
+    public async Task<PaginatedResponse<InventoryItem>> GetInventoryAsync(Guid affiliateId, string? category = null, string? status = null, int page = 1, string? search = null, bool? lowStock = null)
     {
         var query = _context.InventoryItems.Where(i => i.AffiliateId == affiliateId);
         if (!string.IsNullOrEmpty(category)) query = query.Where(i => i.Category == category);
         if (!string.IsNullOrEmpty(status)) query = query.Where(i => i.Status == status);
+        // Búsqueda por nombre (case-insensitive) y filtro "solo stock bajo" — antes solo existían
+        // category/status, así que un negocio con más de 20 items (una sola página) no tenía
+        // forma de encontrar un item específico sin pasar de página a página.
+        if (!string.IsNullOrEmpty(search)) query = query.Where(i => EF.Functions.ILike(i.Name, $"%{search}%"));
+        if (lowStock == true) query = query.Where(i => i.Quantity <= i.MinStock);
         var total = await query.CountAsync();
         var data = await query.OrderBy(i => i.Name).Skip((page - 1) * 20).Take(20).ToListAsync();
         return new PaginatedResponse<InventoryItem> { Data = data, Total = total, Page = page, TotalPages = (int)Math.Ceiling((double)total / 20) };

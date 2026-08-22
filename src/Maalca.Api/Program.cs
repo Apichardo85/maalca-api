@@ -1025,11 +1025,13 @@ app.MapDelete("/api/affiliates/{affiliateId:guid}/services/{id:guid}", async (IS
 // Antes sin ningún chequeo de pertenencia (igual que /team antes del fix) — mismo gating que el
 // resto de /api/affiliates/{id}/...: lectura exige ser el afiliado activo del usuario; escritura
 // además exige no ser rol Staff.
-app.MapGet("/api/affiliates/{affiliateId:guid}/inventory", async (HttpContext ctx, IInventoryService inventoryService, Guid affiliateId, string? category = null, string? status = null, int page = 1) =>
+app.MapGet("/api/affiliates/{affiliateId:guid}/inventory", async (
+    HttpContext ctx, IInventoryService inventoryService, Guid affiliateId,
+    string? category = null, string? status = null, int page = 1, string? search = null, bool? lowStock = null) =>
 {
     if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
         return Results.Forbid();
-    var result = await inventoryService.GetInventoryAsync(affiliateId, category, status, page);
+    var result = await inventoryService.GetInventoryAsync(affiliateId, category, status, page, search, lowStock);
     return Results.Ok(result);
 });
 

@@ -58,7 +58,7 @@ public interface IServiceService
 
 public interface IInventoryService
 {
-    Task<PaginatedResponse<InventoryItem>> GetInventoryAsync(Guid affiliateId, string? category = null, string? status = null, int page = 1);
+    Task<PaginatedResponse<InventoryItem>> GetInventoryAsync(Guid affiliateId, string? category = null, string? status = null, int page = 1, string? search = null, bool? lowStock = null);
     Task<InventoryItem?> GetInventoryItemAsync(Guid affiliateId, Guid id);
     Task<InventoryItem> CreateInventoryItemAsync(Guid affiliateId, InventoryItem item);
     Task<InventoryItem?> UpdateInventoryItemAsync(Guid affiliateId, Guid id, InventoryItem item);
