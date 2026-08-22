@@ -477,16 +477,33 @@ public class InventoryService : IInventoryService
         existing.Quantity = item.Quantity;
         existing.MinStock = item.MinStock;
         existing.UnitPrice = item.UnitPrice;
+        existing.Unit = string.IsNullOrWhiteSpace(item.Unit) ? existing.Unit : item.Unit;
         existing.Status = item.Status;
         existing.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
         return existing;
     }
 
+    /// <summary>Borrar un ingrediente que está en la receta de uno o más platos dejaba el vínculo
+    /// desaparecer en cascada sin avisar — el plato seguía vendiéndose pero dejaba de descontar
+    /// ese ingrediente. Ahora se bloquea con un mensaje claro (qué platos lo usan) hasta que se
+    /// quite de la receta primero.</summary>
     public async Task<bool> DeleteInventoryItemAsync(Guid affiliateId, Guid id)
     {
         var item = await _context.InventoryItems.FirstOrDefaultAsync(i => i.Id == id && i.AffiliateId == affiliateId);
         if (item == null) return false;
+
+        var usedInDishes = await _context.ProductIngredients
+            .Where(pi => pi.InventoryItemId == id)
+            .Include(pi => pi.Product)
+            .Where(pi => pi.Product != null)
+            .Select(pi => pi.Product!.Name)
+            .Distinct()
+            .ToListAsync();
+        if (usedInDishes.Count > 0)
+            throw new InvalidOperationException(
+                $"No se puede eliminar \"{item.Name}\": está en la receta de {string.Join(", ", usedInDishes)}. Quítalo de esa receta primero.");
+
         _context.InventoryItems.Remove(item);
         await _context.SaveChangesAsync();
         return true;
@@ -509,6 +526,145 @@ public class InventoryService : IInventoryService
         _context.InventoryMovements.Add(movement);
         await _context.SaveChangesAsync();
         return movement;
+    }
+
+    // Tarea: historial de movimientos — antes se guardaban pero no había forma de volver a verlos.
+    public async Task<PaginatedResponse<InventoryMovement>> GetMovementsAsync(Guid affiliateId, Guid itemId, int page = 1)
+    {
+        var itemBelongs = await _context.InventoryItems.AnyAsync(i => i.Id == itemId && i.AffiliateId == affiliateId);
+        if (!itemBelongs) return new PaginatedResponse<InventoryMovement> { Data = new List<InventoryMovement>(), Total = 0, Page = page, TotalPages = 0 };
+
+        var query = _context.InventoryMovements.Where(m => m.InventoryItemId == itemId);
+        var total = await query.CountAsync();
+        var data = await query.OrderByDescending(m => m.CreatedAt).Skip((page - 1) * 20).Take(20).ToListAsync();
+        return new PaginatedResponse<InventoryMovement> { Data = data, Total = total, Page = page, TotalPages = (int)Math.Ceiling((double)total / 20) };
+    }
+
+    // Tarea: resumen (valor total + stock bajo) — usado por Inventario y por la alerta del Dashboard.
+    public async Task<InventorySummaryDto> GetSummaryAsync(Guid affiliateId)
+    {
+        var items = await _context.InventoryItems.Where(i => i.AffiliateId == affiliateId).ToListAsync();
+        var totalValue = items.Sum(i => i.Quantity * i.UnitPrice);
+        var low = items.Where(i => i.Quantity <= i.MinStock).OrderBy(i => i.Name).ToList();
+        return new InventorySummaryDto(
+            totalValue,
+            items.Count,
+            low.Count,
+            low.Select(i => new LowStockItemDto(i.Id, i.Name, i.Quantity, i.MinStock, i.Unit)).ToList());
+    }
+
+    // Tarea: exportar CSV — carga inicial/backup manual sin depender de agregar item por item.
+    public async Task<string> ExportCsvAsync(Guid affiliateId)
+    {
+        var items = await _context.InventoryItems
+            .Where(i => i.AffiliateId == affiliateId)
+            .OrderBy(i => i.Name)
+            .ToListAsync();
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Nombre,Categoria,Cantidad,Unidad,StockMinimo,PrecioUnitario,Estado");
+        foreach (var i in items)
+        {
+            sb.AppendLine(string.Join(",",
+                CsvEscape(i.Name),
+                CsvEscape(i.Category ?? ""),
+                i.Quantity.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                CsvEscape(i.Unit),
+                i.MinStock.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                i.UnitPrice.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                CsvEscape(i.Status)));
+        }
+        return sb.ToString();
+    }
+
+    // Tarea: importar CSV — misma cabecera que ExportCsvAsync produce; columnas de más se ignoran,
+    // filas sin Nombre se saltan. No valida duplicados por nombre a propósito (permite reabastecer
+    // agregando de nuevo con Quantity sumándose vía movimientos, no vía import).
+    public async Task<InventoryCsvImportResultDto> ImportCsvAsync(Guid affiliateId, string csvContent)
+    {
+        var lines = csvContent.Replace("\r\n", "\n").Split('\n')
+            .Where(l => !string.IsNullOrWhiteSpace(l))
+            .ToList();
+        if (lines.Count == 0)
+            return new InventoryCsvImportResultDto(0, 0, new List<string>());
+
+        var errors = new List<string>();
+        var created = 0;
+        var now = DateTime.UtcNow;
+
+        // Salta la primera línea si parece cabecera (contiene "Nombre" o "Name").
+        var startIndex = (lines[0].Contains("Nombre", StringComparison.OrdinalIgnoreCase) || lines[0].Contains("Name", StringComparison.OrdinalIgnoreCase)) ? 1 : 0;
+
+        for (var lineIndex = startIndex; lineIndex < lines.Count; lineIndex++)
+        {
+            var cols = ParseCsvLine(lines[lineIndex]);
+            var rowNum = lineIndex + 1;
+            if (cols.Count == 0 || string.IsNullOrWhiteSpace(cols[0]))
+            {
+                errors.Add($"Fila {rowNum}: falta el nombre, se saltó.");
+                continue;
+            }
+
+            var name = cols[0].Trim();
+            var category = cols.Count > 1 ? cols[1].Trim() : null;
+            var quantity = cols.Count > 2 && int.TryParse(cols[2], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var q) ? q : 0;
+            var unit = cols.Count > 3 && !string.IsNullOrWhiteSpace(cols[3]) ? cols[3].Trim() : "unidad";
+            var minStock = cols.Count > 4 && int.TryParse(cols[4], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var m) ? m : 0;
+            var unitPrice = cols.Count > 5 && decimal.TryParse(cols[5], System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var p) ? p : 0m;
+            var status = cols.Count > 6 && !string.IsNullOrWhiteSpace(cols[6]) ? cols[6].Trim() : "Active";
+
+            _context.InventoryItems.Add(new InventoryItem
+            {
+                Id = Guid.NewGuid(),
+                AffiliateId = affiliateId,
+                Name = name,
+                Category = string.IsNullOrWhiteSpace(category) ? null : category,
+                Quantity = quantity,
+                Unit = unit,
+                MinStock = minStock,
+                UnitPrice = unitPrice,
+                Status = status,
+                CreatedAt = now,
+            });
+            created++;
+        }
+
+        if (created > 0)
+            await _context.SaveChangesAsync();
+
+        return new InventoryCsvImportResultDto(created, errors.Count, errors);
+    }
+
+    private static string CsvEscape(string value)
+    {
+        if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
+            return "\"" + value.Replace("\"", "\"\"") + "\"";
+        return value;
+    }
+
+    private static List<string> ParseCsvLine(string line)
+    {
+        var result = new List<string>();
+        var current = new System.Text.StringBuilder();
+        var inQuotes = false;
+        for (var i = 0; i < line.Length; i++)
+        {
+            var c = line[i];
+            if (inQuotes)
+            {
+                if (c == '"' && i + 1 < line.Length && line[i + 1] == '"') { current.Append('"'); i++; }
+                else if (c == '"') inQuotes = false;
+                else current.Append(c);
+            }
+            else
+            {
+                if (c == '"') inQuotes = true;
+                else if (c == ',') { result.Add(current.ToString()); current.Clear(); }
+                else current.Append(c);
+            }
+        }
+        result.Add(current.ToString());
+        return result;
     }
 
     public async Task<List<RecipeItemDto>> GetRecipeAsync(Guid affiliateId, Guid productId)

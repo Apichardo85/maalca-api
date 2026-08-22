@@ -217,10 +217,13 @@ public class AppDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(e => e.ProductId)
                   .OnDelete(DeleteBehavior.Cascade);
+            // Restrict (no Cascade): borrar un InventoryItem usado en receta debe fallar explícito
+            // (ver InventoryService.DeleteInventoryItemAsync), no desaparecer el vínculo en
+            // silencio dejando la receta corta sin avisar a nadie.
             entity.HasOne(e => e.InventoryItem)
                   .WithMany()
                   .HasForeignKey(e => e.InventoryItemId)
-                  .OnDelete(DeleteBehavior.Cascade);
+                  .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(e => new { e.ProductId, e.InventoryItemId }).IsUnique();
         });
 
@@ -260,6 +263,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Name).IsRequired();
             entity.Property(e => e.UnitPrice).HasPrecision(18, 2);
             entity.Property(e => e.DescriptionEn).HasMaxLength(1000);
+            entity.Property(e => e.Unit).HasMaxLength(20);
             entity.HasOne(e => e.Affiliate)
                   .WithMany(a => a.InventoryItems)
                   .HasForeignKey(e => e.AffiliateId)

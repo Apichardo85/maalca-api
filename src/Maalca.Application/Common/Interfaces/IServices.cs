@@ -65,6 +65,17 @@ public interface IInventoryService
     Task<bool> DeleteInventoryItemAsync(Guid affiliateId, Guid id);
     Task<InventoryMovement> CreateMovementAsync(Guid affiliateId, InventoryMovement movement);
 
+    /// <summary>Historial de movimientos de un item — antes se guardaban pero no había forma de
+    /// volver a verlos (solo existía el POST).</summary>
+    Task<PaginatedResponse<InventoryMovement>> GetMovementsAsync(Guid affiliateId, Guid itemId, int page = 1);
+
+    /// <summary>Valor total del inventario + lista de items en stock bajo — usado por Inventario
+    /// y por la alerta del Dashboard.</summary>
+    Task<InventorySummaryDto> GetSummaryAsync(Guid affiliateId);
+
+    Task<string> ExportCsvAsync(Guid affiliateId);
+    Task<InventoryCsvImportResultDto> ImportCsvAsync(Guid affiliateId, string csvContent);
+
     // Receta (Restaurante) — Product (plato) -> [InventoryItem, cantidad]. Reemplazo total de la
     // lista por PUT (no PATCH incremental) — más simple para el editor de plato, que siempre manda
     // el estado completo de la receta.

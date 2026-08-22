@@ -55,8 +55,14 @@ public record CatalogItemDto(
     bool? Popular = null,                       // Product only
     string? VideoUrl = null,                    // Product only — Menu Board Fase 9 Etapa A
     IReadOnlyList<string>? Images = null,       // Product/Service/InventoryItem — galería completa; Images[0] == ImageUrl
-    string? NameEn = null                       // Product/Service/InventoryItem — nombre en inglés, fallback a Name si null
+    string? NameEn = null,                      // Product/Service/InventoryItem — nombre en inglés, fallback a Name si null
+    IReadOnlyList<PublicIngredientDto>? Ingredients = null  // Product (Restaurante) — solo si tiene receta; null/vacío = sin receta definida
 );
+
+// Solo nombre — a propósito no expone Quantity (cantidad por porción, dato interno de receta)
+// ni nada de InventoryItem (stock, costo). El kiosko/tienda pública solo necesita saber qué
+// contiene el plato para mostrarlo y dejar que el cliente lo quite de su pedido si aplica.
+public record PublicIngredientDto(Guid InventoryItemId, string Name);
 
 public record PlanCapabilitiesDto(
     bool OnlinePayments,

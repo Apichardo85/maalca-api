@@ -31,6 +31,9 @@ public class InventoryItem : AuditableEntity
     public int Quantity { get; set; } = 0;
     public int MinStock { get; set; } = 0;
     public decimal UnitPrice { get; set; }
+    /// <summary>Unidad de medida ("unidad", "kg", "lb", "litro", "caja", ...) — solo informativa,
+    /// no afecta el cálculo de stock (Quantity sigue siendo un entero simple).</summary>
+    public string Unit { get; set; } = "unidad";
     public string Status { get; set; } = "Active";
     public string? ImageUrl { get; set; }
     public string? Images { get; set; }

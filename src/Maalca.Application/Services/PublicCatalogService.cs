@@ -59,6 +59,27 @@ public class PublicCatalogService : IPublicCatalogService
                 .OrderBy(p => p.SortOrder).ThenBy(p => p.Name)
                 .ToListAsync();
             items = products.Select(CatalogItemMapper.FromProduct).ToList();
+
+            // Receta pública (solo lectura, solo nombres) — para que el kiosko/página pública
+            // pueda mostrar "contiene: X, Y" y dejar al cliente destildar lo que no quiera.
+            // Un solo query en batch para todos los platos de esta carga, no N+1 por item.
+            var productIds = products.Select(p => p.Id).ToList();
+            if (productIds.Count > 0)
+            {
+                var ingredientsByProduct = (await _db.ProductIngredients
+                    .Where(pi => productIds.Contains(pi.ProductId) && pi.InventoryItem != null)
+                    .Include(pi => pi.InventoryItem)
+                    .Select(pi => new { pi.ProductId, pi.InventoryItemId, Name = pi.InventoryItem!.Name })
+                    .ToListAsync())
+                    .GroupBy(x => x.ProductId)
+                    .ToDictionary(g => g.Key, g => (IReadOnlyList<PublicIngredientDto>)g
+                        .Select(x => new PublicIngredientDto(x.InventoryItemId, x.Name))
+                        .ToList());
+
+                items = items.Select(i => ingredientsByProduct.TryGetValue(i.Id, out var ings)
+                    ? i with { Ingredients = ings }
+                    : i).ToList();
+            }
         }
         else
         {

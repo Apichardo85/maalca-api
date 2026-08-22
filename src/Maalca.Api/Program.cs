@@ -1059,10 +1059,55 @@ app.MapDelete("/api/affiliates/{affiliateId:guid}/inventory/{id:guid}", async (H
         return Results.Forbid();
     if (ctx.User.FindFirst("role")?.Value == "Staff")
         return Results.Forbid();
-    var result = await inventoryService.DeleteInventoryItemAsync(affiliateId, id);
-    if (!result)
-        return Results.NotFound();
-    return Results.NoContent();
+    try
+    {
+        var result = await inventoryService.DeleteInventoryItemAsync(affiliateId, id);
+        if (!result)
+            return Results.NotFound();
+        return Results.NoContent();
+    }
+    catch (InvalidOperationException ex)
+    {
+        // En uso en una receta — 409 Conflict, no 400 (no es un dato inválido, es un conflicto de estado).
+        return Results.Conflict(new { error = new { code = "IN_USE", message = ex.Message } });
+    }
+});
+
+app.MapGet("/api/affiliates/{affiliateId:guid}/inventory/summary", async (HttpContext ctx, IInventoryService inventoryService, Guid affiliateId) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    var result = await inventoryService.GetSummaryAsync(affiliateId);
+    return Results.Ok(result);
+});
+
+app.MapGet("/api/affiliates/{affiliateId:guid}/inventory/{itemId:guid}/movements", async (HttpContext ctx, IInventoryService inventoryService, Guid affiliateId, Guid itemId, int page = 1) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    var result = await inventoryService.GetMovementsAsync(affiliateId, itemId, page);
+    return Results.Ok(result);
+});
+
+app.MapGet("/api/affiliates/{affiliateId:guid}/inventory/export", async (HttpContext ctx, IInventoryService inventoryService, Guid affiliateId) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    var csv = await inventoryService.ExportCsvAsync(affiliateId);
+    var bytes = System.Text.Encoding.UTF8.GetBytes(csv);
+    return Results.File(bytes, "text/csv", "inventario.csv");
+});
+
+app.MapPost("/api/affiliates/{affiliateId:guid}/inventory/import", async (HttpContext ctx, IInventoryService inventoryService, Guid affiliateId, ImportInventoryCsvRequest request) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    if (string.IsNullOrWhiteSpace(request.CsvContent))
+        return Results.BadRequest(new { error = new { code = "EMPTY_CSV", message = "El archivo CSV está vacío." } });
+    var result = await inventoryService.ImportCsvAsync(affiliateId, request.CsvContent);
+    return Results.Ok(result);
 });
 
 app.MapPost("/api/affiliates/{affiliateId:guid}/inventory/movements", async (HttpContext ctx, IInventoryService inventoryService, Guid affiliateId, InventoryMovement movement) =>
