@@ -75,6 +75,7 @@ builder.Services.AddScoped<IStripeConnectService, StripeConnectService>();
 builder.Services.AddScoped<IOrderNotificationService, OrderNotificationService>();
 builder.Services.AddScoped<IAppointmentNotificationService, AppointmentNotificationService>();
 builder.Services.AddScoped<IInvoiceNotificationService, InvoiceNotificationService>();
+builder.Services.AddScoped<IProposalNotificationService, ProposalNotificationService>();
 builder.Services.AddScoped<Maalca.Application.Common.Interfaces.IOrderRealtimeNotifier, Maalca.Api.Hubs.SignalROrderRealtimeNotifier>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IScreenAdService, ScreenAdService>();
@@ -860,15 +861,24 @@ app.MapGet("/api/public/proposals/{token:guid}", async (IProposalService proposa
         expiresAt = result.ExpiresAt,
         acceptedAt = result.AcceptedAt,
         acceptedByName = result.AcceptedByName,
+        createdAt = result.CreatedAt,
+        attachmentUrl = result.AttachmentUrl,
+        attachmentName = result.AttachmentName,
     });
 })
 .AllowAnonymous();
 
-app.MapPost("/api/public/proposals/{token:guid}/accept", async (IProposalService proposalService, Guid token, AcceptProposalRequest request) =>
+app.MapPost("/api/public/proposals/{token:guid}/accept", async (HttpContext ctx, IProposalService proposalService, Guid token, AcceptProposalRequest request) =>
 {
     try
     {
-        var result = await proposalService.AcceptPublicProposalAsync(token, request.SignedByName);
+        // IP/user-agent capturados del propio HttpContext (tarea #335) — nunca del body, que el
+        // cliente podría falsificar. X-Forwarded-For primero porque en Railway/detrás de proxy
+        // RemoteIpAddress es la IP interna del balanceador, no la del visitante real.
+        var ip = ctx.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
+                 ?? ctx.Connection.RemoteIpAddress?.ToString();
+        var userAgent = ctx.Request.Headers.UserAgent.ToString();
+        var result = await proposalService.AcceptPublicProposalAsync(token, request.SignedByName, ip, string.IsNullOrWhiteSpace(userAgent) ? null : userAgent);
         return Results.Ok(new { status = result.Status, acceptedAt = result.AcceptedAt, acceptedByName = result.AcceptedByName });
     }
     catch (KeyNotFoundException)

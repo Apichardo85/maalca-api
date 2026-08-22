@@ -198,11 +198,13 @@ public class ProposalService : IProposalService
 {
     private readonly AppDbContext _context;
     private readonly ICustomerService _customerService;
+    private readonly IProposalNotificationService _notifications;
 
-    public ProposalService(AppDbContext context, ICustomerService customerService)
+    public ProposalService(AppDbContext context, ICustomerService customerService, IProposalNotificationService notifications)
     {
         _context = context;
         _customerService = customerService;
+        _notifications = notifications;
     }
 
     public async Task<List<Proposal>> GetProposalsAsync(Guid affiliateId)
@@ -218,8 +220,11 @@ public class ProposalService : IProposalService
         proposal.Token = Guid.NewGuid();
         proposal.Status = "Draft";
         proposal.CreatedAt = DateTime.UtcNow;
+        // Bug real: truncar a medianoche del dia elegido dejaba la propuesta expirada casi de
+        // inmediato (si "hoy" ya paso la medianoche UTC, ExpiresAt < UtcNow desde el momento de
+        // crearla). Fin del dia elegido, no el inicio.
         if (proposal.ExpiresAt.HasValue)
-            proposal.ExpiresAt = DateTime.SpecifyKind(proposal.ExpiresAt.Value.Date, DateTimeKind.Utc);
+            proposal.ExpiresAt = DateTime.SpecifyKind(proposal.ExpiresAt.Value.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc);
 
         // Tarea #244 — si el negocio dejó un teléfono, vincula (o crea) el Customer para que,
         // si el prospecto convierte, su historial no arranque de cero.
@@ -231,17 +236,25 @@ public class ProposalService : IProposalService
         return proposal;
     }
 
-    // "Enviar" acá no manda un correo real (a diferencia de invites/reminders) — el dueño copia
-    // el link público (/propuesta/{token}) y lo comparte por donde prefiera (WhatsApp, email
-    // propio, etc.). Solo marca el estado para que el cliente pueda aceptarla; antes de esto
-    // AcceptPublicProposalAsync la rechaza por seguir en Draft.
+    // "Enviar" marca el estado para que el cliente pueda aceptarla (antes de esto,
+    // AcceptPublicProposalAsync la rechaza por seguir en Draft) y, si el cliente tiene correo,
+    // dispara un email real con el link — antes solo quedaba en manos del dueño copiarlo y
+    // mandarlo por su cuenta. Si no hay correo, el link se sigue pudiendo copiar/mandar por
+    // WhatsApp igual que antes.
     public async Task<Proposal?> SendProposalAsync(Guid affiliateId, Guid id)
     {
-        var proposal = await _context.Proposals.FirstOrDefaultAsync(p => p.Id == id && p.AffiliateId == affiliateId);
+        var proposal = await _context.Proposals
+            .Include(p => p.Affiliate)
+            .FirstOrDefaultAsync(p => p.Id == id && p.AffiliateId == affiliateId);
         if (proposal is null) return null;
         proposal.Status = "Sent";
         proposal.SentAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
+
+        var webUrl = Environment.GetEnvironmentVariable("MAALCA_WEB_URL")?.TrimEnd('/') ?? "https://maalca.com";
+        var proposalLink = $"{webUrl}/propuesta/{proposal.Token}";
+        await _notifications.NotifyProposalSentAsync(proposal, proposal.Affiliate?.Name ?? "", proposalLink);
+
         return proposal;
     }
 
@@ -259,9 +272,11 @@ public class ProposalService : IProposalService
             .Include(p => p.Affiliate)
             .FirstOrDefaultAsync(p => p.Token == token);
 
-    public async Task<Proposal> AcceptPublicProposalAsync(Guid token, string signedByName)
+    public async Task<Proposal> AcceptPublicProposalAsync(Guid token, string signedByName, string? ip, string? userAgent)
     {
-        var proposal = await _context.Proposals.FirstOrDefaultAsync(p => p.Token == token);
+        var proposal = await _context.Proposals
+            .Include(p => p.Affiliate)
+            .FirstOrDefaultAsync(p => p.Token == token);
         if (proposal is null)
             throw new KeyNotFoundException();
         if (proposal.Status != "Sent")
@@ -278,7 +293,13 @@ public class ProposalService : IProposalService
         proposal.Status = "Accepted";
         proposal.AcceptedAt = DateTime.UtcNow;
         proposal.AcceptedByName = signedByName.Trim();
+        proposal.AcceptedIp = ip;
+        proposal.AcceptedUserAgent = userAgent;
         await _context.SaveChangesAsync();
+
+        if (proposal.Affiliate is not null)
+            await _notifications.NotifyProposalAcceptedAsync(proposal, proposal.Affiliate);
+
         return proposal;
     }
 }

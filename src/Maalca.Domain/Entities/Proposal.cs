@@ -35,6 +35,20 @@ public class Proposal : AuditableEntity
     // CustomerPhone. Nullable: una propuesta a un prospecto sin teléfono aún no puede vincularse.
     public Guid? CustomerId { get; set; }
 
+    // Documento adjunto (tarea #336) — PDF/imagen que el negocio sube al crear la propuesta
+    // (contrato, cotización detallada, referencia visual). Sube a Supabase Storage igual que
+    // las imágenes de catálogo; acá solo se guarda la URL pública + nombre original para mostrar
+    // el link "Ver documento adjunto" tanto en el dashboard como en la página pública.
+    public string? AttachmentUrl { get; set; }
+    public string? AttachmentName { get; set; }
+
+    // Auditoría de firma (tarea #334) — capturados server-side desde HttpContext en el momento
+    // de aceptar (nunca confiados del body del cliente), para dejar rastro de quién/desde dónde
+    // se aceptó. No es una firma certificada legalmente, pero refuerza la trazabilidad de
+    // "acepto escribiendo mi nombre".
+    public string? AcceptedIp { get; set; }
+    public string? AcceptedUserAgent { get; set; }
+
     public Affiliate? Affiliate { get; set; }
     public Customer? Customer { get; set; }
 }

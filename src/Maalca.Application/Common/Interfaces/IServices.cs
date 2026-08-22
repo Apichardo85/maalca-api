@@ -179,7 +179,9 @@ public interface IProposalService
     Task<Proposal?> SendProposalAsync(Guid affiliateId, Guid id);
     Task<bool> DeleteProposalAsync(Guid affiliateId, Guid id);
     Task<Proposal?> GetPublicProposalAsync(Guid token);
-    Task<Proposal> AcceptPublicProposalAsync(Guid token, string signedByName);
+    // ip/userAgent: capturados server-side por el endpoint desde HttpContext (tarea #335) —
+    // nunca confiados del body del cliente. Nullable porque algunos entornos/proxies no los exponen.
+    Task<Proposal> AcceptPublicProposalAsync(Guid token, string signedByName, string? ip, string? userAgent);
 }
 
 public interface ITableReservationService
