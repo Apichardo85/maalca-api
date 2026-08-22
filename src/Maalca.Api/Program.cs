@@ -60,6 +60,7 @@ builder.Services.AddScoped<ITimeClockService, TimeClockService>();
 builder.Services.AddScoped<IStaffTaskService, StaffTaskService>();
 builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddScoped<IInvoiceService, InvoiceService>();
+builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddScoped<Maalca.Application.Common.Interfaces.IQueueRealtimeNotifier, Maalca.Api.Hubs.SignalRQueueRealtimeNotifier>();
 builder.Services.AddScoped<IMetricsService, MetricsService>();
 builder.Services.AddScoped<ILeadService, LeadService>();
@@ -1025,11 +1026,13 @@ app.MapDelete("/api/affiliates/{affiliateId:guid}/services/{id:guid}", async (IS
 // Antes sin ningún chequeo de pertenencia (igual que /team antes del fix) — mismo gating que el
 // resto de /api/affiliates/{id}/...: lectura exige ser el afiliado activo del usuario; escritura
 // además exige no ser rol Staff.
-app.MapGet("/api/affiliates/{affiliateId:guid}/inventory", async (HttpContext ctx, IInventoryService inventoryService, Guid affiliateId, string? category = null, string? status = null, int page = 1) =>
+app.MapGet("/api/affiliates/{affiliateId:guid}/inventory", async (
+    HttpContext ctx, IInventoryService inventoryService, Guid affiliateId,
+    string? category = null, string? status = null, int page = 1, string? search = null, bool? lowStock = null) =>
 {
     if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
         return Results.Forbid();
-    var result = await inventoryService.GetInventoryAsync(affiliateId, category, status, page);
+    var result = await inventoryService.GetInventoryAsync(affiliateId, category, status, page, search, lowStock);
     return Results.Ok(result);
 });
 
@@ -1499,7 +1502,9 @@ app.MapPost("/api/affiliates/{affiliateId:guid}/invoices", async (HttpContext ct
     var items = request.Items
         .Select(i => new InvoiceItem { Description = i.Description, Quantity = i.Quantity, UnitPrice = i.UnitPrice })
         .ToList();
-    var result = await invoiceService.CreateInvoiceAsync(affiliateId, invoice, items);
+    var actorId = ctx.User.FindFirst("sub")?.Value;
+    var actorName = ctx.User.FindFirst("email")?.Value;
+    var result = await invoiceService.CreateInvoiceAsync(affiliateId, invoice, items, request.ReplacesInvoiceId, actorId, actorName);
     return Results.Created($"/api/affiliates/{affiliateId}/invoices/{result.Id}", result);
 });
 
@@ -1509,7 +1514,9 @@ app.MapPut("/api/affiliates/{affiliateId:guid}/invoices/{id:guid}", async (HttpC
         return Results.Forbid();
     if (ctx.User.FindFirst("role")?.Value == "Staff")
         return Results.Forbid();
-    var result = await invoiceService.UpdateInvoiceAsync(affiliateId, id, invoice);
+    var actorId = ctx.User.FindFirst("sub")?.Value;
+    var actorName = ctx.User.FindFirst("email")?.Value;
+    var result = await invoiceService.UpdateInvoiceAsync(affiliateId, id, invoice, actorId, actorName);
     if (result == null)
         return Results.NotFound();
     return Results.Ok(result);
@@ -1527,6 +1534,33 @@ app.MapDelete("/api/affiliates/{affiliateId:guid}/invoices/{id:guid}", async (Ht
     return Results.NoContent();
 });
 
+// Anular — no se edita ni se borra el original (documento financiero). Para "corregir" algo el
+// dueño anula esta y crea una nueva factura con replacesInvoiceId (ver POST /invoices arriba).
+app.MapPost("/api/affiliates/{affiliateId:guid}/invoices/{id:guid}/void", async (
+    HttpContext ctx, IInvoiceService invoiceService, Guid affiliateId, Guid id, VoidInvoiceRequest request) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    if (string.IsNullOrWhiteSpace(request.Reason))
+        return Results.BadRequest(new { error = new { code = "REASON_REQUIRED", message = "Indica el motivo de la anulación." } });
+
+    var actorId = ctx.User.FindFirst("sub")?.Value;
+    var actorName = ctx.User.FindFirst("email")?.Value;
+    try
+    {
+        var result = await invoiceService.VoidInvoiceAsync(affiliateId, id, request.Reason.Trim(), actorId, actorName);
+        if (result is null)
+            return Results.NotFound();
+        return Results.Ok(result);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.Conflict(new { error = new { code = "CONFLICT", message = ex.Message } });
+    }
+});
+
 // Pago real por Stripe Connect (direct charge en la cuenta del afiliado) — genera un Checkout
 // Session hospedado y devuelve la URL para copiar/mandar por WhatsApp o email (ver
 // InvoiceNotificationService). "Marcar pagada" manual sigue existiendo aparte (PUT de arriba),
@@ -1539,9 +1573,11 @@ app.MapPost("/api/affiliates/{affiliateId:guid}/invoices/{id:guid}/checkout", as
     if (ctx.User.FindFirst("role")?.Value == "Staff")
         return Results.Forbid();
 
+    var actorId = ctx.User.FindFirst("sub")?.Value;
+    var actorName = ctx.User.FindFirst("email")?.Value;
     try
     {
-        var checkoutUrl = await invoiceService.CreateInvoiceCheckoutAsync(affiliateId, id, request.SuccessUrl, request.CancelUrl);
+        var checkoutUrl = await invoiceService.CreateInvoiceCheckoutAsync(affiliateId, id, request.SuccessUrl, request.CancelUrl, actorId, actorName);
         if (checkoutUrl is null)
             return Results.NotFound();
         return Results.Ok(new { checkoutUrl });
@@ -1550,6 +1586,21 @@ app.MapPost("/api/affiliates/{affiliateId:guid}/invoices/{id:guid}/checkout", as
     {
         return Results.Conflict(new { error = new { code = "CONFLICT", message = ex.Message } });
     }
+});
+
+// ============ AUDIT LOG ENDPOINTS ============
+// Arranca instrumentado en Facturación (crear/cobrar/anular una factura); cualquier otro
+// servicio puede sumarse llamando IAuditLogService.LogAsync sin tocar este endpoint — la lista
+// ya es transversal a toda la actividad del afiliado (entityType es opcional).
+app.MapGet("/api/affiliates/{affiliateId:guid}/audit-logs", async (
+    HttpContext ctx, IAuditLogService auditLogService, Guid affiliateId, string? entityType = null, Guid? entityId = null, int page = 1) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    var result = await auditLogService.GetLogsAsync(affiliateId, entityType, entityId, page);
+    return Results.Ok(result);
 });
 
 // ============ METRICS ENDPOINTS ============

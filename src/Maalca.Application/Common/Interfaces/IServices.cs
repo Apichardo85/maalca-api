@@ -58,7 +58,7 @@ public interface IServiceService
 
 public interface IInventoryService
 {
-    Task<PaginatedResponse<InventoryItem>> GetInventoryAsync(Guid affiliateId, string? category = null, string? status = null, int page = 1);
+    Task<PaginatedResponse<InventoryItem>> GetInventoryAsync(Guid affiliateId, string? category = null, string? status = null, int page = 1, string? search = null, bool? lowStock = null);
     Task<InventoryItem?> GetInventoryItemAsync(Guid affiliateId, Guid id);
     Task<InventoryItem> CreateInventoryItemAsync(Guid affiliateId, InventoryItem item);
     Task<InventoryItem?> UpdateInventoryItemAsync(Guid affiliateId, Guid id, InventoryItem item);
@@ -134,8 +134,8 @@ public interface IInvoiceService
 {
     Task<PaginatedResponse<Invoice>> GetInvoicesAsync(Guid affiliateId, string? status = null, DateTime? dateFrom = null, DateTime? dateTo = null);
     Task<Invoice?> GetInvoiceAsync(Guid affiliateId, Guid id);
-    Task<Invoice> CreateInvoiceAsync(Guid affiliateId, Invoice invoice, List<InvoiceItem>? items = null);
-    Task<Invoice?> UpdateInvoiceAsync(Guid affiliateId, Guid id, Invoice invoice);
+    Task<Invoice> CreateInvoiceAsync(Guid affiliateId, Invoice invoice, List<InvoiceItem>? items = null, Guid? replacesInvoiceId = null, string? actorId = null, string? actorName = null);
+    Task<Invoice?> UpdateInvoiceAsync(Guid affiliateId, Guid id, Invoice invoice, string? actorId = null, string? actorName = null);
     Task<bool> DeleteInvoiceAsync(Guid affiliateId, Guid id);
 
     /// <summary>
@@ -145,11 +145,25 @@ public interface IInvoiceService
     /// Null si la factura no existe; lanza InvalidOperationException si el afiliado no tiene
     /// Stripe Connect activo (mensaje pensado para mostrarse tal cual al usuario).
     /// </summary>
-    Task<string?> CreateInvoiceCheckoutAsync(Guid affiliateId, Guid invoiceId, string successUrl, string cancelUrl);
+    Task<string?> CreateInvoiceCheckoutAsync(Guid affiliateId, Guid invoiceId, string successUrl, string cancelUrl, string? actorId = null, string? actorName = null);
 
     /// <summary>Confirma el pago desde el webhook de Stripe Connect (checkout.session.completed) —
     /// fuente de verdad real, ver StripeConnectService.HandleWebhookEventAsync.</summary>
     Task ConfirmFromWebhookAsync(string checkoutSessionId, string? paymentIntentId);
+
+    /// <summary>Anula una factura (no se borra ni se edita el original — documento financiero).
+    /// Queda Status=Cancelled + VoidedAt/VoidReason. Null si no existe; InvalidOperationException
+    /// si ya estaba anulada.</summary>
+    Task<Invoice?> VoidInvoiceAsync(Guid affiliateId, Guid id, string reason, string? actorId = null, string? actorName = null);
+}
+
+public interface IAuditLogService
+{
+    /// <summary>Registra una acción en el log de actividad. No lanza excepciones — un fallo acá
+    /// nunca debe tumbar la operación real que se está auditando (se traga el error y sigue).</summary>
+    Task LogAsync(Guid? affiliateId, string action, string entityType, Guid? entityId, string description, string? actorId = null, string? actorName = null, object? metadata = null);
+
+    Task<PaginatedResponse<AuditLogEntry>> GetLogsAsync(Guid affiliateId, string? entityType = null, Guid? entityId = null, int page = 1, int pageSize = 50);
 }
 
 public interface IMetricsService

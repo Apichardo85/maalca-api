@@ -91,6 +91,13 @@ public class InventoryItem : AuditableEntity
     public int SortOrder { get; set; } = 0;
     public bool IsDemo { get; set; } = false;
 
+    /// <summary>Código de barra real del producto (UPC/EAN escaneado o tecleado a mano) —
+    /// opcional, no todos los productos de fábrica traen uno.</summary>
+    public string? Barcode { get; set; }
+    /// <summary>Código interno propio, siempre generado automáticamente al crear el item (nunca
+    /// queda vacío) para poder identificarlo aunque no tenga Barcode de fábrica.</summary>
+    public string? InternalCode { get; set; }
+
     public Affiliate? Affiliate { get; set; }
     public ICollection<InventoryMovement> Movements { get; set; } = new List<InventoryMovement>();
 }
@@ -206,6 +213,13 @@ public class Invoice : AuditableEntity
     public string? StripeCheckoutSessionId { get; set; }
     public string? StripePaymentIntentId { get; set; }
 
+    // Anulación — el original nunca se edita ni se borra (es un documento financiero). Para
+    // "corregir" algo se anula esta y se crea una nueva factura enlazada en ambos sentidos.
+    public DateTime? VoidedAt { get; set; }
+    public string? VoidReason { get; set; }
+    public Guid? ReplacesInvoiceId { get; set; }
+    public Guid? ReplacedByInvoiceId { get; set; }
+
     public Affiliate? Affiliate { get; set; }
     public Customer? Customer { get; set; }
     public ICollection<InvoiceItem> Items { get; set; } = new List<InvoiceItem>();
@@ -261,4 +275,21 @@ public class Lead : BaseEntity
     public string? ProjectType { get; set; }
     public string? Message { get; set; }
     public string Status { get; set; } = "New"; // New, Contacted, Qualified, Converted, Lost
+}
+
+/// <summary>Log de actividad transversal — quién hizo qué, en qué módulo, cuándo. Arranca
+/// instrumentado en Facturación (crear/cobrar/anular una factura); cualquier otro servicio puede
+/// sumarse llamando IAuditLogService.LogAsync sin tocar el esquema.</summary>
+public class AuditLogEntry : BaseEntity
+{
+    public Guid? AffiliateId { get; set; }
+    public string? ActorId { get; set; }
+    public string? ActorName { get; set; }
+    public string Action { get; set; } = string.Empty;      // ej. "invoice.created", "invoice.voided"
+    public string EntityType { get; set; } = string.Empty;  // ej. "Invoice"
+    public Guid? EntityId { get; set; }
+    public string Description { get; set; } = string.Empty; // texto legible para mostrar directo
+    public string? MetadataJson { get; set; }
+
+    public Affiliate? Affiliate { get; set; }
 }
