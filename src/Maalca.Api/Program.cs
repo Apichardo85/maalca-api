@@ -2283,6 +2283,120 @@ app.MapGet("/api/affiliates/{id}/metrics/detailed", async (HttpContext ctx, AppD
     return Results.Ok(new DetailedMetricsResponse(dailyCounts, byCanal, conversion));
 });
 
+// Reportes ampliados de Estadísticas — ventas por día/canal/método de pago, top productos,
+// clientes nuevos vs. recurrentes, estado de facturas, actividad del equipo. Complementa (no
+// reemplaza) metrics/detailed, que se queda solo con visitas/QR/canales/conversión.
+app.MapGet("/api/affiliates/{id}/metrics/reports", async (HttpContext ctx, AppDbContext db, Guid id, int days = 30) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    var effectiveDays = days > 0 ? days : 30;
+    var startDate = DateTime.UtcNow.Date.AddDays(-(effectiveDays - 1));
+
+    var paidOrders = await db.Orders
+        .Where(o => o.AffiliateId == id && o.Status == OrderStatus.Paid && o.CreatedAt >= startDate)
+        .Select(o => new { o.CreatedAt, o.Total, o.Currency, o.Channel, o.PaymentMethod, o.ItemsJson })
+        .ToListAsync();
+
+    // Ingresos por día — mismo patrón día-por-día que metrics/detailed (rellena huecos con 0 en
+    // vez de saltarse días sin ventas, así el gráfico no distorsiona la escala).
+    var revenueByDayMap = paidOrders
+        .GroupBy(o => o.CreatedAt.Date)
+        .ToDictionary(g => g.Key, g => (Revenue: g.Sum(x => x.Total), Count: g.Count()));
+    var revenueByDay = new List<RevenueDayDto>();
+    for (var day = startDate; day <= DateTime.UtcNow.Date; day = day.AddDays(1))
+    {
+        revenueByDayMap.TryGetValue(day, out var v);
+        revenueByDay.Add(new RevenueDayDto(day.ToString("yyyy-MM-dd"), v.Revenue, v.Count));
+    }
+
+    // Top productos/servicios — ItemsJson es una copia congelada del carrito al momento del
+    // pedido (ver Order.cs), se parsea en memoria porque no hay forma de agregar JSON en SQL
+    // de forma portable entre el Postgres local y el de Railway.
+    var itemTotals = new Dictionary<string, (int Qty, decimal Revenue)>();
+    foreach (var order in paidOrders)
+    {
+        foreach (var item in JsonArrayField.Parse<OrderItemDto>(order.ItemsJson))
+        {
+            itemTotals.TryGetValue(item.Name, out var acc);
+            itemTotals[item.Name] = (acc.Qty + item.Qty, acc.Revenue + item.Price * item.Qty);
+        }
+    }
+    var topItems = itemTotals
+        .Select(kv => new TopItemDto(kv.Key, kv.Value.Qty, kv.Value.Revenue))
+        .OrderByDescending(t => t.Revenue)
+        .Take(8)
+        .ToList();
+
+    var byChannel = paidOrders
+        .GroupBy(o => o.Channel)
+        .Select(g => new ChannelBreakdownDto(g.Key, g.Sum(x => x.Total), g.Count()))
+        .OrderByDescending(c => c.Revenue)
+        .ToList();
+
+    var byPaymentMethod = paidOrders
+        .Where(o => !string.IsNullOrEmpty(o.PaymentMethod))
+        .GroupBy(o => o.PaymentMethod!)
+        .Select(g => new PaymentMethodDto(g.Key, g.Count(), g.Sum(x => x.Total)))
+        .OrderByDescending(p => p.Revenue)
+        .ToList();
+
+    // Clientes activos en el período: TotalVisits se incrementa al completar una visita (tarea
+    // #245) — 1 sola visita total todavía es "nuevo", más de una ya es recurrente.
+    var activeCustomers = await db.Customers
+        .Where(c => c.AffiliateId == id && c.LastVisit != null && c.LastVisit >= startDate)
+        .Select(c => c.TotalVisits)
+        .ToListAsync();
+    var customerSegment = new CustomerSegmentDto(
+        NewCustomers: activeCustomers.Count(v => v <= 1),
+        ReturningCustomers: activeCustomers.Count(v => v > 1)
+    );
+
+    // Snapshot completo de facturas — no se filtra por período: una factura Pendiente o Vencida
+    // sigue siéndolo sin importar cuándo se emitió, cortar por fecha la haría desaparecer sola.
+    var invoiceStatus = await db.Invoices
+        .Where(i => i.AffiliateId == id)
+        .GroupBy(i => i.Status)
+        .Select(g => new { Status = g.Key, Count = g.Count(), Amount = g.Sum(i => i.Total) })
+        .ToListAsync();
+
+    // Actividad del equipo — citas completadas (Agenda) + turnos atendidos (Fila) por miembro,
+    // en el mismo período. Solo aplica a negocios con esos módulos; si no hay datos la lista
+    // sale vacía y el frontend oculta la sección.
+    var completedAppointments = await db.Appointments
+        .Where(a => a.AffiliateId == id && a.Status == "Completed" && a.AssignedToId != null && a.Date >= startDate)
+        .Select(a => a.AssignedToId!.Value)
+        .ToListAsync();
+    var completedQueue = await db.QueueEntries
+        .Where(q => q.AffiliateId == id && q.Status == "completed" && q.AssignedToId != null && q.CreatedAt >= startDate)
+        .Select(q => q.AssignedToId!.Value)
+        .ToListAsync();
+    var staffCounts = completedAppointments.Concat(completedQueue)
+        .GroupBy(memberId => memberId)
+        .ToDictionary(g => g.Key, g => g.Count());
+    var staffIds = staffCounts.Keys.ToList();
+    var staffNames = staffIds.Count > 0
+        ? await db.TeamMembers.Where(t => staffIds.Contains(t.Id)).ToDictionaryAsync(t => t.Id, t => t.Name)
+        : new Dictionary<Guid, string>();
+    var staffActivity = staffCounts
+        .Select(kv => new StaffActivityDto(staffNames.TryGetValue(kv.Key, out var n) ? n : "—", kv.Value))
+        .OrderByDescending(s => s.Count)
+        .ToList();
+
+    return Results.Ok(new BusinessReportsResponse(
+        revenueByDay,
+        topItems,
+        byChannel,
+        byPaymentMethod,
+        customerSegment,
+        invoiceStatus.Select(x => new InvoiceStatusDto(x.Status, x.Count, x.Amount)).ToList(),
+        staffActivity,
+        paidOrders.FirstOrDefault()?.Currency ?? "USD"
+    ));
+});
+
 // ============ SPACE DASHBOARD AGGREGATOR ============
 app.MapGet("/api/space/{slug}", async (
     HttpContext ctx,
