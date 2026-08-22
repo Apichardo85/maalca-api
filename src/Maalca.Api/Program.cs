@@ -56,6 +56,8 @@ builder.Services.AddScoped<IServiceService, ServiceService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<IQueueService, QueueService>();
 builder.Services.AddScoped<ITeamService, TeamService>();
+builder.Services.AddScoped<ITimeClockService, TimeClockService>();
+builder.Services.AddScoped<IStaffTaskService, StaffTaskService>();
 builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddScoped<IInvoiceService, InvoiceService>();
 builder.Services.AddScoped<Maalca.Application.Common.Interfaces.IQueueRealtimeNotifier, Maalca.Api.Hubs.SignalRQueueRealtimeNotifier>();
@@ -1246,6 +1248,177 @@ app.MapDelete("/api/affiliates/{affiliateId:guid}/team/{id:guid}", async (HttpCo
     if (ctx.User.FindFirst("role")?.Value == "Staff")
         return Results.Forbid();
     var result = await teamService.DeleteTeamMemberAsync(affiliateId, id);
+    if (!result)
+        return Results.NotFound();
+    return Results.NoContent();
+});
+
+// ============ GESTIÓN DE EQUIPO: PONCHE + NÓMINA + TAREAS ============
+// Módulo "workforce" — ponche de entrada/salida por PIN (kiosko público, sin login de
+// empleado), corrección manual, reporte de nómina (horas × tarifa) y tareas asignadas.
+
+app.MapPost("/api/affiliates/{affiliateId:guid}/team/{teamMemberId:guid}/pin", async (
+    HttpContext ctx, ITimeClockService timeClockService, Guid affiliateId, Guid teamMemberId) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    try
+    {
+        var pin = await timeClockService.RegeneratePinAsync(affiliateId, teamMemberId);
+        return Results.Ok(new { pin });
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+});
+
+app.MapGet("/api/affiliates/{affiliateId:guid}/time-entries", async (
+    HttpContext ctx, ITimeClockService timeClockService, Guid affiliateId, Guid? teamMemberId, DateTime? from, DateTime? to) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    // Horas/nómina son datos sensibles del equipo — a diferencia de /team (que Staff sí puede
+    // leer), esto queda reservado a Owner/Manager.
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    var result = await timeClockService.GetTimeEntriesAsync(affiliateId, teamMemberId, from, to);
+    return Results.Ok(result);
+});
+
+app.MapPatch("/api/affiliates/{affiliateId:guid}/time-entries/{id:guid}", async (
+    HttpContext ctx, ITimeClockService timeClockService, Guid affiliateId, Guid id, UpdateTimeEntryRequest request) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    var result = await timeClockService.UpdateTimeEntryAsync(affiliateId, id, request);
+    if (result == null)
+        return Results.NotFound();
+    return Results.Ok(result);
+});
+
+app.MapDelete("/api/affiliates/{affiliateId:guid}/time-entries/{id:guid}", async (
+    HttpContext ctx, ITimeClockService timeClockService, Guid affiliateId, Guid id) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    var result = await timeClockService.DeleteTimeEntryAsync(affiliateId, id);
+    if (!result)
+        return Results.NotFound();
+    return Results.NoContent();
+});
+
+app.MapGet("/api/affiliates/{affiliateId:guid}/payroll", async (
+    HttpContext ctx, ITimeClockService timeClockService, Guid affiliateId, DateTime from, DateTime to) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    var result = await timeClockService.GetPayrollAsync(affiliateId, from, to);
+    return Results.Ok(result);
+});
+
+// Ponche público (sin login) — la posesión del PIN + estar frente al kiosko del negocio es la
+// autenticación, mismo criterio que el resto de los flujos públicos del proyecto.
+app.MapGet("/api/public/affiliates/{slug}/ponche-team", async (ITimeClockService timeClockService, string slug) =>
+{
+    var result = await timeClockService.GetPonchePickerAsync(slug);
+    if (result == null)
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
+    return Results.Ok(result);
+})
+.AllowAnonymous();
+
+app.MapPost("/api/public/affiliates/{slug}/ponche/{teamMemberId:guid}/clock", async (
+    ITimeClockService timeClockService, string slug, Guid teamMemberId, ClockRequest request) =>
+{
+    try
+    {
+        var result = await timeClockService.ClockAsync(slug, teamMemberId, request.Pin);
+        return Results.Ok(result);
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "No encontrado." } });
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_PIN", message = ex.Message } });
+    }
+})
+.AllowAnonymous();
+
+// ── Tareas asignadas ──────────────────────────────────────────────
+app.MapGet("/api/affiliates/{affiliateId:guid}/tasks", async (
+    HttpContext ctx, IStaffTaskService taskService, Guid affiliateId, Guid? teamMemberId, string? status) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    var result = await taskService.GetTasksAsync(affiliateId, teamMemberId, status);
+    return Results.Ok(result);
+});
+
+app.MapPost("/api/affiliates/{affiliateId:guid}/tasks", async (
+    HttpContext ctx, IStaffTaskService taskService, Guid affiliateId, StaffTaskRequest request) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    if (string.IsNullOrWhiteSpace(request.Title))
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = "El título es requerido." } });
+    var result = await taskService.CreateTaskAsync(affiliateId, request);
+    return Results.Created($"/api/affiliates/{affiliateId}/tasks/{result.Id}", result);
+});
+
+app.MapPatch("/api/affiliates/{affiliateId:guid}/tasks/{id:guid}", async (
+    HttpContext ctx, IStaffTaskService taskService, Guid affiliateId, Guid id, StaffTaskRequest request) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    var result = await taskService.UpdateTaskAsync(affiliateId, id, request);
+    if (result == null)
+        return Results.NotFound();
+    return Results.Ok(result);
+});
+
+// Cambiar solo el estado sí lo puede hacer Staff — es la acción de "marcar hecha mi tarea",
+// distinta de editar/reasignar (reservado a Owner/Manager en el PATCH completo de arriba).
+app.MapPatch("/api/affiliates/{affiliateId:guid}/tasks/{id:guid}/status", async (
+    HttpContext ctx, IStaffTaskService taskService, Guid affiliateId, Guid id, StaffTaskStatusRequest request) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    try
+    {
+        var result = await taskService.UpdateTaskStatusAsync(affiliateId, id, request.Status);
+        if (result == null)
+            return Results.NotFound();
+        return Results.Ok(result);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+});
+
+app.MapDelete("/api/affiliates/{affiliateId:guid}/tasks/{id:guid}", async (
+    HttpContext ctx, IStaffTaskService taskService, Guid affiliateId, Guid id) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    var result = await taskService.DeleteTaskAsync(affiliateId, id);
     if (!result)
         return Results.NotFound();
     return Results.NoContent();

@@ -18,7 +18,7 @@ public static class ModuleCatalog
         "catalog", "page", "metrics", "staff", "appointments",
         "orders", "kitchen", "pos", "board", "billing",
         "invoices", "queue", "reservations", "proposals",
-        "inventory",
+        "inventory", "workforce",
     };
 
     // Espejo de businessTypes/excludeBusinessTypes en maalca-web/src/lib/module-catalog.ts --

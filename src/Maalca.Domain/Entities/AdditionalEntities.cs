@@ -17,7 +17,57 @@ public class TeamMember : AuditableEntity
     /// avatar con iniciales en vez de exponer una imagen no aprobada.</summary>
     public string? PhotoUrl { get; set; }
 
+    // ── Gestión de equipo (ponche + nómina) ──────────────────────────
+    // Tarifa por hora, opcional — sin esto no se puede calcular nómina (ver
+    // TimeClockService.GetPayrollAsync, que salta a los miembros sin tarifa configurada).
+    public decimal? HourlyRate { get; set; }
+    // PIN de 4-6 dígitos para poncharse desde el kiosko público (/{slug}/ponche) sin necesitar
+    // login propio — mismo nivel de fricción que el resto de los flujos públicos del proyecto.
+    // No es una contraseña real (no protege dinero ni datos sensibles del cliente), así que se
+    // guarda en texto plano a propósito, igual de simple que el resto de este modelo.
+    public string? PinCode { get; set; }
+
     public Affiliate? Affiliate { get; set; }
+}
+
+/// <summary>
+/// Ponche de entrada/salida (gestión de equipo — ponche/nómina). Se crea al ponchar entrada
+/// (ClockOut null = turno abierto) y se cierra al ponchar salida. El dueño puede corregir a
+/// mano un ponche olvidado (Source="Manual") sin necesitar que el empleado vuelva a poncharse.
+/// </summary>
+public class TimeEntry : AuditableEntity
+{
+    public Guid AffiliateId { get; set; }
+    public Guid TeamMemberId { get; set; }
+    public DateTime ClockIn { get; set; }
+    public DateTime? ClockOut { get; set; }
+    // "Kiosk" (poncheo real desde /{slug}/ponche) | "Manual" (corrección del dueño/gerente)
+    public string Source { get; set; } = "Kiosk";
+    public string? Notes { get; set; }
+
+    public Affiliate? Affiliate { get; set; }
+    public TeamMember? TeamMember { get; set; }
+}
+
+/// <summary>
+/// Tarea asignada a un miembro del equipo (gestión de equipo — tareas). Tablero simple de tres
+/// estados, mismo nivel de simplicidad que el resto del proyecto (sin subtareas, checklists
+/// anidados ni dependencias entre tareas).
+/// </summary>
+public class StaffTask : AuditableEntity
+{
+    public Guid AffiliateId { get; set; }
+    // Nullable: una tarea puede crearse sin asignar todavía a nadie específico.
+    public Guid? TeamMemberId { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    // Pending / InProgress / Done
+    public string Status { get; set; } = "Pending";
+    public DateTime? DueDate { get; set; }
+    public DateTime? CompletedAt { get; set; }
+
+    public Affiliate? Affiliate { get; set; }
+    public TeamMember? TeamMember { get; set; }
 }
 
 public class InventoryItem : AuditableEntity

@@ -13,6 +13,8 @@ public class AppDbContext : DbContext
     public DbSet<Service> Services => Set<Service>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<TeamMember> TeamMembers => Set<TeamMember>();
+    public DbSet<TimeEntry> TimeEntries => Set<TimeEntry>();
+    public DbSet<StaffTask> StaffTasks => Set<StaffTask>();
     public DbSet<InventoryItem> InventoryItems => Set<InventoryItem>();
     public DbSet<InventoryMovement> InventoryMovements => Set<InventoryMovement>();
     public DbSet<ProductIngredient> ProductIngredients => Set<ProductIngredient>();
@@ -250,10 +252,43 @@ public class AppDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired();
+            entity.Property(e => e.HourlyRate).HasPrecision(18, 2);
+            entity.Property(e => e.PinCode).HasMaxLength(6);
             entity.HasOne(e => e.Affiliate)
                   .WithMany(a => a.TeamMembers)
                   .HasForeignKey(e => e.AffiliateId)
                   .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // TimeEntry (ponche de entrada/salida)
+        modelBuilder.Entity<TimeEntry>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.TeamMember)
+                  .WithMany()
+                  .HasForeignKey(e => e.TeamMemberId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // StaffTask (tareas asignadas)
+        modelBuilder.Entity<StaffTask>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Title).IsRequired();
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            // SetNull (no Cascade): borrar a un empleado no debe borrar el historial de tareas
+            // que se le asignaron, solo desvincularlas.
+            entity.HasOne(e => e.TeamMember)
+                  .WithMany()
+                  .HasForeignKey(e => e.TeamMemberId)
+                  .OnDelete(DeleteBehavior.SetNull);
         });
 
         // InventoryItem

@@ -845,6 +845,7 @@ public class TeamService : ITeamService
         existing.Department = member.Department;
         existing.IsActive = member.IsActive;
         existing.PhotoUrl = member.PhotoUrl;
+        existing.HourlyRate = member.HourlyRate;
         existing.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
         return existing;
@@ -855,6 +856,225 @@ public class TeamService : ITeamService
         var member = await _context.TeamMembers.FirstOrDefaultAsync(t => t.Id == id && t.AffiliateId == affiliateId);
         if (member == null) return false;
         _context.TeamMembers.Remove(member);
+        await _context.SaveChangesAsync();
+        return true;
+    }
+}
+
+/// <summary>
+/// Ponche de entrada/salida (kiosko público por PIN) + corrección manual + reporte de nómina.
+/// El PIN es la única "autenticación" del ponche público — no hay login de empleado, mismo
+/// criterio de simplicidad que el resto de los flujos públicos del proyecto.
+/// </summary>
+public class TimeClockService : ITimeClockService
+{
+    private readonly AppDbContext _context;
+
+    public TimeClockService(AppDbContext context) => _context = context;
+
+    public async Task<List<PonchePickerMemberDto>?> GetPonchePickerAsync(string slug)
+    {
+        var affiliate = await _context.Affiliates
+            .Where(a => a.Slug == slug)
+            .Select(a => new { a.Id })
+            .FirstOrDefaultAsync();
+        if (affiliate is null) return null;
+
+        return await _context.TeamMembers
+            .Where(t => t.AffiliateId == affiliate.Id && t.IsActive && t.PinCode != null)
+            .OrderBy(t => t.Name)
+            .Select(t => new PonchePickerMemberDto(t.Id, t.Name, t.PhotoUrl))
+            .ToListAsync();
+    }
+
+    public async Task<ClockResultDto> ClockAsync(string slug, Guid teamMemberId, string pin)
+    {
+        var affiliate = await _context.Affiliates
+            .Where(a => a.Slug == slug)
+            .Select(a => new { a.Id })
+            .FirstOrDefaultAsync();
+        if (affiliate is null)
+            throw new KeyNotFoundException();
+
+        var member = await _context.TeamMembers
+            .FirstOrDefaultAsync(t => t.Id == teamMemberId && t.AffiliateId == affiliate.Id && t.IsActive);
+        if (member is null)
+            throw new KeyNotFoundException();
+        if (string.IsNullOrEmpty(member.PinCode) || member.PinCode != pin)
+            throw new ArgumentException("PIN incorrecto.");
+
+        var openEntry = await _context.TimeEntries
+            .Where(e => e.TeamMemberId == teamMemberId && e.AffiliateId == affiliate.Id && e.ClockOut == null)
+            .OrderByDescending(e => e.ClockIn)
+            .FirstOrDefaultAsync();
+
+        var now = DateTime.UtcNow;
+
+        if (openEntry is not null)
+        {
+            openEntry.ClockOut = now;
+            await _context.SaveChangesAsync();
+            var hours = Math.Round((decimal)(now - openEntry.ClockIn).TotalHours, 2);
+            return new ClockResultDto("ClockedOut", now, member.Name, hours);
+        }
+
+        var entry = new TimeEntry
+        {
+            Id = Guid.NewGuid(),
+            AffiliateId = affiliate.Id,
+            TeamMemberId = teamMemberId,
+            ClockIn = now,
+            Source = "Kiosk",
+            CreatedAt = now,
+        };
+        _context.TimeEntries.Add(entry);
+        await _context.SaveChangesAsync();
+        return new ClockResultDto("ClockedIn", now, member.Name, null);
+    }
+
+    public async Task<List<TimeEntry>> GetTimeEntriesAsync(Guid affiliateId, Guid? teamMemberId, DateTime? from, DateTime? to)
+    {
+        var query = _context.TimeEntries.AsNoTracking()
+            .Include(e => e.TeamMember)
+            .Where(e => e.AffiliateId == affiliateId);
+        if (teamMemberId.HasValue) query = query.Where(e => e.TeamMemberId == teamMemberId.Value);
+        if (from.HasValue) query = query.Where(e => e.ClockIn >= from.Value);
+        if (to.HasValue) query = query.Where(e => e.ClockIn <= to.Value);
+        return await query.OrderByDescending(e => e.ClockIn).ToListAsync();
+    }
+
+    public async Task<TimeEntry?> UpdateTimeEntryAsync(Guid affiliateId, Guid id, UpdateTimeEntryRequest request)
+    {
+        var entry = await _context.TimeEntries.FirstOrDefaultAsync(e => e.Id == id && e.AffiliateId == affiliateId);
+        if (entry is null) return null;
+        entry.ClockIn = DateTime.SpecifyKind(request.ClockIn, DateTimeKind.Utc);
+        entry.ClockOut = request.ClockOut.HasValue ? DateTime.SpecifyKind(request.ClockOut.Value, DateTimeKind.Utc) : null;
+        entry.Notes = request.Notes;
+        entry.Source = "Manual";
+        entry.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        return entry;
+    }
+
+    public async Task<bool> DeleteTimeEntryAsync(Guid affiliateId, Guid id)
+    {
+        var entry = await _context.TimeEntries.FirstOrDefaultAsync(e => e.Id == id && e.AffiliateId == affiliateId);
+        if (entry is null) return false;
+        _context.TimeEntries.Remove(entry);
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<PayrollReportDto> GetPayrollAsync(Guid affiliateId, DateTime from, DateTime to)
+    {
+        var fromUtc = DateTime.SpecifyKind(from.Date, DateTimeKind.Utc);
+        var toUtc = DateTime.SpecifyKind(to.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc);
+
+        // Solo turnos cerrados (ClockOut != null) — un turno abierto todavía no tiene horas
+        // definitivas que pagar, se cuenta en el próximo período una vez se cierre.
+        var entries = await _context.TimeEntries.AsNoTracking()
+            .Include(e => e.TeamMember)
+            .Where(e => e.AffiliateId == affiliateId && e.ClockOut != null && e.ClockIn >= fromUtc && e.ClockIn <= toUtc)
+            .ToListAsync();
+
+        // Agrupa por TeamMemberId (no por el objeto TeamMember): con AsNoTracking() cada fila
+        // trae su propia instancia de TeamMember sin resolución de identidad, así que agrupar
+        // por referencia de objeto partiría erróneamente a un mismo empleado en varios grupos.
+        var members = entries
+            .Where(e => e.TeamMember is not null)
+            .GroupBy(e => e.TeamMemberId)
+            .Select(g =>
+            {
+                var teamMember = g.First().TeamMember!;
+                var totalHours = Math.Round((decimal)g.Sum(e => (e.ClockOut!.Value - e.ClockIn).TotalHours), 2);
+                var totalPay = teamMember.HourlyRate.HasValue ? Math.Round(totalHours * teamMember.HourlyRate.Value, 2) : (decimal?)null;
+                return new PayrollMemberDto(teamMember.Id, teamMember.Name, teamMember.HourlyRate, totalHours, totalPay);
+            })
+            .OrderBy(m => m.Name)
+            .ToList();
+
+        var grandTotal = members.Sum(m => m.TotalPay ?? 0);
+        return new PayrollReportDto(fromUtc, toUtc, members, grandTotal);
+    }
+
+    public async Task<string> RegeneratePinAsync(Guid affiliateId, Guid teamMemberId)
+    {
+        var member = await _context.TeamMembers.FirstOrDefaultAsync(t => t.Id == teamMemberId && t.AffiliateId == affiliateId);
+        if (member is null) throw new KeyNotFoundException();
+        var pin = Random.Shared.Next(0, 10000).ToString("D4");
+        member.PinCode = pin;
+        member.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        return pin;
+    }
+}
+
+/// <summary>Tareas asignadas a miembros del equipo — tablero simple de tres estados.</summary>
+public class StaffTaskService : IStaffTaskService
+{
+    private readonly AppDbContext _context;
+
+    public StaffTaskService(AppDbContext context) => _context = context;
+
+    public async Task<List<StaffTask>> GetTasksAsync(Guid affiliateId, Guid? teamMemberId, string? status)
+    {
+        var query = _context.StaffTasks.AsNoTracking()
+            .Include(t => t.TeamMember)
+            .Where(t => t.AffiliateId == affiliateId);
+        if (teamMemberId.HasValue) query = query.Where(t => t.TeamMemberId == teamMemberId.Value);
+        if (!string.IsNullOrEmpty(status)) query = query.Where(t => t.Status == status);
+        return await query.OrderBy(t => t.Status).ThenBy(t => t.DueDate).ToListAsync();
+    }
+
+    public async Task<StaffTask> CreateTaskAsync(Guid affiliateId, StaffTaskRequest request)
+    {
+        var task = new StaffTask
+        {
+            Id = Guid.NewGuid(),
+            AffiliateId = affiliateId,
+            Title = request.Title,
+            Description = request.Description,
+            TeamMemberId = request.TeamMemberId,
+            DueDate = request.DueDate,
+            Status = "Pending",
+            CreatedAt = DateTime.UtcNow,
+        };
+        _context.StaffTasks.Add(task);
+        await _context.SaveChangesAsync();
+        return task;
+    }
+
+    public async Task<StaffTask?> UpdateTaskAsync(Guid affiliateId, Guid id, StaffTaskRequest request)
+    {
+        var task = await _context.StaffTasks.FirstOrDefaultAsync(t => t.Id == id && t.AffiliateId == affiliateId);
+        if (task is null) return null;
+        task.Title = request.Title;
+        task.Description = request.Description;
+        task.TeamMemberId = request.TeamMemberId;
+        task.DueDate = request.DueDate;
+        task.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        return task;
+    }
+
+    public async Task<StaffTask?> UpdateTaskStatusAsync(Guid affiliateId, Guid id, string status)
+    {
+        if (status is not ("Pending" or "InProgress" or "Done"))
+            throw new ArgumentException("Estado inválido.");
+        var task = await _context.StaffTasks.FirstOrDefaultAsync(t => t.Id == id && t.AffiliateId == affiliateId);
+        if (task is null) return null;
+        task.Status = status;
+        task.CompletedAt = status == "Done" ? DateTime.UtcNow : null;
+        task.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        return task;
+    }
+
+    public async Task<bool> DeleteTaskAsync(Guid affiliateId, Guid id)
+    {
+        var task = await _context.StaffTasks.FirstOrDefaultAsync(t => t.Id == id && t.AffiliateId == affiliateId);
+        if (task is null) return false;
+        _context.StaffTasks.Remove(task);
         await _context.SaveChangesAsync();
         return true;
     }

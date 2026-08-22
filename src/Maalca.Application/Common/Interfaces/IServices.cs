@@ -99,6 +99,28 @@ public interface ITeamService
     Task<bool> DeleteTeamMemberAsync(Guid affiliateId, Guid id);
 }
 
+/// <summary>Ponche de entrada/salida + nómina calculada — ver TimeEntry.cs.</summary>
+public interface ITimeClockService
+{
+    Task<List<PonchePickerMemberDto>?> GetPonchePickerAsync(string slug);
+    Task<ClockResultDto> ClockAsync(string slug, Guid teamMemberId, string pin);
+    Task<List<TimeEntry>> GetTimeEntriesAsync(Guid affiliateId, Guid? teamMemberId, DateTime? from, DateTime? to);
+    Task<TimeEntry?> UpdateTimeEntryAsync(Guid affiliateId, Guid id, UpdateTimeEntryRequest request);
+    Task<bool> DeleteTimeEntryAsync(Guid affiliateId, Guid id);
+    Task<PayrollReportDto> GetPayrollAsync(Guid affiliateId, DateTime from, DateTime to);
+    Task<string> RegeneratePinAsync(Guid affiliateId, Guid teamMemberId);
+}
+
+/// <summary>Tareas asignadas a miembros del equipo — ver StaffTask.cs.</summary>
+public interface IStaffTaskService
+{
+    Task<List<StaffTask>> GetTasksAsync(Guid affiliateId, Guid? teamMemberId, string? status);
+    Task<StaffTask> CreateTaskAsync(Guid affiliateId, StaffTaskRequest request);
+    Task<StaffTask?> UpdateTaskAsync(Guid affiliateId, Guid id, StaffTaskRequest request);
+    Task<StaffTask?> UpdateTaskStatusAsync(Guid affiliateId, Guid id, string status);
+    Task<bool> DeleteTaskAsync(Guid affiliateId, Guid id);
+}
+
 public interface IProductService
 {
     Task<PaginatedResponse<Product>> GetProductsAsync(Guid affiliateId, string? category = null, string? status = null);
