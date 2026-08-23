@@ -21,7 +21,7 @@ public class AppointmentNotificationService : IAppointmentNotificationService
         _logger = logger;
     }
 
-    public async Task NotifyAppointmentBookedAsync(Appointment appointment, Customer customer, string businessName, string slug, string serviceName, string? staffName)
+    public async Task NotifyAppointmentBookedAsync(Appointment appointment, Customer customer, string businessName, string slug, string serviceName, string? staffName, string? zoomLink = null)
     {
         if (string.IsNullOrWhiteSpace(customer.Email))
             return; // sin correo del cliente no hay a quién notificar
@@ -47,6 +47,8 @@ public class AppointmentNotificationService : IAppointmentNotificationService
                 date = appointment.Date.ToString("yyyy-MM-dd"),
                 time = appointment.Time,
                 staffName,
+                isVirtual = appointment.IsVirtual,
+                zoomLink = appointment.IsVirtual ? zoomLink : null,
             };
 
             var client = _httpClientFactory.CreateClient();

@@ -8,7 +8,9 @@ namespace Maalca.Application.Common.DTOs;
 /// </summary>
 public record PublicTeamMemberDto(Guid Id, string Name, string Role, string? PhotoUrl = null);
 
-public record PublicServiceDto(Guid Id, string Name, string? Description, decimal Price, int DurationMinutes);
+// Modality: "InPerson" | "Virtual" | "Both" — ver Service.Modality. El front usa esto para saber
+// si debe mostrar el selector Presencial/Virtual al reservar (solo cuando es "Both").
+public record PublicServiceDto(Guid Id, string Name, string? Description, decimal Price, int DurationMinutes, string Modality = "InPerson");
 
 public record CreatePublicAppointmentRequest(
     Guid ServiceId,
@@ -21,10 +23,16 @@ public record CreatePublicAppointmentRequest(
     // Tarea #247 — opcional a propósito (el flujo público nunca lo pidió, no queremos volverlo
     // obligatorio de golpe): si viene, se dispara el correo de confirmación con el link de
     // autogestión; si no, la cita se crea igual, solo sin correo.
-    string? CustomerEmail = null
+    string? CustomerEmail = null,
+    // Tarea #405 — solo relevante cuando el Service tiene Modality=Both (el cliente elige); si el
+    // Service es InPerson o Virtual a secas, este valor se ignora y se fuerza server-side según
+    // Service.Modality (ver PublicBookingService.CreatePublicAppointmentAsync).
+    bool? WantsVirtual = null
 );
 
-public record PublicAppointmentResultDto(Guid Id, DateTime Date, string Time, string Status, Guid Token);
+// ZoomLink viaja solo cuando la cita quedó marcada IsVirtual=true, para que el front la muestre
+// en la pantalla de confirmación sin un segundo round-trip.
+public record PublicAppointmentResultDto(Guid Id, DateTime Date, string Time, string Status, Guid Token, bool IsVirtual = false, string? ZoomLink = null);
 
 /// <summary>
 /// Tarea #246 — vista pública de una cita por Token, para la página "gestiona tu cita"
@@ -38,7 +46,9 @@ public record PublicAppointmentManageDto(
     string? StaffName,
     DateTime Date,
     string Time,
-    string Status
+    string Status,
+    bool IsVirtual = false,
+    string? ZoomLink = null
 );
 
 public record ReschedulePublicAppointmentRequest(DateTime Date, string Time);

@@ -15,6 +15,9 @@ public record AffiliatePublicDto(
     string? Address,
     string? City,       // not on Affiliate entity yet — always null until migration adds it
     string? Website,
+    // Link fijo de la sala de Zoom del negocio — ver comentario en Affiliate.ZoomLink. Se
+    // muestra al cliente cuando reserva un servicio Virtual/Both y elige modalidad virtual.
+    string? ZoomLink,
     List<CanalDto> Canales,
     List<ProcessStepDto> ProcessSteps,
     List<FaqItemDto> Faq,
@@ -56,7 +59,8 @@ public record CatalogItemDto(
     string? VideoUrl = null,                    // Product only — Menu Board Fase 9 Etapa A
     IReadOnlyList<string>? Images = null,       // Product/Service/InventoryItem — galería completa; Images[0] == ImageUrl
     string? NameEn = null,                      // Product/Service/InventoryItem — nombre en inglés, fallback a Name si null
-    IReadOnlyList<PublicIngredientDto>? Ingredients = null  // Product (Restaurante) — solo si tiene receta; null/vacío = sin receta definida
+    IReadOnlyList<PublicIngredientDto>? Ingredients = null, // Product (Restaurante) — solo si tiene receta; null/vacío = sin receta definida
+    string? Modality = null                     // Service only — "InPerson" | "Virtual" | "Both". Null en Product/InventoryItem.
 );
 
 // Solo nombre — a propósito no expone Quantity (cantidad por porción, dato interno de receta)

@@ -94,6 +94,13 @@ public class Affiliate : BaseEntity
     public string? Address { get; set; }
     public string? Website { get; set; }
 
+    // Link fijo de la sala de Zoom (o Meet/similar) del negocio — un solo link para todo el
+    // negocio, no uno distinto por cita. Se muestra al cliente cuando reserva un servicio con
+    // Modality Virtual/Both y elige la modalidad virtual. Decisión deliberada: no hay
+    // integración real con la cuenta de Zoom (OAuth, crear reunión por API) — el dueño pega su
+    // propio link de sala personal una vez en Configuración.
+    public string? ZoomLink { get; set; }
+
     // ISO 3166-1 alpha-2 (e.g. "US", "DO"). Usado por StripeConnectService al crear la cuenta
     // conectada del afiliado — Stripe la exige y no se puede cambiar después de creada. Null
     // hasta que el afiliado la configure; StripeConnectService cae a "US" solo como último

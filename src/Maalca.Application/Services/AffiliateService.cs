@@ -68,6 +68,7 @@ public class AffiliateService : IAffiliateService
         if (request.ContactEmail != null) affiliate.ContactEmail = request.ContactEmail.Trim();
         if (request.Address != null) affiliate.Address = request.Address.Trim();
         if (request.Website != null) affiliate.Website = request.Website.Trim();
+        if (request.ZoomLink != null) affiliate.ZoomLink = request.ZoomLink.Trim();
         if (request.PrimaryColor != null) affiliate.PrimaryColor = request.PrimaryColor.Trim();
         // Country solo se setea si todavía no hay una — Stripe no permite cambiar el país
         // de una cuenta conectada ya creada, así que una vez fijado no debería sobreescribirse
@@ -103,7 +104,7 @@ public class AffiliateService : IAffiliateService
             affiliate.Description, affiliate.DescriptionEn, affiliate.PrimaryColor,
             affiliate.LogoUrl, affiliate.CoverImageUrl,
             affiliate.ContactEmail,
-            affiliate.Address, affiliate.Website, affiliate.Country, affiliate.Currency);
+            affiliate.Address, affiliate.Website, affiliate.Country, affiliate.Currency, affiliate.ZoomLink);
     }
 
     public async Task<AffiliateContentDto?> UpdateContentAsync(Guid affiliateId, UpdateAffiliateContentRequest request)
