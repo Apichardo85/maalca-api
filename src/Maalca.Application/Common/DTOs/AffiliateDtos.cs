@@ -39,7 +39,8 @@ public record UpdateAffiliateProfileRequest(
     int? AdFrequency = null,  // Fase 9 Etapa A — cada cuántos slides de menú se inserta un comercial en el board
     string? Language = null,    // Fase 9 — "es" | "en", preferencia del board (no del visitante)
     string? BoardTheme = null,  // Fase 9 — "Dark" | "Light"
-    string? TransitionEffect = null   // Fase 9 — "Fade" | "Slide" | "Zoom" | "None"
+    string? TransitionEffect = null,  // Fase 9 — "Fade" | "Slide" | "Zoom" | "None"
+    string? ZoomLink = null    // Link fijo de la sala de Zoom del negocio (ver Affiliate.ZoomLink)
 );
 
 public record AffiliatePublicProfileDto(
@@ -57,7 +58,8 @@ public record AffiliatePublicProfileDto(
     string? Address,
     string? Website,
     string? Country = null,
-    string? Currency = null
+    string? Currency = null,
+    string? ZoomLink = null
 );
 
 public record UpdateAffiliateContentRequest(

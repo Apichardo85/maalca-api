@@ -1,4 +1,5 @@
 using Maalca.Domain.Common;
+using Maalca.Domain.Enums;
 
 namespace Maalca.Domain.Entities;
 
@@ -25,6 +26,10 @@ public class Service : AuditableEntity
     public bool IsPubliclyVisible { get; set; } = false;
     public int SortOrder { get; set; } = 0;
     public bool IsDemo { get; set; } = false;
+    // Default InPerson a propósito — servicios ya existentes no cambian de comportamiento.
+    // Solo Virtual/Both hacen que la reserva pública ofrezca (u obligue) la modalidad virtual,
+    // usando Affiliate.ZoomLink.
+    public ServiceModality Modality { get; set; } = ServiceModality.InPerson;
 
     public Affiliate? Affiliate { get; set; }
     public ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();

@@ -350,7 +350,8 @@ public class CatalogCrudService : ICatalogCrudService
             DurationMinutes = request.DurationMinutes,
             IsPubliclyVisible = true,
             IsDemo = false,
-            Status = "Active"
+            Status = "Active",
+            Modality = ParseModality(request.Modality) ?? ServiceModality.InPerson
         };
         _db.Services.Add(service);
         await _db.SaveChangesAsync();
@@ -431,6 +432,8 @@ public class CatalogCrudService : ICatalogCrudService
         if (request.SortOrder.HasValue) service.SortOrder = request.SortOrder.Value;
         if (request.IsPubliclyVisible.HasValue) service.IsPubliclyVisible = request.IsPubliclyVisible.Value;
         if (request.DurationMinutes.HasValue) service.DurationMinutes = request.DurationMinutes.Value;
+        var parsedModality = ParseModality(request.Modality);
+        if (parsedModality.HasValue) service.Modality = parsedModality.Value;
 
         await _db.SaveChangesAsync();
         return CatalogItemMapper.FromService(service);
@@ -461,6 +464,14 @@ public class CatalogCrudService : ICatalogCrudService
         await _db.SaveChangesAsync();
         return CatalogItemMapper.FromInventoryItem(item);
     }
+
+    // Null = "no lo mandaron" (crear sin elegir → InPerson default; editar → no tocar).
+    // Valor inválido se ignora silenciosamente en vez de tirar 500 — mismo criterio relajado que
+    // el resto de este archivo para campos de UI no críticos.
+    private static ServiceModality? ParseModality(string? modality) =>
+        modality != null && Enum.TryParse<ServiceModality>(modality, ignoreCase: true, out var parsed)
+            ? parsed
+            : null;
 
     // ── Validation ──────────────────────────────────────────────────
 

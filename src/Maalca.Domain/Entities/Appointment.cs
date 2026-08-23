@@ -20,6 +20,12 @@ public class Appointment : AuditableEntity
     // expuesto sin pensarlo, se genera aparte para poder rotarlo sin tocar el Id real de la fila.
     public Guid Token { get; set; } = Guid.NewGuid();
 
+    // Elegido por el cliente al reservar (si el Service es Modality.Both) o derivado
+    // automáticamente del Service (InPerson→false, Virtual→true) — ver PublicBookingService.
+    // Congelado en el momento de la reserva: si el dueño cambia la Modality del servicio
+    // después, las citas ya agendadas no cambian retroactivamente.
+    public bool IsVirtual { get; set; } = false;
+
     public Affiliate? Affiliate { get; set; }
     public Customer? Customer { get; set; }
     public Service? Service { get; set; }

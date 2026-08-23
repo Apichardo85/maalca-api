@@ -2606,7 +2606,7 @@ app.MapGet("/api/space/{slug}", async (
             JsonArrayField.Parse<FaqItemDto>(affiliate.Faq),
             JsonArrayField.Parse<HorarioEntryDto>(affiliate.Horario),
             affiliate.Timezone,
-            trialDaysRemaining, trialEndsAt, affiliate.Currency),
+            trialDaysRemaining, trialEndsAt, affiliate.Currency, affiliate.ZoomLink),
         items, realCount,
         new ProgressDto(
             FirstProductAdded: completedKeys.Contains(MilestoneKeys.FirstProductAdded),

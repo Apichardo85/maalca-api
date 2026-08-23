@@ -221,6 +221,9 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<string>("WhatsApp")
                         .HasColumnType("text");
 
+                    b.Property<string>("ZoomLink")
+                        .HasColumnType("text");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Slug")
@@ -394,6 +397,9 @@ namespace Maalca.Infrastructure.Migrations
 
                     b.Property<DateTime>("Date")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsVirtual")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("Notes")
                         .HasColumnType("text");
@@ -1326,6 +1332,9 @@ namespace Maalca.Infrastructure.Migrations
 
                     b.Property<bool>("IsPubliclyVisible")
                         .HasColumnType("boolean");
+
+                    b.Property<int>("Modality")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Name")
                         .IsRequired()

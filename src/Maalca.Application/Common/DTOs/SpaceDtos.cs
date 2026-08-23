@@ -32,7 +32,8 @@ public record BusinessDto(
     string? Timezone,
     int? TrialDaysRemaining,
     DateTime? TrialEndsAt,
-    string Currency = "USD"
+    string Currency = "USD",
+    string? ZoomLink = null
 );
 
 public record ProcessStepDto(string Title, string Description);

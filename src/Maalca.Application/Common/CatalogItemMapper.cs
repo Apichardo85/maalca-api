@@ -19,7 +19,8 @@ public static class CatalogItemMapper
     public static CatalogItemDto FromService(Service s) => new(
         s.Id, s.Name, s.Description, s.Price, s.Category, s.ImageUrl, s.SortOrder, s.IsDemo,
         s.DurationMinutes, null, s.Status,
-        s.DescriptionEn, Images: JsonArrayField.Parse<string>(s.Images), NameEn: s.NameEn);
+        s.DescriptionEn, Images: JsonArrayField.Parse<string>(s.Images), NameEn: s.NameEn,
+        Modality: s.Modality.ToString());
 
     public static CatalogItemDto FromInventoryItem(InventoryItem i) => new(
         i.Id, i.Name, i.Description, i.UnitPrice, i.Category, i.ImageUrl, i.SortOrder, i.IsDemo,

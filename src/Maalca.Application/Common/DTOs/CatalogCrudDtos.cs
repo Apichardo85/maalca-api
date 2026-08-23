@@ -17,7 +17,8 @@ public record CreateCatalogItemRequest(
     bool? Popular = null,                       // Product only
     string? VideoUrl = null,                    // Product only — Menu Board Fase 9 Etapa A
     IReadOnlyList<string>? Images = null,       // Galería completa (orden = orden de visualización); Images[0] pasa a ser ImageUrl
-    string? NameEn = null                       // Product/Service/InventoryItem — nombre en inglés, fallback a Name si null
+    string? NameEn = null,                      // Product/Service/InventoryItem — nombre en inglés, fallback a Name si null
+    string? Modality = null                     // Service only — "InPerson" | "Virtual" | "Both". Null = InPerson (default del enum).
 );
 
 public record UpdateCatalogItemRequest(
@@ -39,7 +40,8 @@ public record UpdateCatalogItemRequest(
     bool? Popular = null,                       // Product only
     string? VideoUrl = null,                    // Product only — Menu Board Fase 9 Etapa A
     IReadOnlyList<string>? Images = null,       // null = no tocar la galería; [] = vaciarla; lista = reemplazarla entera
-    string? NameEn = null                       // Product/Service/InventoryItem — nombre en inglés, fallback a Name si null
+    string? NameEn = null,                      // Product/Service/InventoryItem — nombre en inglés, fallback a Name si null
+    string? Modality = null                     // Service only — "InPerson" | "Virtual" | "Both". Null = no tocar.
 );
 
 // Receta (ProductIngredient) — Product (plato) -> InventoryItem (ingrediente) + cantidad consumida

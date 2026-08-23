@@ -177,6 +177,7 @@ public class PublicCatalogService : IPublicCatalogService
             a.WhatsApp, a.ContactEmail, a.Address,
             null,   // City — Affiliate entity does not have this field yet
             a.Website,
+            a.ZoomLink,
             canales,
             JsonArrayField.Parse<ProcessStepDto>(a.ProcessSteps),
             JsonArrayField.Parse<FaqItemDto>(a.Faq),

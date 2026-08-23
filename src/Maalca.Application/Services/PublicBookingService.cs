@@ -60,7 +60,7 @@ public class PublicBookingService : IPublicBookingService
             // Agenda necesita un número para calcular slots aunque el dueño no haya fijado
             // duración en el catálogo (donde null = oculto) — 30 min es el mismo fallback
             // que ya se usaba como default histórico. No afecta lo que se guarda en Service.
-            .Select(s => new PublicServiceDto(s.Id, s.Name, s.Description, s.Price, s.DurationMinutes ?? 30))
+            .Select(s => new PublicServiceDto(s.Id, s.Name, s.Description, s.Price, s.DurationMinutes ?? 30, s.Modality.ToString()))
             .ToListAsync();
     }
 
@@ -188,6 +188,20 @@ public class PublicBookingService : IPublicBookingService
         if (service is null)
             throw new ArgumentException("Servicio no encontrado.");
 
+        // Tarea #405 — la modalidad real de la cita nunca se confía ciegamente al cliente: se
+        // deriva de Service.Modality. Solo cuando el servicio admite ambas (Both) el cliente
+        // decide (WantsVirtual); si el servicio es puramente InPerson o Virtual, se fuerza ese
+        // valor server-side sin importar lo que haya mandado el front.
+        var isVirtual = service.Modality switch
+        {
+            Domain.Enums.ServiceModality.Virtual => true,
+            Domain.Enums.ServiceModality.InPerson => false,
+            Domain.Enums.ServiceModality.Both => request.WantsVirtual ?? false,
+            _ => false,
+        };
+        if (isVirtual && string.IsNullOrWhiteSpace(affiliate.ZoomLink))
+            throw new ArgumentException("Este negocio todavía no configuró su link de reuniones virtuales.");
+
         if (request.AssignedToId is Guid assignedToId)
         {
             var validStaff = await _db.TeamMembers
@@ -231,6 +245,7 @@ public class PublicBookingService : IPublicBookingService
             Time = request.Time,
             Status = "Scheduled",
             Notes = request.Notes,
+            IsVirtual = isVirtual,
         };
         _db.Appointments.Add(appointment);
         await _db.SaveChangesAsync();
@@ -254,10 +269,10 @@ public class PublicBookingService : IPublicBookingService
             // Se espera (no fire-and-forget) — tarea #135 ya mostró que un fire-and-forget se
             // corta a mitad de camino en el runtime serverless de Railway. El servicio de abajo
             // ya atrapa sus propios errores y nunca tumba la reserva si el correo falla.
-            await _appointmentNotifications.NotifyAppointmentBookedAsync(appointment, customer, affiliate.Name, affiliateSlug, service.Name, staffName);
+            await _appointmentNotifications.NotifyAppointmentBookedAsync(appointment, customer, affiliate.Name, affiliateSlug, service.Name, staffName, affiliate.ZoomLink);
         }
 
-        return new PublicAppointmentResultDto(appointment.Id, appointment.Date, appointment.Time, appointment.Status, appointment.Token);
+        return new PublicAppointmentResultDto(appointment.Id, appointment.Date, appointment.Time, appointment.Status, appointment.Token, appointment.IsVirtual, isVirtual ? affiliate.ZoomLink : null);
     }
 
     public async Task<PublicTableReservationResultDto> CreatePublicTableReservationAsync(string affiliateSlug, CreatePublicTableReservationRequest request)
@@ -365,7 +380,8 @@ public class PublicBookingService : IPublicBookingService
 
         return new PublicAppointmentManageDto(
             appt.Token, appt.Affiliate?.Name ?? "", appt.Service?.Name ?? "",
-            appt.AssignedTo?.Name, appt.Date, appt.Time, appt.Status);
+            appt.AssignedTo?.Name, appt.Date, appt.Time, appt.Status,
+            appt.IsVirtual, appt.IsVirtual ? appt.Affiliate?.ZoomLink : null);
     }
 
     public async Task<PublicAppointmentManageDto> ConfirmPublicAppointmentAsync(Guid token)
@@ -380,7 +396,7 @@ public class PublicBookingService : IPublicBookingService
         appt.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
-        return new PublicAppointmentManageDto(appt.Token, appt.Affiliate?.Name ?? "", appt.Service?.Name ?? "", appt.AssignedTo?.Name, appt.Date, appt.Time, appt.Status);
+        return new PublicAppointmentManageDto(appt.Token, appt.Affiliate?.Name ?? "", appt.Service?.Name ?? "", appt.AssignedTo?.Name, appt.Date, appt.Time, appt.Status, appt.IsVirtual, appt.IsVirtual ? appt.Affiliate?.ZoomLink : null);
     }
 
     public async Task<PublicAppointmentManageDto> CancelPublicAppointmentAsync(Guid token)
@@ -395,7 +411,7 @@ public class PublicBookingService : IPublicBookingService
         appt.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
-        return new PublicAppointmentManageDto(appt.Token, appt.Affiliate?.Name ?? "", appt.Service?.Name ?? "", appt.AssignedTo?.Name, appt.Date, appt.Time, appt.Status);
+        return new PublicAppointmentManageDto(appt.Token, appt.Affiliate?.Name ?? "", appt.Service?.Name ?? "", appt.AssignedTo?.Name, appt.Date, appt.Time, appt.Status, appt.IsVirtual, appt.IsVirtual ? appt.Affiliate?.ZoomLink : null);
     }
 
     public async Task<PublicAppointmentManageDto> ReschedulePublicAppointmentAsync(Guid token, DateTime date, string time)
@@ -431,6 +447,6 @@ public class PublicBookingService : IPublicBookingService
         appt.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
-        return new PublicAppointmentManageDto(appt.Token, appt.Affiliate?.Name ?? "", appt.Service?.Name ?? "", appt.AssignedTo?.Name, appt.Date, appt.Time, appt.Status);
+        return new PublicAppointmentManageDto(appt.Token, appt.Affiliate?.Name ?? "", appt.Service?.Name ?? "", appt.AssignedTo?.Name, appt.Date, appt.Time, appt.Status, appt.IsVirtual, appt.IsVirtual ? appt.Affiliate?.ZoomLink : null);
     }
 }
