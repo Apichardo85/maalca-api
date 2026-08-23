@@ -23,7 +23,7 @@ public class PlanLimitService : IPlanLimitService
 
     public int GetMaxItems(Plan plan) => plan switch
     {
-        Plan.Entrepreneur => int.MaxValue,
+        Plan.Entrepreneur or Plan.Enterprise => int.MaxValue,
         _ => 10
     };
 
