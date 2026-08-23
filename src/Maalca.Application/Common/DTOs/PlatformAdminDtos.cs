@@ -42,6 +42,12 @@ public record SetAffiliateStatusRequest(bool? Published, bool? Active);
 /// publicar/suspender) por su impacto financiero.</summary>
 public record SetAffiliatePlanRequest(string Plan);
 
+/// <summary>Corrige el rubro de un negocio elegido mal en el onboarding (ej. alguien de Creador
+/// que solo tenía Restaurant/Barber/Service/Retail para escoger y terminó con el template
+/// equivocado). Limitado a esos 4 valores a propósito — Creator/Publisher/Professional existen
+/// en el enum pero no tienen plantilla pública real todavía; asignarlos rompería la página.</summary>
+public record SetAffiliateBusinessTypeRequest(string BusinessType);
+
 /// <summary>Info del propio admin autenticado — reemplaza el antiguo { isPlatformAdmin: bool } de /api/me/admin-status.</summary>
 public record MyAdminStatusDto(bool IsPlatformAdmin, string? Role);
 

@@ -195,6 +195,60 @@ public class PlatformAdminService : IPlatformAdminService
             ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()).ToList());
     }
 
+    // Solo estos 4 tienen plantilla pública real (src/components/public/templates/ en
+    // maalca-web) — Creator/Publisher/Professional existen en el enum de negocio pero no tienen
+    // template todavía, así que asignarlos desde acá dejaría la página en blanco/rota.
+    private static readonly HashSet<BusinessType> BusinessTypesWithTemplate = new()
+    {
+        BusinessType.Restaurant, BusinessType.Barber, BusinessType.Service, BusinessType.Retail,
+    };
+
+    /// <summary>
+    /// Corrige el rubro de un negocio elegido mal en el onboarding (ej. alguien de Creador que
+    /// solo tenía Restaurant/Barber/Service/Retail para escoger). El catálogo viejo del tipo
+    /// anterior (platos demo, etc.) no se borra — simplemente deja de mostrarse porque cada
+    /// plantilla lee de su propia tabla (Products/Services/InventoryItems); el dueño puede
+    /// limpiarlo desde su Catálogo cuando quiera.
+    /// </summary>
+    public async Task<PlatformAffiliateSummaryDto> SetAffiliateBusinessTypeAsync(Guid affiliateId, string businessType)
+    {
+        var affiliate = await _context.Affiliates.FindAsync(affiliateId)
+            ?? throw new InvalidOperationException("Ese negocio no existe.");
+
+        if (!Enum.TryParse<BusinessType>(businessType, ignoreCase: true, out var parsedType)
+            || !BusinessTypesWithTemplate.Contains(parsedType))
+        {
+            throw new InvalidOperationException(
+                $"Tipo de negocio inválido: '{businessType}'. Debe ser Restaurant, Barber, Service o Retail.");
+        }
+
+        affiliate.BusinessType = parsedType;
+        affiliate.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        var since30d = DateTime.UtcNow.AddDays(-30);
+        var orders30d = await _context.Orders.CountAsync(o => o.AffiliateId == affiliateId && o.CreatedAt >= since30d);
+
+        var alerts = new List<string>();
+        var now = DateTime.UtcNow;
+        if (affiliate.Plan == Plan.Entrepreneur && !affiliate.StripeConnectChargesEnabled)
+            alerts.Add("Sin conectar pagos");
+        if (affiliate.Plan == Plan.Entrepreneur && orders30d == 0 && affiliate.CreatedAt < now.AddDays(-30))
+            alerts.Add("Sin pedidos en 30 días");
+        if (!affiliate.Published && affiliate.CreatedAt < now.AddDays(-7))
+            alerts.Add("Sin publicar");
+        if (!affiliate.IsActive)
+            alerts.Add("Suspendido");
+        if (affiliate.PlanStatus == PlanStatus.PastDue)
+            alerts.Add("Pago atrasado");
+
+        return new PlatformAffiliateSummaryDto(
+            affiliate.Id, affiliate.Name, affiliate.Slug ?? "", affiliate.BusinessType.ToString(),
+            affiliate.Plan.ToString(), affiliate.PlanStatus.ToString(), affiliate.Published, affiliate.IsActive,
+            affiliate.CreatedAt, orders30d, affiliate.StripeConnectChargesEnabled, alerts, affiliate.LogoUrl,
+            ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()).ToList());
+    }
+
     /// <summary>
     /// Control de módulos por afiliado (MaalCa, no el plan, es la autoridad final acá) — guarda
     /// el override explícito de Affiliate.ModulosActivos. Lista vacía se guarda como "" (no

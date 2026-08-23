@@ -281,6 +281,31 @@ app.MapPatch("/api/ops/affiliates/{affiliateId:guid}/plan", async (
     }
 });
 
+app.MapPatch("/api/ops/affiliates/{affiliateId:guid}/business-type", async (
+    HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId, SetAffiliateBusinessTypeRequest request) =>
+{
+    // Cambiar el rubro cambia qué plantilla pública se renderiza — mismo gate que
+    // publicar/suspender y plan: solo Owner.
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    if (ctx.User.FindFirst("platform_role")?.Value != nameof(PlatformAdminRole.Owner))
+        return Results.Forbid();
+
+    try
+    {
+        var result = await opsService.SetAffiliateBusinessTypeAsync(affiliateId, request.BusinessType);
+        return Results.Ok(result);
+    }
+    catch (InvalidOperationException ex) when (ex.Message.Contains("no existe"))
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = ex.Message } });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_BUSINESS_TYPE", message = ex.Message } });
+    }
+});
+
 // Control de módulos por afiliado (MaalCa converge lo que da el plan + overrides manuales) —
 // no es tan destructivo como publicar/suspender, así que cualquier admin de plataforma puede
 // tocarlo (no solo Owner), igual que las lecturas de overview/affiliates.
