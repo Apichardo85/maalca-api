@@ -54,6 +54,7 @@ builder.Services.AddScoped<ITimeBlockService, TimeBlockService>();
 builder.Services.AddScoped<IProposalService, ProposalService>();
 builder.Services.AddScoped<IServiceService, ServiceService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
+builder.Services.AddScoped<IModifierService, ModifierService>();
 builder.Services.AddScoped<IQueueService, QueueService>();
 builder.Services.AddScoped<ITeamService, TeamService>();
 builder.Services.AddScoped<ITimeClockService, TimeClockService>();
@@ -1212,6 +1213,88 @@ app.MapPut("/api/affiliates/{affiliateId:guid}/products/{productId:guid}/ingredi
     try
     {
         var result = await inventoryService.SetRecipeAsync(affiliateId, productId, request.Items.ToList());
+        return Results.Ok(result);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_OPERATION", message = ex.Message } });
+    }
+});
+
+// ============ MODIFIER GROUPS (grupos de modificadores reutilizables — Restaurante) ============
+// Mismo gating que Receta/Inventario: lectura exige ser el afiliado activo, escritura además
+// exige no ser Staff. Un ModifierGroup ("Guarnición") es reutilizable — se enlaza a muchos
+// Product a la vez vía /products/{productId}/modifier-groups (reemplazo total por PUT).
+app.MapGet("/api/affiliates/{affiliateId:guid}/modifier-groups", async (HttpContext ctx, IModifierService modifierService, Guid affiliateId) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    var result = await modifierService.GetGroupsAsync(affiliateId);
+    return Results.Ok(result);
+});
+
+app.MapGet("/api/affiliates/{affiliateId:guid}/modifier-groups/{id:guid}", async (HttpContext ctx, IModifierService modifierService, Guid affiliateId, Guid id) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    var result = await modifierService.GetGroupAsync(affiliateId, id);
+    return result == null ? Results.NotFound() : Results.Ok(result);
+});
+
+app.MapPost("/api/affiliates/{affiliateId:guid}/modifier-groups", async (HttpContext ctx, IModifierService modifierService, Guid affiliateId, CreateModifierGroupRequest request) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    var result = await modifierService.CreateGroupAsync(affiliateId, request);
+    return Results.Created($"/api/affiliates/{affiliateId}/modifier-groups/{result.Id}", result);
+});
+
+app.MapPut("/api/affiliates/{affiliateId:guid}/modifier-groups/{id:guid}", async (HttpContext ctx, IModifierService modifierService, Guid affiliateId, Guid id, UpdateModifierGroupRequest request) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    var result = await modifierService.UpdateGroupAsync(affiliateId, id, request);
+    return result == null ? Results.NotFound() : Results.Ok(result);
+});
+
+app.MapDelete("/api/affiliates/{affiliateId:guid}/modifier-groups/{id:guid}", async (HttpContext ctx, IModifierService modifierService, Guid affiliateId, Guid id) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    try
+    {
+        var deleted = await modifierService.DeleteGroupAsync(affiliateId, id);
+        return deleted ? Results.NoContent() : Results.NotFound();
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_OPERATION", message = ex.Message } });
+    }
+});
+
+app.MapGet("/api/affiliates/{affiliateId:guid}/products/{productId:guid}/modifier-groups", async (HttpContext ctx, IModifierService modifierService, Guid affiliateId, Guid productId) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    var result = await modifierService.GetProductModifierGroupsAsync(affiliateId, productId);
+    return Results.Ok(result);
+});
+
+app.MapPut("/api/affiliates/{affiliateId:guid}/products/{productId:guid}/modifier-groups", async (HttpContext ctx, IModifierService modifierService, Guid affiliateId, Guid productId, SetProductModifierGroupsRequest request) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    try
+    {
+        var result = await modifierService.SetProductModifierGroupsAsync(affiliateId, productId, request.ModifierGroupIds.ToList());
         return Results.Ok(result);
     }
     catch (InvalidOperationException ex)

@@ -18,6 +18,9 @@ public class AppDbContext : DbContext
     public DbSet<InventoryItem> InventoryItems => Set<InventoryItem>();
     public DbSet<InventoryMovement> InventoryMovements => Set<InventoryMovement>();
     public DbSet<ProductIngredient> ProductIngredients => Set<ProductIngredient>();
+    public DbSet<ModifierGroup> ModifierGroups => Set<ModifierGroup>();
+    public DbSet<ModifierOption> ModifierOptions => Set<ModifierOption>();
+    public DbSet<ProductModifierGroup> ProductModifierGroups => Set<ProductModifierGroup>();
     public DbSet<QueueEntry> QueueEntries => Set<QueueEntry>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
@@ -228,6 +231,47 @@ public class AppDbContext : DbContext
                   .HasForeignKey(e => e.InventoryItemId)
                   .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(e => new { e.ProductId, e.InventoryItemId }).IsUnique();
+        });
+
+        // ModifierGroup (grupo de modificadores reutilizable, ej. "Guarnición")
+        modelBuilder.Entity<ModifierGroup>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired();
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ModifierOption (opción dentro de un ModifierGroup, con su propio delta de precio)
+        modelBuilder.Entity<ModifierOption>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired();
+            entity.Property(e => e.PriceDelta).HasPrecision(18, 2);
+            entity.HasOne(e => e.ModifierGroup)
+                  .WithMany(g => g.Options)
+                  .HasForeignKey(e => e.ModifierGroupId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ProductModifierGroup (junction Product <-> ModifierGroup, reutilizable entre productos)
+        modelBuilder.Entity<ProductModifierGroup>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasOne(e => e.Product)
+                  .WithMany()
+                  .HasForeignKey(e => e.ProductId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            // Restrict (no Cascade): borrar un ModifierGroup usado por productos debe fallar
+            // explícito (ver ModifierService.DeleteGroupAsync), no desaparecer el vínculo en
+            // silencio dejando el producto sin avisar a nadie.
+            entity.HasOne(e => e.ModifierGroup)
+                  .WithMany()
+                  .HasForeignKey(e => e.ModifierGroupId)
+                  .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => new { e.ProductId, e.ModifierGroupId }).IsUnique();
         });
 
         // TimeBlock

@@ -61,3 +61,59 @@ public record RecipeItemInput(
     Guid InventoryItemId,
     decimal Quantity
 );
+
+// Grupos de modificadores reutilizables (ej. "Guarnición") — afiliado-scoped, se enlazan a
+// Product vía ProductModifierGroup. Asignar/desasignar grupos a un producto es reemplazo total
+// por PUT (SetProductModifierGroupsRequest), mismo patrón que SetRecipeRequest.
+public record ModifierOptionDto(
+    Guid Id,
+    string Name,
+    string? NameEn,
+    decimal PriceDelta,
+    bool IsDefault,
+    int SortOrder
+);
+
+public record ModifierGroupDto(
+    Guid Id,
+    string Name,
+    string? NameEn,
+    int MinSelect,
+    int MaxSelect,
+    bool Required,
+    int SortOrder,
+    IReadOnlyList<ModifierOptionDto> Options
+);
+
+public record ModifierOptionInput(
+    Guid? Id,           // null = opción nueva; ignorado en el server (siempre se regenera el Id)
+    string Name,
+    string? NameEn,
+    decimal PriceDelta,
+    bool IsDefault,
+    int SortOrder
+);
+
+public record CreateModifierGroupRequest(
+    string Name,
+    string? NameEn,
+    int MinSelect,
+    int MaxSelect,
+    bool Required,
+    int SortOrder,
+    IReadOnlyList<ModifierOptionInput> Options
+);
+
+public record UpdateModifierGroupRequest(
+    string? Name,
+    string? NameEn,
+    int? MinSelect,
+    int? MaxSelect,
+    bool? Required,
+    int? SortOrder,
+    IReadOnlyList<ModifierOptionInput>? Options   // null = no tocar las opciones; lista = reemplazarlas por completo
+);
+
+public record SetProductModifierGroupsRequest(
+    IReadOnlyList<Guid> ModifierGroupIds
+);

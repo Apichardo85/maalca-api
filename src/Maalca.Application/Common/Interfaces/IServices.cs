@@ -83,6 +83,27 @@ public interface IInventoryService
     Task<List<RecipeItemDto>> SetRecipeAsync(Guid affiliateId, Guid productId, List<RecipeItemInput> items);
 }
 
+/// <summary>
+/// Grupos de modificadores reutilizables (Restaurante) — ej. un solo grupo "Guarnición" enlazado
+/// a los 8 items de Fritura en vez de duplicar cada plato en "sin guarnición"/"con guarnición".
+/// Reemplazo total por PUT al asignar grupos a un producto, mismo patrón que Receta.
+/// </summary>
+public interface IModifierService
+{
+    Task<List<ModifierGroupDto>> GetGroupsAsync(Guid affiliateId);
+    Task<ModifierGroupDto?> GetGroupAsync(Guid affiliateId, Guid id);
+    Task<ModifierGroupDto> CreateGroupAsync(Guid affiliateId, CreateModifierGroupRequest request);
+    Task<ModifierGroupDto?> UpdateGroupAsync(Guid affiliateId, Guid id, UpdateModifierGroupRequest request);
+    Task<bool> DeleteGroupAsync(Guid affiliateId, Guid id);
+
+    Task<List<ModifierGroupDto>> GetProductModifierGroupsAsync(Guid affiliateId, Guid productId);
+    Task<List<ModifierGroupDto>> SetProductModifierGroupsAsync(Guid affiliateId, Guid productId, List<Guid> modifierGroupIds);
+
+    // Batch load para catálogo (dashboard y público) — un solo query para N productos, sin N+1
+    // (mismo patrón que ingredientsByProduct en PublicCatalogService.GetCatalogAsync).
+    Task<Dictionary<Guid, List<PublicModifierGroupDto>>> GetModifierGroupsForProductsAsync(Guid affiliateId, List<Guid> productIds);
+}
+
 public interface IQueueService
 {
     Task<List<QueueEntry>> GetQueueAsync(Guid affiliateId);
