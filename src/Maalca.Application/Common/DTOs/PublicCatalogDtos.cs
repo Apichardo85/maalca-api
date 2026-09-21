@@ -60,13 +60,28 @@ public record CatalogItemDto(
     IReadOnlyList<string>? Images = null,       // Product/Service/InventoryItem — galería completa; Images[0] == ImageUrl
     string? NameEn = null,                      // Product/Service/InventoryItem — nombre en inglés, fallback a Name si null
     IReadOnlyList<PublicIngredientDto>? Ingredients = null, // Product (Restaurante) — solo si tiene receta; null/vacío = sin receta definida
-    string? Modality = null                     // Service only — "InPerson" | "Virtual" | "Both". Null en Product/InventoryItem.
+    string? Modality = null,                    // Service only — "InPerson" | "Virtual" | "Both". Null en Product/InventoryItem.
+    IReadOnlyList<PublicModifierGroupDto>? ModifierGroups = null // Product (Restaurante) — grupos reutilizables enlazados (ej. "Guarnición"); null/vacío = sin modificadores
 );
 
 // Solo nombre — a propósito no expone Quantity (cantidad por porción, dato interno de receta)
 // ni nada de InventoryItem (stock, costo). El kiosko/tienda pública solo necesita saber qué
 // contiene el plato para mostrarlo y dejar que el cliente lo quite de su pedido si aplica.
 public record PublicIngredientDto(Guid InventoryItemId, string Name);
+
+// Vista pública de un ModifierGroup/ModifierOption — mismo shape que el dashboard (ModifierGroupDto
+// en CatalogCrudDtos.cs) pero sin campos internos de administración (SortOrder de edición, etc.
+// se mantiene porque el cliente sí necesita el orden de despliegue).
+public record PublicModifierOptionDto(Guid Id, string Name, decimal PriceDelta, bool IsDefault);
+
+public record PublicModifierGroupDto(
+    Guid Id,
+    string Name,
+    int MinSelect,
+    int MaxSelect,
+    bool Required,
+    IReadOnlyList<PublicModifierOptionDto> Options
+);
 
 public record PlanCapabilitiesDto(
     bool OnlinePayments,

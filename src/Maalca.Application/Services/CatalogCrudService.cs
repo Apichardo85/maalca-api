@@ -12,11 +12,13 @@ public class CatalogCrudService : ICatalogCrudService
 {
     private readonly AppDbContext _db;
     private readonly IPlanLimitService _planLimit;
+    private readonly IModifierService _modifiers;
 
-    public CatalogCrudService(AppDbContext db, IPlanLimitService planLimit)
+    public CatalogCrudService(AppDbContext db, IPlanLimitService planLimit, IModifierService modifiers)
     {
         _db = db;
         _planLimit = planLimit;
+        _modifiers = modifiers;
     }
 
     public async Task<List<CatalogItemDto>> GetItemsAsync(Guid affiliateId)
@@ -30,7 +32,16 @@ public class CatalogCrudService : ICatalogCrudService
                 .Where(p => p.AffiliateId == affiliateId)
                 .OrderBy(p => p.SortOrder).ThenBy(p => p.Name)
                 .ToListAsync();
-            return products.Select(CatalogItemMapper.FromProduct).ToList();
+            var items = products.Select(CatalogItemMapper.FromProduct).ToList();
+
+            // Grupos de modificadores reutilizables (ej. "Guarnición") — un solo query en batch
+            // para todos los platos de esta carga, no N+1 por item.
+            var modifiersByProduct = await _modifiers.GetModifierGroupsForProductsAsync(affiliateId, products.Select(p => p.Id).ToList());
+            items = items.Select(i => modifiersByProduct.TryGetValue(i.Id, out var groups)
+                ? i with { ModifierGroups = groups }
+                : i).ToList();
+
+            return items;
         }
 
         return affiliate.BusinessType switch
@@ -62,7 +73,10 @@ public class CatalogCrudService : ICatalogCrudService
         {
             var product = await _db.Products
                 .FirstOrDefaultAsync(p => p.AffiliateId == affiliateId && p.Id == itemId);
-            return product == null ? null : CatalogItemMapper.FromProduct(product);
+            if (product == null) return null;
+            var item = CatalogItemMapper.FromProduct(product);
+            var modifiersByProduct = await _modifiers.GetModifierGroupsForProductsAsync(affiliateId, new List<Guid> { product.Id });
+            return modifiersByProduct.TryGetValue(product.Id, out var groups) ? item with { ModifierGroups = groups } : item;
         }
 
         return affiliate.BusinessType switch

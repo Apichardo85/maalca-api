@@ -10,10 +10,12 @@ namespace Maalca.Application.Services;
 public class PublicCatalogService : IPublicCatalogService
 {
     private readonly AppDbContext _db;
+    private readonly IModifierService _modifiers;
 
-    public PublicCatalogService(AppDbContext db)
+    public PublicCatalogService(AppDbContext db, IModifierService modifiers)
     {
         _db = db;
+        _modifiers = modifiers;
     }
 
     public async Task<AffiliatePublicDto?> GetAffiliateBySlugAsync(string slug)
@@ -78,6 +80,16 @@ public class PublicCatalogService : IPublicCatalogService
 
                 items = items.Select(i => ingredientsByProduct.TryGetValue(i.Id, out var ings)
                     ? i with { Ingredients = ings }
+                    : i).ToList();
+            }
+
+            // Grupos de modificadores reutilizables (ej. "Guarnición") — mismo patrón en batch que
+            // la receta pública de arriba, un solo query para todos los platos de esta carga.
+            var modifiersByProduct = await _modifiers.GetModifierGroupsForProductsAsync(affiliate.Id, productIds);
+            if (modifiersByProduct.Count > 0)
+            {
+                items = items.Select(i => modifiersByProduct.TryGetValue(i.Id, out var groups)
+                    ? i with { ModifierGroups = groups }
                     : i).ToList();
             }
         }

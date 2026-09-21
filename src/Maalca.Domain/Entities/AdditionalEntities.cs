@@ -293,3 +293,58 @@ public class AuditLogEntry : BaseEntity
 
     public Affiliate? Affiliate { get; set; }
 }
+
+/// <summary>
+/// Grupo de modificadores reutilizable (ej. "Guarnición", "Tamaño", "Extras") — afiliado-scoped,
+/// se enlaza a muchos Product a la vez vía ProductModifierGroup (mismo patrón POS que
+/// Toast/Square: el item base tiene un precio, el grupo se elige al momento de ordenar en vez de
+/// duplicar el plato en el catálogo por cada combinación posible).
+/// </summary>
+public class ModifierGroup : AuditableEntity
+{
+    public Guid AffiliateId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? NameEn { get; set; }
+    // Cuántas opciones puede/debe elegir el cliente de este grupo al ordenar.
+    public int MinSelect { get; set; } = 0;
+    public int MaxSelect { get; set; } = 1;
+    public bool Required { get; set; } = false;
+    public int SortOrder { get; set; } = 0;
+
+    public Affiliate? Affiliate { get; set; }
+    public ICollection<ModifierOption> Options { get; set; } = new List<ModifierOption>();
+}
+
+/// <summary>
+/// Opción dentro de un ModifierGroup (ej. "Ninguna", "Tostones", "Mofongo") con su propio delta
+/// de precio sobre el precio base del Product — no un precio absoluto, así una misma opción
+/// compartida entre productos con precios base distintos (ej. "Guarnición" en Tiras de Pollo vs.
+/// Chicharrón) sigue teniendo sentido.
+/// </summary>
+public class ModifierOption : BaseEntity
+{
+    public Guid ModifierGroupId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? NameEn { get; set; }
+    public decimal PriceDelta { get; set; } = 0;
+    public bool IsDefault { get; set; } = false;
+    public int SortOrder { get; set; } = 0;
+
+    public ModifierGroup? ModifierGroup { get; set; }
+}
+
+/// <summary>
+/// Junction Product &lt;-&gt; ModifierGroup (muchos-a-muchos) — un ModifierGroup reutilizable
+/// ("Guarnición") se enlaza a varios Product (ej. los 8 items de Fritura) sin duplicarse por
+/// cada uno. Restrict en el FK a ModifierGroup (ver AppDbContext): borrar un grupo enlazado a
+/// productos falla explícito en vez de desaparecer el vínculo en silencio.
+/// </summary>
+public class ProductModifierGroup : BaseEntity
+{
+    public Guid ProductId { get; set; }
+    public Guid ModifierGroupId { get; set; }
+    public int SortOrder { get; set; } = 0;
+
+    public Product? Product { get; set; }
+    public ModifierGroup? ModifierGroup { get; set; }
+}
