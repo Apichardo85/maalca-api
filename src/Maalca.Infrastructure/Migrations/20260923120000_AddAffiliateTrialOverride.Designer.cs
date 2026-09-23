@@ -3,6 +3,7 @@ using System;
 using Maalca.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Maalca.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260923120000_AddAffiliateTrialOverride")]
+    partial class AddAffiliateTrialOverride
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -148,9 +151,6 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
-
-                    b.Property<int>("OperatorType")
-                        .HasColumnType("integer");
 
                     b.Property<int>("Plan")
                         .HasColumnType("integer");
@@ -552,94 +552,6 @@ namespace Maalca.Infrastructure.Migrations
                     b.ToTable("Canales");
                 });
 
-            modelBuilder.Entity("Maalca.Domain.Entities.Combo", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("AffiliateId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("CostPerPlate")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AffiliateId");
-
-                    b.ToTable("Combos");
-                });
-
-            modelBuilder.Entity("Maalca.Domain.Entities.ComboRecipe", b =>
-                {
-                    b.Property<Guid>("ComboId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("RecipeId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("ComboId", "RecipeId");
-
-                    b.HasIndex("RecipeId");
-
-                    b.ToTable("ComboRecipes");
-                });
-
-            modelBuilder.Entity("Maalca.Domain.Entities.ComboServing", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("AffiliateId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("ComboId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ComboName")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<decimal>("CostPerPlate")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Quantity")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("ServedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ComboId");
-
-                    b.HasIndex("AffiliateId", "ServedAt");
-
-                    b.ToTable("ComboServings");
-                });
-
             modelBuilder.Entity("Maalca.Domain.Entities.Customer", b =>
                 {
                     b.Property<Guid>("Id")
@@ -749,9 +661,6 @@ namespace Maalca.Infrastructure.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
-                    b.Property<DateOnly?>("ExpirationDate")
-                        .HasColumnType("date");
-
                     b.Property<string>("ImageUrl")
                         .HasColumnType("text");
 
@@ -767,9 +676,8 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<bool>("IsPubliclyVisible")
                         .HasColumnType("boolean");
 
-                    b.Property<decimal>("MinStock")
-                        .HasPrecision(18, 3)
-                        .HasColumnType("numeric(18,3)");
+                    b.Property<int>("MinStock")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -778,14 +686,10 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<string>("NameEn")
                         .HasColumnType("text");
 
-                    b.Property<decimal>("Quantity")
-                        .HasPrecision(18, 3)
-                        .HasColumnType("numeric(18,3)");
-
-                    b.Property<int>("SortOrder")
+                    b.Property<int>("Quantity")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("Source")
+                    b.Property<int>("SortOrder")
                         .HasColumnType("integer");
 
                     b.Property<string>("Status")
@@ -796,10 +700,6 @@ namespace Maalca.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
-
-                    b.Property<decimal>("UnitCost")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)");
 
                     b.Property<decimal>("UnitPrice")
                         .HasPrecision(18, 2)
@@ -813,7 +713,7 @@ namespace Maalca.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AffiliateId", "ExpirationDate");
+                    b.HasIndex("AffiliateId");
 
                     b.ToTable("InventoryItems");
                 });
@@ -833,9 +733,8 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<string>("Notes")
                         .HasColumnType("text");
 
-                    b.Property<decimal>("Quantity")
-                        .HasPrecision(18, 3)
-                        .HasColumnType("numeric(18,3)");
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Type")
                         .IsRequired()
@@ -1530,72 +1429,6 @@ namespace Maalca.Infrastructure.Migrations
                     b.ToTable("QueueEntries");
                 });
 
-            modelBuilder.Entity("Maalca.Domain.Entities.Recipe", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("AffiliateId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("CostPerServing")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<int>("Servings")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AffiliateId");
-
-                    b.ToTable("Recipes");
-                });
-
-            modelBuilder.Entity("Maalca.Domain.Entities.RecipeIngredient", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("InventoryItemId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("QuantityRequired")
-                        .HasPrecision(18, 3)
-                        .HasColumnType("numeric(18,3)");
-
-                    b.Property<Guid>("RecipeId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("InventoryItemId");
-
-                    b.HasIndex("RecipeId", "InventoryItemId")
-                        .IsUnique();
-
-                    b.ToTable("RecipeIngredients");
-                });
-
             modelBuilder.Entity("Maalca.Domain.Entities.Screen", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2229,54 +2062,6 @@ namespace Maalca.Infrastructure.Migrations
                     b.Navigation("Affiliate");
                 });
 
-            modelBuilder.Entity("Maalca.Domain.Entities.Combo", b =>
-                {
-                    b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
-                        .WithMany()
-                        .HasForeignKey("AffiliateId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Affiliate");
-                });
-
-            modelBuilder.Entity("Maalca.Domain.Entities.ComboRecipe", b =>
-                {
-                    b.HasOne("Maalca.Domain.Entities.Combo", "Combo")
-                        .WithMany("Recipes")
-                        .HasForeignKey("ComboId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Maalca.Domain.Entities.Recipe", "Recipe")
-                        .WithMany()
-                        .HasForeignKey("RecipeId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Combo");
-
-                    b.Navigation("Recipe");
-                });
-
-            modelBuilder.Entity("Maalca.Domain.Entities.ComboServing", b =>
-                {
-                    b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
-                        .WithMany()
-                        .HasForeignKey("AffiliateId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Maalca.Domain.Entities.Combo", "Combo")
-                        .WithMany()
-                        .HasForeignKey("ComboId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("Affiliate");
-
-                    b.Navigation("Combo");
-                });
-
             modelBuilder.Entity("Maalca.Domain.Entities.Customer", b =>
                 {
                     b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
@@ -2490,36 +2275,6 @@ namespace Maalca.Infrastructure.Migrations
                     b.Navigation("Service");
                 });
 
-            modelBuilder.Entity("Maalca.Domain.Entities.Recipe", b =>
-                {
-                    b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
-                        .WithMany()
-                        .HasForeignKey("AffiliateId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Affiliate");
-                });
-
-            modelBuilder.Entity("Maalca.Domain.Entities.RecipeIngredient", b =>
-                {
-                    b.HasOne("Maalca.Domain.Entities.InventoryItem", "InventoryItem")
-                        .WithMany()
-                        .HasForeignKey("InventoryItemId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Maalca.Domain.Entities.Recipe", "Recipe")
-                        .WithMany("Ingredients")
-                        .HasForeignKey("RecipeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("InventoryItem");
-
-                    b.Navigation("Recipe");
-                });
-
             modelBuilder.Entity("Maalca.Domain.Entities.Screen", b =>
                 {
                     b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
@@ -2688,11 +2443,6 @@ namespace Maalca.Infrastructure.Migrations
                     b.Navigation("Users");
                 });
 
-            modelBuilder.Entity("Maalca.Domain.Entities.Combo", b =>
-                {
-                    b.Navigation("Recipes");
-                });
-
             modelBuilder.Entity("Maalca.Domain.Entities.InventoryItem", b =>
                 {
                     b.Navigation("Movements");
@@ -2706,11 +2456,6 @@ namespace Maalca.Infrastructure.Migrations
             modelBuilder.Entity("Maalca.Domain.Entities.ModifierGroup", b =>
                 {
                     b.Navigation("Options");
-                });
-
-            modelBuilder.Entity("Maalca.Domain.Entities.Recipe", b =>
-                {
-                    b.Navigation("Ingredients");
                 });
 
             modelBuilder.Entity("Maalca.Domain.Entities.Service", b =>

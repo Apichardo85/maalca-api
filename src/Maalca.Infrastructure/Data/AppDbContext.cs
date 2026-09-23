@@ -18,6 +18,11 @@ public class AppDbContext : DbContext
     public DbSet<InventoryItem> InventoryItems => Set<InventoryItem>();
     public DbSet<InventoryMovement> InventoryMovements => Set<InventoryMovement>();
     public DbSet<ProductIngredient> ProductIngredients => Set<ProductIngredient>();
+    public DbSet<Recipe> Recipes => Set<Recipe>();
+    public DbSet<RecipeIngredient> RecipeIngredients => Set<RecipeIngredient>();
+    public DbSet<Combo> Combos => Set<Combo>();
+    public DbSet<ComboRecipe> ComboRecipes => Set<ComboRecipe>();
+    public DbSet<ComboServing> ComboServings => Set<ComboServing>();
     public DbSet<ModifierGroup> ModifierGroups => Set<ModifierGroup>();
     public DbSet<ModifierOption> ModifierOptions => Set<ModifierOption>();
     public DbSet<ProductModifierGroup> ProductModifierGroups => Set<ProductModifierGroup>();
@@ -342,8 +347,13 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired();
             entity.Property(e => e.UnitPrice).HasPrecision(18, 2);
+            entity.Property(e => e.Quantity).HasPrecision(18, 3);
+            entity.Property(e => e.MinStock).HasPrecision(18, 3);
+            entity.Property(e => e.UnitCost).HasPrecision(18, 4);
             entity.Property(e => e.DescriptionEn).HasMaxLength(1000);
             entity.Property(e => e.Unit).HasMaxLength(20);
+            // Filtro ?expiringBefore= de /inventory-items (alertas de vencimiento en Comunidad).
+            entity.HasIndex(e => new { e.AffiliateId, e.ExpirationDate });
             entity.HasOne(e => e.Affiliate)
                   .WithMany(a => a.InventoryItems)
                   .HasForeignKey(e => e.AffiliateId)
@@ -354,10 +364,84 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<InventoryMovement>(entity =>
         {
             entity.HasKey(e => e.Id);
+            entity.Property(e => e.Quantity).HasPrecision(18, 3);
             entity.HasOne(e => e.InventoryItem)
                   .WithMany(i => i.Movements)
                   .HasForeignKey(e => e.InventoryItemId)
                   .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── MaalCa Comunidad (Fase 1): Recipe / RecipeIngredient / Combo / ComboServing ──
+        modelBuilder.Entity<Recipe>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.CostPerServing).HasPrecision(18, 4);
+            entity.HasIndex(e => e.AffiliateId);
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RecipeIngredient>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.QuantityRequired).HasPrecision(18, 3);
+            entity.HasOne(e => e.Recipe)
+                  .WithMany(r => r.Ingredients)
+                  .HasForeignKey(e => e.RecipeId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            // Restrict, igual que ProductIngredient: borrar un insumo en uso debe fallar explícito
+            // (ver InventoryService/CommunityService delete), no dejar la receta corta en silencio.
+            entity.HasOne(e => e.InventoryItem)
+                  .WithMany()
+                  .HasForeignKey(e => e.InventoryItemId)
+                  .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => new { e.RecipeId, e.InventoryItemId }).IsUnique();
+        });
+
+        modelBuilder.Entity<Combo>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.CostPerPlate).HasPrecision(18, 4);
+            entity.HasIndex(e => e.AffiliateId);
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ComboRecipe>(entity =>
+        {
+            entity.HasKey(e => new { e.ComboId, e.RecipeId });
+            entity.HasOne(e => e.Combo)
+                  .WithMany(c => c.Recipes)
+                  .HasForeignKey(e => e.ComboId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            // Restrict: una Recipe en uso por un combo no se borra en silencio (ver CommunityService).
+            entity.HasOne(e => e.Recipe)
+                  .WithMany()
+                  .HasForeignKey(e => e.RecipeId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ComboServing>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ComboName).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.CostPerPlate).HasPrecision(18, 4);
+            // community-metrics suma por afiliado + rango de fecha.
+            entity.HasIndex(e => new { e.AffiliateId, e.ServedAt });
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Combo)
+                  .WithMany()
+                  .HasForeignKey(e => e.ComboId)
+                  .OnDelete(DeleteBehavior.SetNull);
         });
 
         // QueueEntry

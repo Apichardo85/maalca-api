@@ -38,10 +38,10 @@ public static class ModuleCatalog
         ["invoices"] = new[] { "service", "professional" },
         ["reservations"] = new[] { "restaurant" },
         ["proposals"] = new[] { "service", "professional" },
-        ["inventory"] = new[] { "restaurant", "retail" },
+        ["inventory"] = new[] { "restaurant", "retail", "community" },
         ["modifiers"] = new[] { "restaurant" },
     };
-    private static readonly string[] AppointmentsExcludedBusinessTypes = { "retail", "creator", "publisher", "restaurant" };
+    private static readonly string[] AppointmentsExcludedBusinessTypes = { "retail", "creator", "publisher", "restaurant", "community" };
 
     public static string[] FilterActive(string? modules, string? businessType = null)
     {

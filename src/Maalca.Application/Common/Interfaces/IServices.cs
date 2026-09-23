@@ -156,7 +156,7 @@ public interface IInvoiceService
     Task<PaginatedResponse<Invoice>> GetInvoicesAsync(Guid affiliateId, string? status = null, DateTime? dateFrom = null, DateTime? dateTo = null);
     Task<Invoice?> GetInvoiceAsync(Guid affiliateId, Guid id);
     Task<Invoice> CreateInvoiceAsync(Guid affiliateId, Invoice invoice, List<InvoiceItem>? items = null, Guid? replacesInvoiceId = null, string? actorId = null, string? actorName = null);
-    Task<Invoice?> UpdateInvoiceAsync(Guid affiliateId, Guid id, Invoice invoice, string? actorId = null, string? actorName = null);
+    Task<Invoice?> UpdateInvoiceAsync(Guid affiliateId, Guid id, Invoice invoice, List<InvoiceItem>? items = null, string? actorId = null, string? actorName = null);
     Task<bool> DeleteInvoiceAsync(Guid affiliateId, Guid id);
 
     /// <summary>

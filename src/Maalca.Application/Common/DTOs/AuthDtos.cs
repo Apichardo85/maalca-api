@@ -95,6 +95,25 @@ public class VoidInvoiceRequest
     public string Reason { get; set; } = string.Empty;
 }
 
+/// <summary>Editar una factura existente vía PUT. Items es opcional a propósito: "Marcar
+/// pagada" sigue mandando este mismo endpoint sin Items (solo cambia Status/PaidDate), mientras
+/// que editar de verdad (cliente/líneas/vencimiento, ver InvoicesContent "Editar") manda Items
+/// y solo se permite mientras la factura sigue Pending/Overdue — InvoiceService.UpdateInvoiceAsync
+/// tira InvalidOperationException si no. Subtotal/Total se ignoran cuando hay Items (se
+/// recalculan de las líneas reales, mismo criterio que CreateInvoiceAsync).</summary>
+public class UpdateInvoiceRequest
+{
+    public Guid CustomerId { get; set; }
+    public decimal Subtotal { get; set; }
+    public decimal Tax { get; set; }
+    public decimal Total { get; set; }
+    public string Status { get; set; } = "Pending";
+    public DateTime? DueDate { get; set; }
+    public DateTime? PaidDate { get; set; }
+    public string? Notes { get; set; }
+    public List<CreateInvoiceItemRequest>? Items { get; set; }
+}
+
 /// <summary>Pago real de factura (Stripe Connect) — ver InvoiceService.CreateInvoiceCheckoutAsync.</summary>
 public class CreateInvoiceCheckoutRequest
 {

@@ -8,6 +8,7 @@ using Maalca.Domain.Enums;
 using Maalca.Infrastructure.Auth;
 using Maalca.Infrastructure.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
@@ -55,6 +56,7 @@ builder.Services.AddScoped<IProposalService, ProposalService>();
 builder.Services.AddScoped<IServiceService, ServiceService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<IModifierService, ModifierService>();
+builder.Services.AddScoped<ICommunityService, CommunityService>();
 builder.Services.AddScoped<IQueueService, QueueService>();
 builder.Services.AddScoped<ITeamService, TeamService>();
 builder.Services.AddScoped<ITimeClockService, TimeClockService>();
@@ -280,6 +282,108 @@ app.MapPatch("/api/ops/affiliates/{affiliateId:guid}/plan", async (
     {
         return Results.BadRequest(new { error = new { code = "INVALID_PLAN", message = ex.Message } });
     }
+});
+
+app.MapPatch("/api/ops/affiliates/{affiliateId:guid}/trial", async (
+    HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId, SetAffiliateTrialRequest request) =>
+{
+    // Gestionar el trial a mano (casos piloto/existentes) es una acción financiera — mismo gate
+    // que plan/publicar/suspender: solo Owner, no Support.
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    if (ctx.User.FindFirst("platform_role")?.Value != nameof(PlatformAdminRole.Owner))
+        return Results.Forbid();
+
+    try
+    {
+        var result = await opsService.SetAffiliateTrialAsync(affiliateId, request.Action, request.Days);
+        return Results.Ok(result);
+    }
+    catch (InvalidOperationException ex) when (ex.Message.Contains("no existe"))
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = ex.Message } });
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_ACTION", message = ex.Message } });
+    }
+});
+
+// ---- Borrado real (hard delete) desde /ops — solo Owner, igual gate que el trial arriba.
+// Aparte de los flujos normales de negocio (Anular factura, Cancelar orden/cita), que nunca
+// borran nada a propósito — esto es solo para limpiar datos de prueba reales que nunca debieron
+// llegar a producción. Confirm:true es una segunda traba, además del gate de rol, para que
+// nunca se dispare por un doble-click o un curl copiado sin pensar.
+
+app.MapDelete("/api/ops/affiliates/{affiliateId:guid}/customers/{customerId:guid}", async (
+    HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId, Guid customerId, [FromBody] OpsHardDeleteRequest request) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    if (ctx.User.FindFirst("platform_role")?.Value != nameof(PlatformAdminRole.Owner))
+        return Results.Forbid();
+    if (!request.Confirm)
+        return Results.BadRequest(new { error = new { code = "CONFIRM_REQUIRED", message = "Falta confirmar el borrado." } });
+
+    var actorId = ctx.User.FindFirst("sub")?.Value;
+    var actorName = ctx.User.FindFirst("email")?.Value;
+    try
+    {
+        var result = await opsService.DeleteCustomerCascadeAsync(affiliateId, customerId, actorId, actorName);
+        return Results.Ok(result);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = ex.Message } });
+    }
+});
+
+app.MapDelete("/api/ops/affiliates/{affiliateId:guid}/orders/{orderId:guid}", async (
+    HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId, Guid orderId, [FromBody] OpsHardDeleteRequest request) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    if (ctx.User.FindFirst("platform_role")?.Value != nameof(PlatformAdminRole.Owner))
+        return Results.Forbid();
+    if (!request.Confirm)
+        return Results.BadRequest(new { error = new { code = "CONFIRM_REQUIRED", message = "Falta confirmar el borrado." } });
+
+    var actorId = ctx.User.FindFirst("sub")?.Value;
+    var actorName = ctx.User.FindFirst("email")?.Value;
+    var ok = await opsService.DeleteOrderAsync(affiliateId, orderId, actorId, actorName);
+    return ok ? Results.NoContent() : Results.NotFound();
+});
+
+app.MapDelete("/api/ops/affiliates/{affiliateId:guid}/appointments/{appointmentId:guid}", async (
+    HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId, Guid appointmentId, [FromBody] OpsHardDeleteRequest request) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    if (ctx.User.FindFirst("platform_role")?.Value != nameof(PlatformAdminRole.Owner))
+        return Results.Forbid();
+    if (!request.Confirm)
+        return Results.BadRequest(new { error = new { code = "CONFIRM_REQUIRED", message = "Falta confirmar el borrado." } });
+
+    var actorId = ctx.User.FindFirst("sub")?.Value;
+    var actorName = ctx.User.FindFirst("email")?.Value;
+    var ok = await opsService.DeleteAppointmentAsync(affiliateId, appointmentId, actorId, actorName);
+    return ok ? Results.NoContent() : Results.NotFound();
+});
+
+app.MapDelete("/api/ops/affiliates/{affiliateId:guid}/invoices/{invoiceId:guid}", async (
+    HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId, Guid invoiceId, [FromBody] OpsHardDeleteRequest request) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    if (ctx.User.FindFirst("platform_role")?.Value != nameof(PlatformAdminRole.Owner))
+        return Results.Forbid();
+    if (!request.Confirm)
+        return Results.BadRequest(new { error = new { code = "CONFIRM_REQUIRED", message = "Falta confirmar el borrado." } });
+
+    var actorId = ctx.User.FindFirst("sub")?.Value;
+    var actorName = ctx.User.FindFirst("email")?.Value;
+    var ok = await opsService.DeleteInvoiceHardAsync(affiliateId, invoiceId, actorId, actorName);
+    return ok ? Results.NoContent() : Results.NotFound();
 });
 
 app.MapPatch("/api/ops/affiliates/{affiliateId:guid}/business-type", async (
@@ -1221,6 +1325,183 @@ app.MapPut("/api/affiliates/{affiliateId:guid}/products/{productId:guid}/ingredi
     }
 });
 
+// ============ MAALCA COMUNIDAD (Fase 1) — inventario, recetas, combos, /serve, métricas ============
+// Ownership check a nivel de grupo (endpoint filter): TODO endpoint de Comunidad bajo
+// /api/affiliates/{affiliateId}/ exige que {affiliateId} sea el active_affiliate_id del usuario —
+// no depende de que cada handler se acuerde de chequearlo. Escritura además exige no ser Staff
+// (mismo gating que /inventory); /serve sí se permite a Staff porque servir platos es operación
+// diaria, no administración.
+var community = app.MapGroup("/api/affiliates/{affiliateId:guid}")
+    .RequireAuthorization()
+    .AddEndpointFilter(async (efc, next) =>
+    {
+        var ctx = efc.HttpContext;
+        if (ctx.User.FindFirst("active_affiliate_id")?.Value != ctx.Request.RouteValues["affiliateId"]?.ToString())
+            return Results.Forbid();
+        return await next(efc);
+    });
+
+static bool IsStaff(HttpContext ctx) => ctx.User.FindFirst("role")?.Value == "Staff";
+static IResult CommunityBadRequest(InvalidOperationException ex)
+    => Results.BadRequest(new { error = new { code = "INVALID_OPERATION", message = ex.Message } });
+static IResult CommunityInUse(InvalidOperationException ex)
+    => Results.Conflict(new { error = new { code = "IN_USE", message = ex.Message } });
+
+// --- Inventory items (vista Comunidad de la tabla InventoryItems existente) ---
+community.MapGet("/inventory-items", async (ICommunityService svc, Guid affiliateId, DateOnly? expiringBefore) =>
+    Results.Ok(await svc.GetInventoryItemsAsync(affiliateId, expiringBefore)));
+
+community.MapGet("/inventory-items/{id:guid}", async (ICommunityService svc, Guid affiliateId, Guid id) =>
+    await svc.GetInventoryItemAsync(affiliateId, id) is { } item ? Results.Ok(item) : Results.NotFound());
+
+community.MapPost("/inventory-items", async (HttpContext ctx, ICommunityService svc, Guid affiliateId, UpsertCommunityInventoryItemRequest request) =>
+{
+    if (IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var item = await svc.CreateInventoryItemAsync(affiliateId, request);
+        return Results.Created($"/api/affiliates/{affiliateId}/inventory-items/{item.Id}", item);
+    }
+    catch (InvalidOperationException ex) { return CommunityBadRequest(ex); }
+});
+
+community.MapPut("/inventory-items/{id:guid}", async (HttpContext ctx, ICommunityService svc, Guid affiliateId, Guid id, UpsertCommunityInventoryItemRequest request) =>
+{
+    if (IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        return await svc.UpdateInventoryItemAsync(affiliateId, id, request) is { } item ? Results.Ok(item) : Results.NotFound();
+    }
+    catch (InvalidOperationException ex) { return CommunityBadRequest(ex); }
+});
+
+community.MapDelete("/inventory-items/{id:guid}", async (HttpContext ctx, ICommunityService svc, Guid affiliateId, Guid id) =>
+{
+    if (IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        return await svc.DeleteInventoryItemAsync(affiliateId, id) ? Results.NoContent() : Results.NotFound();
+    }
+    catch (InvalidOperationException ex) { return CommunityInUse(ex); }
+});
+
+// --- Recipes ---
+community.MapGet("/recipes", async (ICommunityService svc, Guid affiliateId) =>
+    Results.Ok(await svc.GetRecipesAsync(affiliateId)));
+
+community.MapGet("/recipes/{id:guid}", async (ICommunityService svc, Guid affiliateId, Guid id) =>
+    await svc.GetRecipeAsync(affiliateId, id) is { } recipe ? Results.Ok(recipe) : Results.NotFound());
+
+community.MapPost("/recipes", async (HttpContext ctx, ICommunityService svc, Guid affiliateId, UpsertRecipeRequest request) =>
+{
+    if (IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var recipe = await svc.CreateRecipeAsync(affiliateId, request);
+        return Results.Created($"/api/affiliates/{affiliateId}/recipes/{recipe.Id}", recipe);
+    }
+    catch (InvalidOperationException ex) { return CommunityBadRequest(ex); }
+});
+
+community.MapPut("/recipes/{id:guid}", async (HttpContext ctx, ICommunityService svc, Guid affiliateId, Guid id, UpsertRecipeRequest request) =>
+{
+    if (IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        return await svc.UpdateRecipeAsync(affiliateId, id, request) is { } recipe ? Results.Ok(recipe) : Results.NotFound();
+    }
+    catch (InvalidOperationException ex) { return CommunityBadRequest(ex); }
+});
+
+community.MapDelete("/recipes/{id:guid}", async (HttpContext ctx, ICommunityService svc, Guid affiliateId, Guid id) =>
+{
+    if (IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        return await svc.DeleteRecipeAsync(affiliateId, id) ? Results.NoContent() : Results.NotFound();
+    }
+    catch (InvalidOperationException ex) { return CommunityInUse(ex); }
+});
+
+// --- Recipe ingredients (cada cambio recalcula CostPerServing y el CostPerPlate de sus combos) ---
+community.MapGet("/recipes/{id:guid}/ingredients", async (ICommunityService svc, Guid affiliateId, Guid id) =>
+    await svc.GetRecipeIngredientsAsync(affiliateId, id) is { } lines ? Results.Ok(lines) : Results.NotFound());
+
+community.MapPost("/recipes/{id:guid}/ingredients", async (HttpContext ctx, ICommunityService svc, Guid affiliateId, Guid id, UpsertRecipeIngredientRequest request) =>
+{
+    if (IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        return await svc.AddRecipeIngredientAsync(affiliateId, id, request) is { } recipe
+            ? Results.Created($"/api/affiliates/{affiliateId}/recipes/{id}/ingredients", recipe)
+            : Results.NotFound();
+    }
+    catch (InvalidOperationException ex) { return CommunityBadRequest(ex); }
+});
+
+community.MapPut("/recipes/{id:guid}/ingredients/{ingredientId:guid}", async (HttpContext ctx, ICommunityService svc, Guid affiliateId, Guid id, Guid ingredientId, UpsertRecipeIngredientRequest request) =>
+{
+    if (IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        return await svc.UpdateRecipeIngredientAsync(affiliateId, id, ingredientId, request) is { } recipe ? Results.Ok(recipe) : Results.NotFound();
+    }
+    catch (InvalidOperationException ex) { return CommunityBadRequest(ex); }
+});
+
+community.MapDelete("/recipes/{id:guid}/ingredients/{ingredientId:guid}", async (HttpContext ctx, ICommunityService svc, Guid affiliateId, Guid id, Guid ingredientId) =>
+{
+    if (IsStaff(ctx)) return Results.Forbid();
+    return await svc.DeleteRecipeIngredientAsync(affiliateId, id, ingredientId) is { } recipe ? Results.Ok(recipe) : Results.NotFound();
+});
+
+// --- Combos ---
+community.MapGet("/combos", async (ICommunityService svc, Guid affiliateId) =>
+    Results.Ok(await svc.GetCombosAsync(affiliateId)));
+
+community.MapGet("/combos/{id:guid}", async (ICommunityService svc, Guid affiliateId, Guid id) =>
+    await svc.GetComboAsync(affiliateId, id) is { } combo ? Results.Ok(combo) : Results.NotFound());
+
+community.MapPost("/combos", async (HttpContext ctx, ICommunityService svc, Guid affiliateId, UpsertComboRequest request) =>
+{
+    if (IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var combo = await svc.CreateComboAsync(affiliateId, request);
+        return Results.Created($"/api/affiliates/{affiliateId}/combos/{combo.Id}", combo);
+    }
+    catch (InvalidOperationException ex) { return CommunityBadRequest(ex); }
+});
+
+community.MapPut("/combos/{id:guid}", async (HttpContext ctx, ICommunityService svc, Guid affiliateId, Guid id, UpsertComboRequest request) =>
+{
+    if (IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        return await svc.UpdateComboAsync(affiliateId, id, request) is { } combo ? Results.Ok(combo) : Results.NotFound();
+    }
+    catch (InvalidOperationException ex) { return CommunityBadRequest(ex); }
+});
+
+community.MapDelete("/combos/{id:guid}", async (HttpContext ctx, ICommunityService svc, Guid affiliateId, Guid id) =>
+{
+    if (IsStaff(ctx)) return Results.Forbid();
+    return await svc.DeleteComboAsync(affiliateId, id) ? Results.NoContent() : Results.NotFound();
+});
+
+// Fuente ÚNICA de "comidas servidas": cada llamada queda como un ComboServing.
+community.MapPost("/combos/{id:guid}/serve", async (ICommunityService svc, Guid affiliateId, Guid id, ServeComboRequest request) =>
+{
+    try
+    {
+        return await svc.ServeComboAsync(affiliateId, id, request.Quantity) is { } result ? Results.Ok(result) : Results.NotFound();
+    }
+    catch (InvalidOperationException ex) { return CommunityBadRequest(ex); }
+});
+
+community.MapGet("/community-metrics", async (ICommunityService svc, Guid affiliateId) =>
+    Results.Ok(await svc.GetMetricsAsync(affiliateId)));
+
 // ============ MODIFIER GROUPS (grupos de modificadores reutilizables — Restaurante) ============
 // Mismo gating que Receta/Inventario: lectura exige ser el afiliado activo, escritura además
 // exige no ser Staff. Un ModifierGroup ("Guarnición") es reutilizable — se enlaza a muchos
@@ -1641,18 +1922,41 @@ app.MapPost("/api/affiliates/{affiliateId:guid}/invoices", async (HttpContext ct
     return Results.Created($"/api/affiliates/{affiliateId}/invoices/{result.Id}", result);
 });
 
-app.MapPut("/api/affiliates/{affiliateId:guid}/invoices/{id:guid}", async (HttpContext ctx, IInvoiceService invoiceService, Guid affiliateId, Guid id, Invoice invoice) =>
+// UpdateInvoiceRequest en vez del Invoice crudo — "Marcar pagada" sigue mandando este mismo
+// endpoint sin Items (solo status/paidDate), mientras que "Editar" (solo mientras Pending/
+// Overdue, ver InvoicesContent) manda Items y dispara la recalculación de líneas/total en
+// InvoiceService.UpdateInvoiceAsync, que tira InvalidOperationException si ya no se puede editar.
+app.MapPut("/api/affiliates/{affiliateId:guid}/invoices/{id:guid}", async (HttpContext ctx, IInvoiceService invoiceService, Guid affiliateId, Guid id, UpdateInvoiceRequest request) =>
 {
     if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
         return Results.Forbid();
     if (ctx.User.FindFirst("role")?.Value == "Staff")
         return Results.Forbid();
+    var invoice = new Invoice
+    {
+        CustomerId = request.CustomerId,
+        Subtotal = request.Subtotal,
+        Tax = request.Tax,
+        Total = request.Total,
+        Status = request.Status,
+        DueDate = request.DueDate,
+        PaidDate = request.PaidDate,
+        Notes = request.Notes,
+    };
+    var items = request.Items?.Select(i => new InvoiceItem { Description = i.Description, Quantity = i.Quantity, UnitPrice = i.UnitPrice }).ToList();
     var actorId = ctx.User.FindFirst("sub")?.Value;
     var actorName = ctx.User.FindFirst("email")?.Value;
-    var result = await invoiceService.UpdateInvoiceAsync(affiliateId, id, invoice, actorId, actorName);
-    if (result == null)
-        return Results.NotFound();
-    return Results.Ok(result);
+    try
+    {
+        var result = await invoiceService.UpdateInvoiceAsync(affiliateId, id, invoice, items, actorId, actorName);
+        if (result == null)
+            return Results.NotFound();
+        return Results.Ok(result);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVOICE_LOCKED", message = ex.Message } });
+    }
 });
 
 app.MapDelete("/api/affiliates/{affiliateId:guid}/invoices/{id:guid}", async (HttpContext ctx, IInvoiceService invoiceService, Guid affiliateId, Guid id) =>
@@ -1661,10 +1965,17 @@ app.MapDelete("/api/affiliates/{affiliateId:guid}/invoices/{id:guid}", async (Ht
         return Results.Forbid();
     if (ctx.User.FindFirst("role")?.Value == "Staff")
         return Results.Forbid();
-    var result = await invoiceService.DeleteInvoiceAsync(affiliateId, id);
-    if (!result)
-        return Results.NotFound();
-    return Results.NoContent();
+    try
+    {
+        var result = await invoiceService.DeleteInvoiceAsync(affiliateId, id);
+        if (!result)
+            return Results.NotFound();
+        return Results.NoContent();
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVOICE_LOCKED", message = ex.Message } });
+    }
 });
 
 // Anular — no se edita ni se borra el original (documento financiero). Para "corregir" algo el
@@ -2745,6 +3056,18 @@ app.MapGet("/api/public/affiliates/{slug}", async (IPublicCatalogService catalog
 app.MapGet("/api/public/affiliates/{slug}/catalog", async (IPublicCatalogService catalogService, string slug, HttpResponse response, Guid? screenId) =>
 {
     var result = await catalogService.GetCatalogAsync(slug, screenId);
+    if (result == null)
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
+    response.Headers.CacheControl = "public, max-age=60";
+    return Results.Ok(result);
+})
+.AllowAnonymous();
+
+// Vitrina Comunidad — métricas públicas (comidas servidas del mes, costo promedio por plato
+// para la calculadora de impacto). Solo devuelve algo si el afiliado es businessType Community.
+app.MapGet("/api/public/affiliates/{slug}/community-metrics", async (ICommunityService communityService, string slug, HttpResponse response) =>
+{
+    var result = await communityService.GetPublicMetricsAsync(slug);
     if (result == null)
         return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
     response.Headers.CacheControl = "public, max-age=60";

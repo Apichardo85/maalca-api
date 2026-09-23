@@ -42,6 +42,15 @@ public record SetAffiliateStatusRequest(bool? Published, bool? Active);
 /// publicar/suspender) por su impacto financiero.</summary>
 public record SetAffiliatePlanRequest(string Plan);
 
+/// <summary>Gestión manual del trial de un afiliado desde /ops — Action es uno de "extend",
+/// "expireNow" o "clearOverride". Days solo aplica a "extend" (default 30 si se omite).
+/// Independiente de Stripe — para casos piloto/existentes (ej. Pegote, The Little Dominican)
+/// donde hay que extender, resetear o forzar el vencimiento del trial a mano.</summary>
+public record SetAffiliateTrialRequest(string Action, int? Days);
+
+/// <summary>Estado del trial de un afiliado tras un SetAffiliateTrialAsync.</summary>
+public record AffiliateTrialDto(Guid AffiliateId, DateTime? TrialOverrideEndsAt, bool IsTrialExpired);
+
 /// <summary>Corrige el rubro de un negocio elegido mal en el onboarding (ej. alguien de Creador
 /// que solo tenía Restaurant/Barber/Service/Retail para escoger y terminó con el template
 /// equivocado). Limitado a esos 4 valores a propósito — Creator/Publisher/Professional existen
@@ -60,3 +69,16 @@ public record UpdatePlatformAdminRoleRequest(string Role);
 public record AffiliateNoteDto(Guid Id, string AuthorEmail, string Text, DateTime CreatedAt);
 
 public record CreateAffiliateNoteRequest(string Text);
+
+/// <summary>Borrado real (no reversible) desde /ops — solo Owner. Los flujos normales de
+/// negocio (Anular factura, Cancelar orden/cita) nunca borran nada a propósito; esto existe
+/// aparte, solo para limpiar datos de prueba que nunca debieron llegar a producción (ej. "QA
+/// Walk-in Claude"). Confirm debe venir en true — es una segunda traba además del gate de rol,
+/// pensada para que nunca se dispare por un doble-click o un curl copiado sin pensar.</summary>
+public record OpsHardDeleteRequest(bool Confirm);
+
+/// <summary>Resultado de borrar un cliente en cascada — cuántas filas ligadas se llevó (citas,
+/// fila, propuestas, reservas, facturas). No incluye Order — Order no tiene relación por id con
+/// Customer, es una copia suelta de nombre/teléfono (ver Order.CustomerName), se borra aparte.</summary>
+public record CustomerCascadeDeleteResultDto(
+    int Appointments, int QueueEntries, int Proposals, int TableReservations, int Invoices);

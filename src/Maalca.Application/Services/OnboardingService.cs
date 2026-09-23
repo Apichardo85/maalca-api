@@ -77,6 +77,11 @@ public class OnboardingService : IOnboardingService
         if (!Enum.TryParse<BusinessType>(request.BusinessType, ignoreCase: true, out var businessType))
             throw new ArgumentException($"Invalid BusinessType: {request.BusinessType}");
 
+        var operatorType = OperatorType.Organization;
+        if (!string.IsNullOrWhiteSpace(request.OperatorType) &&
+            (!Enum.TryParse(request.OperatorType, ignoreCase: true, out operatorType) || !Enum.IsDefined(operatorType)))
+            throw new ArgumentException($"Invalid OperatorType: {request.OperatorType}");
+
         if (request.WhatsApp != null && !IsValidWhatsApp(request.WhatsApp))
             throw new ArgumentException("El número de WhatsApp debe incluir el código de país (ej. 1 para RD/USA): 18095551234");
 
@@ -88,6 +93,7 @@ public class OnboardingService : IOnboardingService
             Description = request.Description?.Trim(),
             WhatsApp = request.WhatsApp?.Trim(),
             BusinessType = businessType,
+            OperatorType = operatorType,
             Slug = slug,
             Plan = Plan.Free,
             PlanStatus = PlanStatus.Active,
