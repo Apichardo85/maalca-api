@@ -55,6 +55,7 @@ builder.Services.AddScoped<IProposalService, ProposalService>();
 builder.Services.AddScoped<IServiceService, ServiceService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<IModifierService, ModifierService>();
+builder.Services.AddScoped<ICommunityService, CommunityService>();
 builder.Services.AddScoped<IQueueService, QueueService>();
 builder.Services.AddScoped<ITeamService, TeamService>();
 builder.Services.AddScoped<ITimeClockService, TimeClockService>();
@@ -1322,6 +1323,183 @@ app.MapPut("/api/affiliates/{affiliateId:guid}/products/{productId:guid}/ingredi
         return Results.BadRequest(new { error = new { code = "INVALID_OPERATION", message = ex.Message } });
     }
 });
+
+// ============ MAALCA COMUNIDAD (Fase 1) — inventario, recetas, combos, /serve, métricas ============
+// Ownership check a nivel de grupo (endpoint filter): TODO endpoint de Comunidad bajo
+// /api/affiliates/{affiliateId}/ exige que {affiliateId} sea el active_affiliate_id del usuario —
+// no depende de que cada handler se acuerde de chequearlo. Escritura además exige no ser Staff
+// (mismo gating que /inventory); /serve sí se permite a Staff porque servir platos es operación
+// diaria, no administración.
+var community = app.MapGroup("/api/affiliates/{affiliateId:guid}")
+    .RequireAuthorization()
+    .AddEndpointFilter(async (efc, next) =>
+    {
+        var ctx = efc.HttpContext;
+        if (ctx.User.FindFirst("active_affiliate_id")?.Value != ctx.Request.RouteValues["affiliateId"]?.ToString())
+            return Results.Forbid();
+        return await next(efc);
+    });
+
+static bool IsStaff(HttpContext ctx) => ctx.User.FindFirst("role")?.Value == "Staff";
+static IResult CommunityBadRequest(InvalidOperationException ex)
+    => Results.BadRequest(new { error = new { code = "INVALID_OPERATION", message = ex.Message } });
+static IResult CommunityInUse(InvalidOperationException ex)
+    => Results.Conflict(new { error = new { code = "IN_USE", message = ex.Message } });
+
+// --- Inventory items (vista Comunidad de la tabla InventoryItems existente) ---
+community.MapGet("/inventory-items", async (ICommunityService svc, Guid affiliateId, DateOnly? expiringBefore) =>
+    Results.Ok(await svc.GetInventoryItemsAsync(affiliateId, expiringBefore)));
+
+community.MapGet("/inventory-items/{id:guid}", async (ICommunityService svc, Guid affiliateId, Guid id) =>
+    await svc.GetInventoryItemAsync(affiliateId, id) is { } item ? Results.Ok(item) : Results.NotFound());
+
+community.MapPost("/inventory-items", async (HttpContext ctx, ICommunityService svc, Guid affiliateId, UpsertCommunityInventoryItemRequest request) =>
+{
+    if (IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var item = await svc.CreateInventoryItemAsync(affiliateId, request);
+        return Results.Created($"/api/affiliates/{affiliateId}/inventory-items/{item.Id}", item);
+    }
+    catch (InvalidOperationException ex) { return CommunityBadRequest(ex); }
+});
+
+community.MapPut("/inventory-items/{id:guid}", async (HttpContext ctx, ICommunityService svc, Guid affiliateId, Guid id, UpsertCommunityInventoryItemRequest request) =>
+{
+    if (IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        return await svc.UpdateInventoryItemAsync(affiliateId, id, request) is { } item ? Results.Ok(item) : Results.NotFound();
+    }
+    catch (InvalidOperationException ex) { return CommunityBadRequest(ex); }
+});
+
+community.MapDelete("/inventory-items/{id:guid}", async (HttpContext ctx, ICommunityService svc, Guid affiliateId, Guid id) =>
+{
+    if (IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        return await svc.DeleteInventoryItemAsync(affiliateId, id) ? Results.NoContent() : Results.NotFound();
+    }
+    catch (InvalidOperationException ex) { return CommunityInUse(ex); }
+});
+
+// --- Recipes ---
+community.MapGet("/recipes", async (ICommunityService svc, Guid affiliateId) =>
+    Results.Ok(await svc.GetRecipesAsync(affiliateId)));
+
+community.MapGet("/recipes/{id:guid}", async (ICommunityService svc, Guid affiliateId, Guid id) =>
+    await svc.GetRecipeAsync(affiliateId, id) is { } recipe ? Results.Ok(recipe) : Results.NotFound());
+
+community.MapPost("/recipes", async (HttpContext ctx, ICommunityService svc, Guid affiliateId, UpsertRecipeRequest request) =>
+{
+    if (IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var recipe = await svc.CreateRecipeAsync(affiliateId, request);
+        return Results.Created($"/api/affiliates/{affiliateId}/recipes/{recipe.Id}", recipe);
+    }
+    catch (InvalidOperationException ex) { return CommunityBadRequest(ex); }
+});
+
+community.MapPut("/recipes/{id:guid}", async (HttpContext ctx, ICommunityService svc, Guid affiliateId, Guid id, UpsertRecipeRequest request) =>
+{
+    if (IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        return await svc.UpdateRecipeAsync(affiliateId, id, request) is { } recipe ? Results.Ok(recipe) : Results.NotFound();
+    }
+    catch (InvalidOperationException ex) { return CommunityBadRequest(ex); }
+});
+
+community.MapDelete("/recipes/{id:guid}", async (HttpContext ctx, ICommunityService svc, Guid affiliateId, Guid id) =>
+{
+    if (IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        return await svc.DeleteRecipeAsync(affiliateId, id) ? Results.NoContent() : Results.NotFound();
+    }
+    catch (InvalidOperationException ex) { return CommunityInUse(ex); }
+});
+
+// --- Recipe ingredients (cada cambio recalcula CostPerServing y el CostPerPlate de sus combos) ---
+community.MapGet("/recipes/{id:guid}/ingredients", async (ICommunityService svc, Guid affiliateId, Guid id) =>
+    await svc.GetRecipeIngredientsAsync(affiliateId, id) is { } lines ? Results.Ok(lines) : Results.NotFound());
+
+community.MapPost("/recipes/{id:guid}/ingredients", async (HttpContext ctx, ICommunityService svc, Guid affiliateId, Guid id, UpsertRecipeIngredientRequest request) =>
+{
+    if (IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        return await svc.AddRecipeIngredientAsync(affiliateId, id, request) is { } recipe
+            ? Results.Created($"/api/affiliates/{affiliateId}/recipes/{id}/ingredients", recipe)
+            : Results.NotFound();
+    }
+    catch (InvalidOperationException ex) { return CommunityBadRequest(ex); }
+});
+
+community.MapPut("/recipes/{id:guid}/ingredients/{ingredientId:guid}", async (HttpContext ctx, ICommunityService svc, Guid affiliateId, Guid id, Guid ingredientId, UpsertRecipeIngredientRequest request) =>
+{
+    if (IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        return await svc.UpdateRecipeIngredientAsync(affiliateId, id, ingredientId, request) is { } recipe ? Results.Ok(recipe) : Results.NotFound();
+    }
+    catch (InvalidOperationException ex) { return CommunityBadRequest(ex); }
+});
+
+community.MapDelete("/recipes/{id:guid}/ingredients/{ingredientId:guid}", async (HttpContext ctx, ICommunityService svc, Guid affiliateId, Guid id, Guid ingredientId) =>
+{
+    if (IsStaff(ctx)) return Results.Forbid();
+    return await svc.DeleteRecipeIngredientAsync(affiliateId, id, ingredientId) is { } recipe ? Results.Ok(recipe) : Results.NotFound();
+});
+
+// --- Combos ---
+community.MapGet("/combos", async (ICommunityService svc, Guid affiliateId) =>
+    Results.Ok(await svc.GetCombosAsync(affiliateId)));
+
+community.MapGet("/combos/{id:guid}", async (ICommunityService svc, Guid affiliateId, Guid id) =>
+    await svc.GetComboAsync(affiliateId, id) is { } combo ? Results.Ok(combo) : Results.NotFound());
+
+community.MapPost("/combos", async (HttpContext ctx, ICommunityService svc, Guid affiliateId, UpsertComboRequest request) =>
+{
+    if (IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var combo = await svc.CreateComboAsync(affiliateId, request);
+        return Results.Created($"/api/affiliates/{affiliateId}/combos/{combo.Id}", combo);
+    }
+    catch (InvalidOperationException ex) { return CommunityBadRequest(ex); }
+});
+
+community.MapPut("/combos/{id:guid}", async (HttpContext ctx, ICommunityService svc, Guid affiliateId, Guid id, UpsertComboRequest request) =>
+{
+    if (IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        return await svc.UpdateComboAsync(affiliateId, id, request) is { } combo ? Results.Ok(combo) : Results.NotFound();
+    }
+    catch (InvalidOperationException ex) { return CommunityBadRequest(ex); }
+});
+
+community.MapDelete("/combos/{id:guid}", async (HttpContext ctx, ICommunityService svc, Guid affiliateId, Guid id) =>
+{
+    if (IsStaff(ctx)) return Results.Forbid();
+    return await svc.DeleteComboAsync(affiliateId, id) ? Results.NoContent() : Results.NotFound();
+});
+
+// Fuente ÚNICA de "comidas servidas": cada llamada queda como un ComboServing.
+community.MapPost("/combos/{id:guid}/serve", async (ICommunityService svc, Guid affiliateId, Guid id, ServeComboRequest request) =>
+{
+    try
+    {
+        return await svc.ServeComboAsync(affiliateId, id, request.Quantity) is { } result ? Results.Ok(result) : Results.NotFound();
+    }
+    catch (InvalidOperationException ex) { return CommunityBadRequest(ex); }
+});
+
+community.MapGet("/community-metrics", async (ICommunityService svc, Guid affiliateId) =>
+    Results.Ok(await svc.GetMetricsAsync(affiliateId)));
 
 // ============ MODIFIER GROUPS (grupos de modificadores reutilizables — Restaurante) ============
 // Mismo gating que Receta/Inventario: lectura exige ser el afiliado activo, escritura además

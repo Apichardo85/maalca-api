@@ -78,6 +78,13 @@ public class Affiliate : BaseEntity
     // CreatedAt. Ver PlanLimitService.IsTrialExpired.
     public DateTime? TrialOverrideEndsAt { get; set; }
 
+    // ── MaalCa Comunidad: quién opera el afiliado ────────────────────────
+    // NO decide si puede tener voluntarios (eso es independiente, Fase 3+). Solo decide el staff
+    // administrativo del dashboard: en un afiliado Community con OperatorType=Individual,
+    // AffiliateMapService.InviteAsync no deja agregar un segundo UserAffiliateMap. Default
+    // Organization para que ningún afiliado existente (de cualquier vertical) pierda su equipo.
+    public OperatorType OperatorType { get; set; } = OperatorType.Organization;
+
     // ── Stripe Connect: destino de pago del afiliado (distinto de StripeCustomerId,
     // que es al afiliado como CLIENTE de MaalCa). Esta cuenta conectada es donde
     // el afiliado recibe el dinero de SUS PROPIOS clientes. Cuenta tipo Standard,
