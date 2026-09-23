@@ -8,5 +8,6 @@ public enum BusinessType
     Retail       = 3,
     Creator      = 4,   // CiriWhispers y similares
     Publisher    = 5,   // Editorial MaalCa
-    Professional = 6    // Dr. Pichardo y similares
+    Professional = 6,   // Dr. Pichardo y similares
+    Community    = 7    // MaalCa Comunidad — comedores, bancos de alimentos, causas
 }

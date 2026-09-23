@@ -24,6 +24,8 @@ public static class CatalogItemMapper
 
     public static CatalogItemDto FromInventoryItem(InventoryItem i) => new(
         i.Id, i.Name, i.Description, i.UnitPrice, i.Category, i.ImageUrl, i.SortOrder, i.IsDemo,
-        null, i.Quantity, i.Status,
+        // Stock del catálogo sigue siendo entero (Retail vende unidades enteras); Quantity es
+        // decimal desde Comunidad Fase 1 — se trunca solo para esta vista.
+        null, (int)Math.Floor(i.Quantity), i.Status,
         i.DescriptionEn, Images: JsonArrayField.Parse<string>(i.Images), NameEn: i.NameEn);
 }

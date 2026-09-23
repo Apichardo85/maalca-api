@@ -1,4 +1,5 @@
 using Maalca.Domain.Common;
+using Maalca.Domain.Enums;
 
 namespace Maalca.Domain.Entities;
 
@@ -78,11 +79,13 @@ public class InventoryItem : AuditableEntity
     public string? Description { get; set; }
     public string? DescriptionEn { get; set; }
     public string? Category { get; set; }
-    public int Quantity { get; set; } = 0;
-    public int MinStock { get; set; } = 0;
+    // decimal (antes int) para que kg/litros descuenten exacto — Comunidad y las recetas de
+    // Restaurante consumen fracciones (0.25 kg por plato) que un int obligaba a redondear.
+    public decimal Quantity { get; set; } = 0;
+    public decimal MinStock { get; set; } = 0;
     public decimal UnitPrice { get; set; }
     /// <summary>Unidad de medida ("unidad", "kg", "lb", "litro", "caja", ...) — solo informativa,
-    /// no afecta el cálculo de stock (Quantity sigue siendo un entero simple).</summary>
+    /// no convierte cantidades entre unidades.</summary>
     public string Unit { get; set; } = "unidad";
     public string Status { get; set; } = "Active";
     public string? ImageUrl { get; set; }
@@ -98,6 +101,15 @@ public class InventoryItem : AuditableEntity
     /// queda vacío) para poder identificarlo aunque no tenga Barcode de fábrica.</summary>
     public string? InternalCode { get; set; }
 
+    // ── MaalCa Comunidad (Fase 1) ────────────────────────────────────────
+    /// <summary>Costo por unidad (distinto de UnitPrice, que es precio de VENTA en Retail). Base
+    /// del costo real por porción/plato de Recipe/Combo. 0 para donaciones en especie si el
+    /// afiliado no les asigna un valor.</summary>
+    public decimal UnitCost { get; set; } = 0;
+    public DateOnly? ExpirationDate { get; set; }
+    /// <summary>Origen del insumo — null en verticales que no lo usan (Retail/Restaurante).</summary>
+    public InventorySource? Source { get; set; }
+
     public Affiliate? Affiliate { get; set; }
     public ICollection<InventoryMovement> Movements { get; set; } = new List<InventoryMovement>();
 }
@@ -106,7 +118,7 @@ public class InventoryMovement : BaseEntity
 {
     public Guid InventoryItemId { get; set; }
     public string Type { get; set; } = "in"; // in, out
-    public int Quantity { get; set; }
+    public decimal Quantity { get; set; }
     public string? Notes { get; set; }
 
     public InventoryItem? InventoryItem { get; set; }

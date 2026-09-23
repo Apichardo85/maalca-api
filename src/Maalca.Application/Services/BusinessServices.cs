@@ -537,6 +537,12 @@ public class InventoryService : IInventoryService
             .Select(pi => pi.Product!.Name)
             .Distinct()
             .ToListAsync();
+        // Recetas de Comunidad (RecipeIngredient, también FK Restrict) — mismo bloqueo explícito.
+        usedInDishes.AddRange(await _context.RecipeIngredients
+            .Where(ri => ri.InventoryItemId == id)
+            .Select(ri => ri.Recipe!.Name)
+            .Distinct()
+            .ToListAsync());
         if (usedInDishes.Count > 0)
             throw new InvalidOperationException(
                 $"No se puede eliminar \"{item.Name}\": está en la receta de {string.Join(", ", usedInDishes)}. Quítalo de esa receta primero.");
@@ -644,9 +650,9 @@ public class InventoryService : IInventoryService
 
             var name = cols[0].Trim();
             var category = cols.Count > 1 ? cols[1].Trim() : null;
-            var quantity = cols.Count > 2 && int.TryParse(cols[2], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var q) ? q : 0;
+            var quantity = cols.Count > 2 && decimal.TryParse(cols[2], System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var q) ? q : 0m;
             var unit = cols.Count > 3 && !string.IsNullOrWhiteSpace(cols[3]) ? cols[3].Trim() : "unidad";
-            var minStock = cols.Count > 4 && int.TryParse(cols[4], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var m) ? m : 0;
+            var minStock = cols.Count > 4 && decimal.TryParse(cols[4], System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var m) ? m : 0m;
             var unitPrice = cols.Count > 5 && decimal.TryParse(cols[5], System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var p) ? p : 0m;
             var status = cols.Count > 6 && !string.IsNullOrWhiteSpace(cols[6]) ? cols[6].Trim() : "Active";
 

@@ -1,5 +1,6 @@
 using Maalca.Application.Common.Interfaces;
 using Maalca.Domain.Entities;
+using Maalca.Domain.Enums;
 using Maalca.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -82,6 +83,20 @@ public class AffiliateMapService : IAffiliateMapService
             .AnyAsync(m => m.AffiliateId == affiliateId && m.Email.ToLower() == normalizedEmail);
         if (exists)
             throw new InvalidOperationException("Ese correo ya tiene acceso a este negocio.");
+
+        // Comunidad: un afiliado Individual tiene UN solo responsable en el dashboard — el staff
+        // administrativo (más de un UserAffiliateMap) es lo que distingue a Organization. No
+        // tiene nada que ver con voluntarios (Fase 3+), que no pasan por UserAffiliateMap.
+        // Solo aplica a Community: el resto de verticales siempre pudo tener equipo.
+        var affiliate = await _context.Affiliates.FindAsync(affiliateId);
+        if (affiliate is { BusinessType: BusinessType.Community, OperatorType: OperatorType.Individual })
+        {
+            var hasResponsible = await _context.UserAffiliateMaps
+                .AnyAsync(m => m.AffiliateId == affiliateId && !m.IsImpersonation);
+            if (hasResponsible)
+                throw new InvalidOperationException(
+                    "Este espacio está registrado como Individual: solo admite un responsable. Cámbialo a Organización para invitar más personas al panel.");
+        }
 
         // Si se manda teamMemberId, debe ser un miembro de Personal real de ESTE afiliado —
         // evita que alguien vincule un id de otro negocio a mano.

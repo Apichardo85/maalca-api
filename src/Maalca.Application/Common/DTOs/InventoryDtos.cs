@@ -12,8 +12,8 @@ public record InventorySummaryDto(
 public record LowStockItemDto(
     Guid Id,
     string Name,
-    int Quantity,
-    int MinStock,
+    decimal Quantity,
+    decimal MinStock,
     string Unit
 );
 

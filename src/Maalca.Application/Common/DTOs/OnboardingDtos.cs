@@ -6,7 +6,10 @@ public record OnboardingRequest(
     string? WhatsApp = null,
     string? Description = null,
     string? PrimaryColor = null,
-    string? LogoUrl = null
+    string? LogoUrl = null,
+    // "Individual" | "Organization" — solo relevante para BusinessType=Community (ver
+    // Affiliate.OperatorType). Omitido = Organization.
+    string? OperatorType = null
 );
 
 public record OnboardingResponse(

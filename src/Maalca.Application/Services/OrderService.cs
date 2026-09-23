@@ -393,9 +393,9 @@ public class OrderService : IOrderService
                 var inv = ingredientItems.FirstOrDefault(i => i.Id == line.InventoryItemId);
                 if (inv is null) continue;
 
-                // InventoryItem.Quantity es int; la receta es decimal (ej. 0.5 kg por plato) —
-                // redondeamos hacia arriba para no sub-descontar el ingrediente real.
-                var consumed = (int)Math.Ceiling(line.Quantity * item.Qty);
+                // InventoryItem.Quantity es decimal (antes int + Math.Ceiling) — se descuenta la
+                // fracción exacta de la receta (ej. 0.5 kg por plato), sin redondear.
+                var consumed = line.Quantity * item.Qty;
                 if (consumed <= 0) continue;
 
                 inv.Quantity = Math.Max(0, inv.Quantity - consumed);
