@@ -12,6 +12,7 @@ public class PlatformAdminService : IPlatformAdminService
 {
     private readonly AppDbContext _context;
     private readonly IPlanLimitService _planLimit;
+    private readonly IAuditLogService _audit;
 
     // Mantener en sync con ENTREPRENEUR_PRICE_USD en maalca-web/src/lib/plan-limits.ts — no hay
     // una única fuente de verdad compartida entre los dos repos, así que si el precio cambia
@@ -21,10 +22,11 @@ public class PlatformAdminService : IPlatformAdminService
     // Cuánto dura un grant de impersonation antes de expirar solo — ver UserAffiliateMap.IsImpersonation.
     private static readonly TimeSpan ImpersonationDuration = TimeSpan.FromHours(2);
 
-    public PlatformAdminService(AppDbContext context, IPlanLimitService planLimit)
+    public PlatformAdminService(AppDbContext context, IPlanLimitService planLimit, IAuditLogService audit)
     {
         _context = context;
         _planLimit = planLimit;
+        _audit = audit;
     }
 
     public async Task<bool> IsPlatformAdminAsync(string supabaseUserId, string email)
@@ -230,6 +232,89 @@ public class PlatformAdminService : IPlatformAdminService
 
         return new AffiliateTrialDto(
             affiliate.Id, affiliate.TrialOverrideEndsAt, _planLimit.IsTrialExpired(affiliate));
+    }
+
+    // ---- Borrado real (hard delete) desde /ops — solo Owner (gateado en el endpoint, ver
+    // Program.cs). Los flujos normales de negocio (Anular factura, Cancelar orden/cita) nunca
+    // borran nada, es intencional — documento financiero / rastro de auditoría. Esto es aparte,
+    // solo para limpiar datos de prueba reales que nunca debieron llegar a producción (ej. "QA
+    // Walk-in Claude", 12 órdenes "Unnamed customer" en Little Dominican). Cada borrado queda
+    // en el audit log ANTES del removal de la fila, con lo que hacía falta para reconstruir qué
+    // se perdió si algún día hace falta.
+
+    public async Task<CustomerCascadeDeleteResultDto> DeleteCustomerCascadeAsync(Guid affiliateId, Guid customerId, string? actorId, string? actorName)
+    {
+        var customer = await _context.Customers.FirstOrDefaultAsync(c => c.Id == customerId && c.AffiliateId == affiliateId)
+            ?? throw new InvalidOperationException("Ese cliente no existe.");
+
+        var appointments = await _context.Appointments.Where(a => a.CustomerId == customerId && a.AffiliateId == affiliateId).ToListAsync();
+        var queueEntries = await _context.QueueEntries.Where(q => q.CustomerId == customerId && q.AffiliateId == affiliateId).ToListAsync();
+        var proposals = await _context.Proposals.Where(p => p.CustomerId == customerId && p.AffiliateId == affiliateId).ToListAsync();
+        var reservations = await _context.TableReservations.Where(r => r.CustomerId == customerId && r.AffiliateId == affiliateId).ToListAsync();
+        var invoices = await _context.Invoices.Include(i => i.Items).Where(i => i.CustomerId == customerId && i.AffiliateId == affiliateId).ToListAsync();
+
+        var result = new CustomerCascadeDeleteResultDto(
+            appointments.Count, queueEntries.Count, proposals.Count, reservations.Count, invoices.Count);
+
+        // Log ANTES de borrar — si algo falla a mitad del SaveChanges, mejor un log de una
+        // acción que no terminó de aplicar que una fila borrada sin rastro de qué se intentó.
+        await _audit.LogAsync(affiliateId, "ops.customer.hard_deleted", "Customer", customerId,
+            $"Cliente '{customer.Name}' ({customer.Phone ?? "sin teléfono"}) borrado permanentemente desde /ops, " +
+            $"junto con {appointments.Count} cita(s), {queueEntries.Count} fila(s) de espera, " +
+            $"{proposals.Count} propuesta(s), {reservations.Count} reserva(s) y {invoices.Count} factura(s).",
+            actorId, actorName);
+
+        _context.Appointments.RemoveRange(appointments);
+        _context.QueueEntries.RemoveRange(queueEntries);
+        _context.Proposals.RemoveRange(proposals);
+        _context.TableReservations.RemoveRange(reservations);
+        foreach (var inv in invoices)
+            _context.InvoiceItems.RemoveRange(inv.Items);
+        _context.Invoices.RemoveRange(invoices);
+        _context.Customers.Remove(customer);
+
+        await _context.SaveChangesAsync();
+        return result;
+    }
+
+    // Order no tiene CustomerId (es un pedido del storefront/POS con nombre/teléfono sueltos,
+    // nunca ligado por id a un Customer — ver Order.cs), así que no entra en el cascade de
+    // arriba. Se borra suelto, por su propio id.
+    public async Task<bool> DeleteOrderAsync(Guid affiliateId, Guid orderId, string? actorId, string? actorName)
+    {
+        var order = await _context.Orders.FirstOrDefaultAsync(o => o.Id == orderId && o.AffiliateId == affiliateId);
+        if (order == null) return false;
+        await _audit.LogAsync(affiliateId, "ops.order.hard_deleted", "Order", orderId,
+            $"Orden de '{order.CustomerName ?? "(sin nombre)"}' por {order.Total:C} ({order.Status}) borrada permanentemente desde /ops.",
+            actorId, actorName);
+        _context.Orders.Remove(order);
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> DeleteAppointmentAsync(Guid affiliateId, Guid appointmentId, string? actorId, string? actorName)
+    {
+        var appt = await _context.Appointments.Include(a => a.Customer).FirstOrDefaultAsync(a => a.Id == appointmentId && a.AffiliateId == affiliateId);
+        if (appt == null) return false;
+        await _audit.LogAsync(affiliateId, "ops.appointment.hard_deleted", "Appointment", appointmentId,
+            $"Cita de '{appt.Customer?.Name ?? "(sin cliente)"}' del {appt.Date:yyyy-MM-dd} {appt.Time} borrada permanentemente desde /ops.",
+            actorId, actorName);
+        _context.Appointments.Remove(appt);
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> DeleteInvoiceHardAsync(Guid affiliateId, Guid invoiceId, string? actorId, string? actorName)
+    {
+        var invoice = await _context.Invoices.Include(i => i.Items).FirstOrDefaultAsync(i => i.Id == invoiceId && i.AffiliateId == affiliateId);
+        if (invoice == null) return false;
+        await _audit.LogAsync(affiliateId, "ops.invoice.hard_deleted", "Invoice", invoiceId,
+            $"Factura {invoice.InvoiceNumber} ({invoice.Total:C}, estado {invoice.Status}) borrada permanentemente desde /ops.",
+            actorId, actorName);
+        _context.InvoiceItems.RemoveRange(invoice.Items);
+        _context.Invoices.Remove(invoice);
+        await _context.SaveChangesAsync();
+        return true;
     }
 
     // Solo estos 4 tienen plantilla pública real (src/components/public/templates/ en

@@ -1239,25 +1239,60 @@ public class InvoiceService : IInvoiceService
         return invoice;
     }
 
-    public async Task<Invoice?> UpdateInvoiceAsync(Guid affiliateId, Guid id, Invoice invoice, string? actorId = null, string? actorName = null)
+    public async Task<Invoice?> UpdateInvoiceAsync(Guid affiliateId, Guid id, Invoice invoice, List<InvoiceItem>? items = null, string? actorId = null, string? actorName = null)
     {
-        var existing = await _context.Invoices.FirstOrDefaultAsync(i => i.Id == id && i.AffiliateId == affiliateId);
+        var existing = await _context.Invoices.Include(i => i.Items).FirstOrDefaultAsync(i => i.Id == id && i.AffiliateId == affiliateId);
         if (existing == null) return null;
+
+        // Editar de verdad (cliente/líneas/vencimiento) solo mientras sigue Pending/Overdue —
+        // una vez Paid o Cancelled es un documento financiero cerrado (ver VoidInvoiceAsync para
+        // "corregir" una ya pagada/anulada con una factura de corrección enlazada). Esto es
+        // aparte del cambio de estado (Mark paid / Mark preparing), que sigue pasando por este
+        // mismo método pero sin mandar Items — ver UpdateInvoiceRequest en el endpoint.
+        if (items is { Count: > 0 } && existing.Status != "Pending" && existing.Status != "Overdue")
+            throw new InvalidOperationException(
+                "Esta factura ya no se puede editar — solo mientras está pendiente. Anúlala y crea una factura de corrección si hace falta cambiar algo.");
+
         var wasPaid = existing.Status == "Paid";
         existing.CustomerId = invoice.CustomerId;
-        existing.Subtotal = invoice.Subtotal;
         existing.Tax = invoice.Tax;
-        existing.Total = invoice.Total;
         existing.Status = invoice.Status;
         existing.DueDate = invoice.DueDate.HasValue ? DateTime.SpecifyKind(invoice.DueDate.Value, DateTimeKind.Utc) : null;
         existing.PaidDate = invoice.PaidDate.HasValue ? DateTime.SpecifyKind(invoice.PaidDate.Value, DateTimeKind.Utc) : null;
         existing.Notes = invoice.Notes;
         existing.UpdatedAt = DateTime.UtcNow;
+
+        if (items is { Count: > 0 })
+        {
+            // Igual criterio que CreateInvoiceAsync: el total nunca se confía al request, se
+            // recalcula acá a partir de las líneas reales.
+            _context.InvoiceItems.RemoveRange(existing.Items);
+            existing.Items = items.Select(i => new InvoiceItem
+            {
+                Id = Guid.NewGuid(),
+                InvoiceId = existing.Id,
+                Description = i.Description,
+                Quantity = i.Quantity,
+                UnitPrice = i.UnitPrice,
+                Total = i.Quantity * i.UnitPrice,
+            }).ToList();
+            existing.Subtotal = existing.Items.Sum(i => i.Total);
+            existing.Total = existing.Subtotal + existing.Tax;
+        }
+        else
+        {
+            existing.Subtotal = invoice.Subtotal;
+            existing.Total = invoice.Total;
+        }
+
         await _context.SaveChangesAsync();
 
         if (!wasPaid && existing.Status == "Paid")
             await _audit.LogAsync(affiliateId, "invoice.paid", "Invoice", existing.Id,
                 $"Factura {existing.InvoiceNumber} marcada como pagada ({existing.Total:C})", actorId, actorName);
+        else if (items is { Count: > 0 })
+            await _audit.LogAsync(affiliateId, "invoice.edited", "Invoice", existing.Id,
+                $"Factura {existing.InvoiceNumber} editada (cliente/líneas/vencimiento) — nuevo total {existing.Total:C}", actorId, actorName);
 
         return existing;
     }
@@ -1266,6 +1301,12 @@ public class InvoiceService : IInvoiceService
     {
         var invoice = await _context.Invoices.FirstOrDefaultAsync(i => i.Id == id && i.AffiliateId == affiliateId);
         if (invoice == null) return false;
+        // Antes borraba cualquier factura sin importar su estado — el endpoint nunca estaba
+        // expuesto en el frontend, pero la ruta cruda no tenía ninguna guardia. Ahora solo
+        // Pending/Overdue, nunca una ya cobrada o anulada; para eso está el borrado real desde
+        // /ops (solo Owner), aparte — ver PlatformAdminService.DeleteInvoiceHardAsync.
+        if (invoice.Status != "Pending" && invoice.Status != "Overdue")
+            throw new InvalidOperationException("Solo se pueden borrar facturas pendientes. Esta ya está pagada o anulada.");
         _context.Invoices.Remove(invoice);
         await _context.SaveChangesAsync();
         return true;

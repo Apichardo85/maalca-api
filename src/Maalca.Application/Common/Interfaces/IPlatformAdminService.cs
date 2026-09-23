@@ -58,4 +58,13 @@ public interface IPlatformAdminService
     // ---- Notas CRM internas por afiliado ----
     Task<List<AffiliateNoteDto>> GetAffiliateNotesAsync(Guid affiliateId);
     Task<AffiliateNoteDto> AddAffiliateNoteAsync(Guid affiliateId, string authorEmail, string text);
+
+    // ---- Borrado real (hard delete) — solo Owner, ver OpsHardDeleteRequest ----
+    /// <summary>Borra un cliente y todo lo que cuelga de él por CustomerId (citas, fila,
+    /// propuestas, reservas, facturas+líneas). Order no se toca — no tiene relación por id con
+    /// Customer. Lanza InvalidOperationException si el cliente no existe.</summary>
+    Task<CustomerCascadeDeleteResultDto> DeleteCustomerCascadeAsync(Guid affiliateId, Guid customerId, string? actorId, string? actorName);
+    Task<bool> DeleteOrderAsync(Guid affiliateId, Guid orderId, string? actorId, string? actorName);
+    Task<bool> DeleteAppointmentAsync(Guid affiliateId, Guid appointmentId, string? actorId, string? actorName);
+    Task<bool> DeleteInvoiceHardAsync(Guid affiliateId, Guid invoiceId, string? actorId, string? actorName);
 }

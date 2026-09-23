@@ -307,6 +307,83 @@ app.MapPatch("/api/ops/affiliates/{affiliateId:guid}/trial", async (
     }
 });
 
+// ---- Borrado real (hard delete) desde /ops — solo Owner, igual gate que el trial arriba.
+// Aparte de los flujos normales de negocio (Anular factura, Cancelar orden/cita), que nunca
+// borran nada a propósito — esto es solo para limpiar datos de prueba reales que nunca debieron
+// llegar a producción. Confirm:true es una segunda traba, además del gate de rol, para que
+// nunca se dispare por un doble-click o un curl copiado sin pensar.
+
+app.MapDelete("/api/ops/affiliates/{affiliateId:guid}/customers/{customerId:guid}", async (
+    HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId, Guid customerId, OpsHardDeleteRequest request) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    if (ctx.User.FindFirst("platform_role")?.Value != nameof(PlatformAdminRole.Owner))
+        return Results.Forbid();
+    if (!request.Confirm)
+        return Results.BadRequest(new { error = new { code = "CONFIRM_REQUIRED", message = "Falta confirmar el borrado." } });
+
+    var actorId = ctx.User.FindFirst("sub")?.Value;
+    var actorName = ctx.User.FindFirst("email")?.Value;
+    try
+    {
+        var result = await opsService.DeleteCustomerCascadeAsync(affiliateId, customerId, actorId, actorName);
+        return Results.Ok(result);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = ex.Message } });
+    }
+});
+
+app.MapDelete("/api/ops/affiliates/{affiliateId:guid}/orders/{orderId:guid}", async (
+    HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId, Guid orderId, OpsHardDeleteRequest request) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    if (ctx.User.FindFirst("platform_role")?.Value != nameof(PlatformAdminRole.Owner))
+        return Results.Forbid();
+    if (!request.Confirm)
+        return Results.BadRequest(new { error = new { code = "CONFIRM_REQUIRED", message = "Falta confirmar el borrado." } });
+
+    var actorId = ctx.User.FindFirst("sub")?.Value;
+    var actorName = ctx.User.FindFirst("email")?.Value;
+    var ok = await opsService.DeleteOrderAsync(affiliateId, orderId, actorId, actorName);
+    return ok ? Results.NoContent() : Results.NotFound();
+});
+
+app.MapDelete("/api/ops/affiliates/{affiliateId:guid}/appointments/{appointmentId:guid}", async (
+    HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId, Guid appointmentId, OpsHardDeleteRequest request) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    if (ctx.User.FindFirst("platform_role")?.Value != nameof(PlatformAdminRole.Owner))
+        return Results.Forbid();
+    if (!request.Confirm)
+        return Results.BadRequest(new { error = new { code = "CONFIRM_REQUIRED", message = "Falta confirmar el borrado." } });
+
+    var actorId = ctx.User.FindFirst("sub")?.Value;
+    var actorName = ctx.User.FindFirst("email")?.Value;
+    var ok = await opsService.DeleteAppointmentAsync(affiliateId, appointmentId, actorId, actorName);
+    return ok ? Results.NoContent() : Results.NotFound();
+});
+
+app.MapDelete("/api/ops/affiliates/{affiliateId:guid}/invoices/{invoiceId:guid}", async (
+    HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId, Guid invoiceId, OpsHardDeleteRequest request) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    if (ctx.User.FindFirst("platform_role")?.Value != nameof(PlatformAdminRole.Owner))
+        return Results.Forbid();
+    if (!request.Confirm)
+        return Results.BadRequest(new { error = new { code = "CONFIRM_REQUIRED", message = "Falta confirmar el borrado." } });
+
+    var actorId = ctx.User.FindFirst("sub")?.Value;
+    var actorName = ctx.User.FindFirst("email")?.Value;
+    var ok = await opsService.DeleteInvoiceHardAsync(affiliateId, invoiceId, actorId, actorName);
+    return ok ? Results.NoContent() : Results.NotFound();
+});
+
 app.MapPatch("/api/ops/affiliates/{affiliateId:guid}/business-type", async (
     HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId, SetAffiliateBusinessTypeRequest request) =>
 {
@@ -1666,18 +1743,41 @@ app.MapPost("/api/affiliates/{affiliateId:guid}/invoices", async (HttpContext ct
     return Results.Created($"/api/affiliates/{affiliateId}/invoices/{result.Id}", result);
 });
 
-app.MapPut("/api/affiliates/{affiliateId:guid}/invoices/{id:guid}", async (HttpContext ctx, IInvoiceService invoiceService, Guid affiliateId, Guid id, Invoice invoice) =>
+// UpdateInvoiceRequest en vez del Invoice crudo — "Marcar pagada" sigue mandando este mismo
+// endpoint sin Items (solo status/paidDate), mientras que "Editar" (solo mientras Pending/
+// Overdue, ver InvoicesContent) manda Items y dispara la recalculación de líneas/total en
+// InvoiceService.UpdateInvoiceAsync, que tira InvalidOperationException si ya no se puede editar.
+app.MapPut("/api/affiliates/{affiliateId:guid}/invoices/{id:guid}", async (HttpContext ctx, IInvoiceService invoiceService, Guid affiliateId, Guid id, UpdateInvoiceRequest request) =>
 {
     if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
         return Results.Forbid();
     if (ctx.User.FindFirst("role")?.Value == "Staff")
         return Results.Forbid();
+    var invoice = new Invoice
+    {
+        CustomerId = request.CustomerId,
+        Subtotal = request.Subtotal,
+        Tax = request.Tax,
+        Total = request.Total,
+        Status = request.Status,
+        DueDate = request.DueDate,
+        PaidDate = request.PaidDate,
+        Notes = request.Notes,
+    };
+    var items = request.Items?.Select(i => new InvoiceItem { Description = i.Description, Quantity = i.Quantity, UnitPrice = i.UnitPrice }).ToList();
     var actorId = ctx.User.FindFirst("sub")?.Value;
     var actorName = ctx.User.FindFirst("email")?.Value;
-    var result = await invoiceService.UpdateInvoiceAsync(affiliateId, id, invoice, actorId, actorName);
-    if (result == null)
-        return Results.NotFound();
-    return Results.Ok(result);
+    try
+    {
+        var result = await invoiceService.UpdateInvoiceAsync(affiliateId, id, invoice, items, actorId, actorName);
+        if (result == null)
+            return Results.NotFound();
+        return Results.Ok(result);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVOICE_LOCKED", message = ex.Message } });
+    }
 });
 
 app.MapDelete("/api/affiliates/{affiliateId:guid}/invoices/{id:guid}", async (HttpContext ctx, IInvoiceService invoiceService, Guid affiliateId, Guid id) =>
@@ -1686,10 +1786,17 @@ app.MapDelete("/api/affiliates/{affiliateId:guid}/invoices/{id:guid}", async (Ht
         return Results.Forbid();
     if (ctx.User.FindFirst("role")?.Value == "Staff")
         return Results.Forbid();
-    var result = await invoiceService.DeleteInvoiceAsync(affiliateId, id);
-    if (!result)
-        return Results.NotFound();
-    return Results.NoContent();
+    try
+    {
+        var result = await invoiceService.DeleteInvoiceAsync(affiliateId, id);
+        if (!result)
+            return Results.NotFound();
+        return Results.NoContent();
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVOICE_LOCKED", message = ex.Message } });
+    }
 });
 
 // Anular — no se edita ni se borra el original (documento financiero). Para "corregir" algo el

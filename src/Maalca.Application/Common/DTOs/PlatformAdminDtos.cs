@@ -69,3 +69,16 @@ public record UpdatePlatformAdminRoleRequest(string Role);
 public record AffiliateNoteDto(Guid Id, string AuthorEmail, string Text, DateTime CreatedAt);
 
 public record CreateAffiliateNoteRequest(string Text);
+
+/// <summary>Borrado real (no reversible) desde /ops — solo Owner. Los flujos normales de
+/// negocio (Anular factura, Cancelar orden/cita) nunca borran nada a propósito; esto existe
+/// aparte, solo para limpiar datos de prueba que nunca debieron llegar a producción (ej. "QA
+/// Walk-in Claude"). Confirm debe venir en true — es una segunda traba además del gate de rol,
+/// pensada para que nunca se dispare por un doble-click o un curl copiado sin pensar.</summary>
+public record OpsHardDeleteRequest(bool Confirm);
+
+/// <summary>Resultado de borrar un cliente en cascada — cuántas filas ligadas se llevó (citas,
+/// fila, propuestas, reservas, facturas). No incluye Order — Order no tiene relación por id con
+/// Customer, es una copia suelta de nombre/teléfono (ver Order.CustomerName), se borra aparte.</summary>
+public record CustomerCascadeDeleteResultDto(
+    int Appointments, int QueueEntries, int Proposals, int TableReservations, int Invoices);
