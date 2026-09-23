@@ -37,4 +37,8 @@ public interface ICommunityService
     Task<ServeComboResponse?> ServeComboAsync(Guid affiliateId, Guid comboId, int quantity);
 
     Task<CommunityMetricsDto> GetMetricsAsync(Guid affiliateId);
+
+    /// <summary>Vista pública (vitrina) — sin auth, por slug. null = el slug no existe o el
+    /// afiliado no es businessType Community.</summary>
+    Task<PublicCommunityMetricsDto?> GetPublicMetricsAsync(string slug);
 }

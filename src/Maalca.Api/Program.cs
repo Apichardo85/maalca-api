@@ -3062,6 +3062,18 @@ app.MapGet("/api/public/affiliates/{slug}/catalog", async (IPublicCatalogService
 })
 .AllowAnonymous();
 
+// Vitrina Comunidad — métricas públicas (comidas servidas del mes, costo promedio por plato
+// para la calculadora de impacto). Solo devuelve algo si el afiliado es businessType Community.
+app.MapGet("/api/public/affiliates/{slug}/community-metrics", async (ICommunityService communityService, string slug, HttpResponse response) =>
+{
+    var result = await communityService.GetPublicMetricsAsync(slug);
+    if (result == null)
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
+    response.Headers.CacheControl = "public, max-age=60";
+    return Results.Ok(result);
+})
+.AllowAnonymous();
+
 // ============ PUBLIC BOOKING (agenda pública, sin login) ============
 app.MapGet("/api/public/affiliates/{slug}/team", async (IPublicBookingService bookingService, string slug, HttpResponse response) =>
 {

@@ -93,3 +93,12 @@ public record CommunityMetricsDto(
     DateTime PeriodStart,
     DateTime PeriodEnd
 );
+
+// Vitrina pública (sin auth) — solo lo que es seguro mostrar a un visitante anónimo. No expone
+// costos internos por insumo ni nombres de combos, solo el promedio necesario para la
+// calculadora de impacto (WEB-COM-003). AvgCostPerPlate es null si el afiliado todavía no tiene
+// ningún Combo con costo calculado — el frontend debe mostrar un estado vacío honesto, no 0.
+public record PublicCommunityMetricsDto(
+    int MealsServedThisMonth,
+    decimal? AvgCostPerPlate
+);

@@ -408,6 +408,33 @@ public class CommunityService : ICommunityService
         return new CommunityMetricsDto(meals, Math.Round(cost, 2, MidpointRounding.AwayFromZero), startUtc, endUtc);
     }
 
+    public async Task<PublicCommunityMetricsDto?> GetPublicMetricsAsync(string slug)
+    {
+        var affiliate = await _db.Affiliates
+            .Where(a => a.Slug == slug && a.BusinessType == BusinessType.Community)
+            .Select(a => new { a.Id, a.Timezone })
+            .FirstOrDefaultAsync();
+        if (affiliate is null) return null;
+
+        var (startUtc, endUtc) = CurrentMonthUtc(affiliate.Timezone);
+        var meals = await _db.ComboServings
+            .Where(s => s.AffiliateId == affiliate.Id && s.ServedAt >= startUtc && s.ServedAt < endUtc)
+            .SumAsync(s => (int?)s.Quantity) ?? 0;
+
+        // Promedio simple entre los combos que ya tienen costo calculado (CostPerPlate > 0) —
+        // un combo recién creado sin recetas cargadas todavía no cuenta, para no arrastrar el
+        // promedio a la baja con un $0 que no es real.
+        var costs = await _db.Combos
+            .Where(c => c.AffiliateId == affiliate.Id && c.CostPerPlate > 0)
+            .Select(c => c.CostPerPlate)
+            .ToListAsync();
+        decimal? avgCost = costs.Count > 0
+            ? Math.Round(costs.Average(), 2, MidpointRounding.AwayFromZero)
+            : null;
+
+        return new PublicCommunityMetricsDto(meals, avgCost);
+    }
+
     // ── Cálculo de costos ───────────────────────────────────────────────────
 
     private static decimal ComputeRecipeCost(Recipe recipe, IEnumerable<InventoryItem> items)
