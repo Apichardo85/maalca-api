@@ -8,6 +8,7 @@ using Maalca.Domain.Enums;
 using Maalca.Infrastructure.Auth;
 using Maalca.Infrastructure.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
@@ -315,7 +316,7 @@ app.MapPatch("/api/ops/affiliates/{affiliateId:guid}/trial", async (
 // nunca se dispare por un doble-click o un curl copiado sin pensar.
 
 app.MapDelete("/api/ops/affiliates/{affiliateId:guid}/customers/{customerId:guid}", async (
-    HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId, Guid customerId, OpsHardDeleteRequest request) =>
+    HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId, Guid customerId, [FromBody] OpsHardDeleteRequest request) =>
 {
     if (ctx.User.FindFirst("platform_admin")?.Value != "true")
         return Results.Forbid();
@@ -338,7 +339,7 @@ app.MapDelete("/api/ops/affiliates/{affiliateId:guid}/customers/{customerId:guid
 });
 
 app.MapDelete("/api/ops/affiliates/{affiliateId:guid}/orders/{orderId:guid}", async (
-    HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId, Guid orderId, OpsHardDeleteRequest request) =>
+    HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId, Guid orderId, [FromBody] OpsHardDeleteRequest request) =>
 {
     if (ctx.User.FindFirst("platform_admin")?.Value != "true")
         return Results.Forbid();
@@ -354,7 +355,7 @@ app.MapDelete("/api/ops/affiliates/{affiliateId:guid}/orders/{orderId:guid}", as
 });
 
 app.MapDelete("/api/ops/affiliates/{affiliateId:guid}/appointments/{appointmentId:guid}", async (
-    HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId, Guid appointmentId, OpsHardDeleteRequest request) =>
+    HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId, Guid appointmentId, [FromBody] OpsHardDeleteRequest request) =>
 {
     if (ctx.User.FindFirst("platform_admin")?.Value != "true")
         return Results.Forbid();
@@ -370,7 +371,7 @@ app.MapDelete("/api/ops/affiliates/{affiliateId:guid}/appointments/{appointmentI
 });
 
 app.MapDelete("/api/ops/affiliates/{affiliateId:guid}/invoices/{invoiceId:guid}", async (
-    HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId, Guid invoiceId, OpsHardDeleteRequest request) =>
+    HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId, Guid invoiceId, [FromBody] OpsHardDeleteRequest request) =>
 {
     if (ctx.User.FindFirst("platform_admin")?.Value != "true")
         return Results.Forbid();
