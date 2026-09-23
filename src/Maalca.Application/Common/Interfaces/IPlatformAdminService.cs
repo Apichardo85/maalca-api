@@ -37,6 +37,11 @@ public interface IPlatformAdminService
     /// Stripe, para cortesías, negociaciones directas o corregir un pago que no sincronizó.</summary>
     Task<PlatformAffiliateSummaryDto> SetAffiliatePlanAsync(Guid affiliateId, string plan);
 
+    /// <summary>Gestión manual del trial de un afiliado desde /ops — extender, forzar
+    /// vencimiento, o quitar el override — al margen de Stripe, para casos piloto/existentes
+    /// (ej. Pegote, The Little Dominican). Ver Affiliate.TrialOverrideEndsAt.</summary>
+    Task<AffiliateTrialDto> SetAffiliateTrialAsync(Guid affiliateId, string action, int? days);
+
     /// <summary>Corrige el BusinessType elegido en el onboarding — solo entre los 4 valores con
     /// plantilla pública real (Restaurant/Barber/Service/Retail).</summary>
     Task<PlatformAffiliateSummaryDto> SetAffiliateBusinessTypeAsync(Guid affiliateId, string businessType);

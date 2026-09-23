@@ -58,9 +58,6 @@ public class CanalService : ICanalService
         var affiliate = await _db.Affiliates.FindAsync(affiliateId)
             ?? throw new KeyNotFoundException($"Affiliate {affiliateId} not found.");
 
-        if (_planLimit.IsTrialExpired(affiliate))
-            throw new InvalidOperationException(PlanLimitService.TrialExpiredMessage);
-
         if (!Enum.TryParse<CanalTipo>(request.Tipo, ignoreCase: true, out var tipo) ||
             (!ManualTipos.Contains(tipo) && !EnlaceTipos.Contains(tipo)))
             throw new ArgumentException($"Unsupported Tipo: {request.Tipo}. Only WhatsApp, Email, Telefono, Facebook, Instagram, TikTok are supported in this phase.");
@@ -103,8 +100,6 @@ public class CanalService : ICanalService
 
         var affiliate = await _db.Affiliates.FindAsync(affiliateId)
             ?? throw new KeyNotFoundException($"Affiliate {affiliateId} not found.");
-        if (_planLimit.IsTrialExpired(affiliate))
-            throw new InvalidOperationException(PlanLimitService.TrialExpiredMessage);
 
         if (request.ValorCrudo != null)
         {

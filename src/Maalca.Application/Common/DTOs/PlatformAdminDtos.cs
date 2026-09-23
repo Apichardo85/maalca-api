@@ -42,6 +42,15 @@ public record SetAffiliateStatusRequest(bool? Published, bool? Active);
 /// publicar/suspender) por su impacto financiero.</summary>
 public record SetAffiliatePlanRequest(string Plan);
 
+/// <summary>Gestión manual del trial de un afiliado desde /ops — Action es uno de "extend",
+/// "expireNow" o "clearOverride". Days solo aplica a "extend" (default 30 si se omite).
+/// Independiente de Stripe — para casos piloto/existentes (ej. Pegote, The Little Dominican)
+/// donde hay que extender, resetear o forzar el vencimiento del trial a mano.</summary>
+public record SetAffiliateTrialRequest(string Action, int? Days);
+
+/// <summary>Estado del trial de un afiliado tras un SetAffiliateTrialAsync.</summary>
+public record AffiliateTrialDto(Guid AffiliateId, DateTime? TrialOverrideEndsAt, bool IsTrialExpired);
+
 /// <summary>Corrige el rubro de un negocio elegido mal en el onboarding (ej. alguien de Creador
 /// que solo tenía Restaurant/Barber/Service/Retail para escoger y terminó con el template
 /// equivocado). Limitado a esos 4 valores a propósito — Creator/Publisher/Professional existen

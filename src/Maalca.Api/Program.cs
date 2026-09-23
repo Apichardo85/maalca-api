@@ -282,6 +282,31 @@ app.MapPatch("/api/ops/affiliates/{affiliateId:guid}/plan", async (
     }
 });
 
+app.MapPatch("/api/ops/affiliates/{affiliateId:guid}/trial", async (
+    HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId, SetAffiliateTrialRequest request) =>
+{
+    // Gestionar el trial a mano (casos piloto/existentes) es una acción financiera — mismo gate
+    // que plan/publicar/suspender: solo Owner, no Support.
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    if (ctx.User.FindFirst("platform_role")?.Value != nameof(PlatformAdminRole.Owner))
+        return Results.Forbid();
+
+    try
+    {
+        var result = await opsService.SetAffiliateTrialAsync(affiliateId, request.Action, request.Days);
+        return Results.Ok(result);
+    }
+    catch (InvalidOperationException ex) when (ex.Message.Contains("no existe"))
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = ex.Message } });
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_ACTION", message = ex.Message } });
+    }
+});
+
 app.MapPatch("/api/ops/affiliates/{affiliateId:guid}/business-type", async (
     HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId, SetAffiliateBusinessTypeRequest request) =>
 {

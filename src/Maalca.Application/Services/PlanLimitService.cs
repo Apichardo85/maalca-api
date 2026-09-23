@@ -18,14 +18,34 @@ public class PlanLimitService : IPlanLimitService
         _db = db;
     }
 
-    public bool IsTrialExpired(Affiliate affiliate) =>
-        affiliate.Plan == Plan.Free && affiliate.CreatedAt.AddDays(TrialDays) < DateTime.UtcNow;
+    public bool IsTrialExpired(Affiliate affiliate)
+    {
+        if (affiliate.Plan != Plan.Free) return false;
+
+        // El override manual desde /ops (extender/forzar vencimiento) tiene prioridad sobre el
+        // cálculo normal basado en CreatedAt — ver Affiliate.TrialOverrideEndsAt.
+        if (affiliate.TrialOverrideEndsAt.HasValue)
+            return affiliate.TrialOverrideEndsAt.Value < DateTime.UtcNow;
+
+        return affiliate.CreatedAt.AddDays(TrialDays) < DateTime.UtcNow;
+    }
 
     public int GetMaxItems(Plan plan) => plan switch
     {
         Plan.Entrepreneur or Plan.Enterprise => int.MaxValue,
         _ => 10
     };
+
+    // Durante el trial activo (Free, sin vencer) no hay tope de items — el trial debe sentirse
+    // como el plan pagado. Al vencer el trial cae al tope normal de Free (10), en vez del bloqueo
+    // total que existía antes.
+    public int GetMaxItems(Affiliate affiliate)
+    {
+        if (affiliate.Plan == Plan.Free && !IsTrialExpired(affiliate))
+            return int.MaxValue;
+
+        return GetMaxItems(affiliate.Plan);
+    }
 
     public async Task<int> GetCurrentItemCountAsync(Guid affiliateId)
     {
@@ -53,6 +73,6 @@ public class PlanLimitService : IPlanLimitService
         if (affiliate == null) return false;
 
         var current = await GetCurrentItemCountAsync(affiliateId);
-        return current < GetMaxItems(affiliate.Plan);
+        return current < GetMaxItems(affiliate);
     }
 }

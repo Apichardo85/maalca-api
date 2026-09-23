@@ -11,6 +11,7 @@ namespace Maalca.Application.Services;
 public class PlatformAdminService : IPlatformAdminService
 {
     private readonly AppDbContext _context;
+    private readonly IPlanLimitService _planLimit;
 
     // Mantener en sync con ENTREPRENEUR_PRICE_USD en maalca-web/src/lib/plan-limits.ts — no hay
     // una única fuente de verdad compartida entre los dos repos, así que si el precio cambia
@@ -20,7 +21,11 @@ public class PlatformAdminService : IPlatformAdminService
     // Cuánto dura un grant de impersonation antes de expirar solo — ver UserAffiliateMap.IsImpersonation.
     private static readonly TimeSpan ImpersonationDuration = TimeSpan.FromHours(2);
 
-    public PlatformAdminService(AppDbContext context) => _context = context;
+    public PlatformAdminService(AppDbContext context, IPlanLimitService planLimit)
+    {
+        _context = context;
+        _planLimit = planLimit;
+    }
 
     public async Task<bool> IsPlatformAdminAsync(string supabaseUserId, string email)
     {
@@ -193,6 +198,38 @@ public class PlatformAdminService : IPlatformAdminService
             affiliate.Plan.ToString(), affiliate.PlanStatus.ToString(), affiliate.Published, affiliate.IsActive,
             affiliate.CreatedAt, orders30d, affiliate.StripeConnectChargesEnabled, alerts, affiliate.LogoUrl,
             ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()).ToList());
+    }
+
+    /// <summary>
+    /// Gestión manual del trial de un afiliado desde /ops, al margen de Stripe — para casos
+    /// piloto/existentes (ej. Pegote, The Little Dominican) donde hay que extender, resetear o
+    /// forzar el vencimiento del trial a mano.
+    /// </summary>
+    public async Task<AffiliateTrialDto> SetAffiliateTrialAsync(Guid affiliateId, string action, int? days)
+    {
+        var affiliate = await _context.Affiliates.FindAsync(affiliateId)
+            ?? throw new InvalidOperationException("Ese negocio no existe.");
+
+        switch (action)
+        {
+            case "extend":
+                affiliate.TrialOverrideEndsAt = DateTime.UtcNow.AddDays(days ?? 30);
+                break;
+            case "expireNow":
+                affiliate.TrialOverrideEndsAt = DateTime.UtcNow.AddDays(-1);
+                break;
+            case "clearOverride":
+                affiliate.TrialOverrideEndsAt = null;
+                break;
+            default:
+                throw new ArgumentException($"Acción de trial inválida: '{action}'. Debe ser extend, expireNow o clearOverride.");
+        }
+
+        affiliate.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        return new AffiliateTrialDto(
+            affiliate.Id, affiliate.TrialOverrideEndsAt, _planLimit.IsTrialExpired(affiliate));
     }
 
     // Solo estos 4 tienen plantilla pública real (src/components/public/templates/ en

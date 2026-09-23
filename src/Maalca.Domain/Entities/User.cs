@@ -72,6 +72,12 @@ public class Affiliate : BaseEntity
     public string? StripeSubscriptionId { get; set; }
     public DateTime? PlanStartedAt { get; set; }
 
+    // Override manual de vencimiento de trial desde /ops (Free plan) — independiente del cálculo
+    // normal CreatedAt+30 días, para casos piloto (ej. Pegote, The Little Dominican) donde hay que
+    // extender, resetear o forzar el vencimiento a mano. Null = usa el cálculo normal basado en
+    // CreatedAt. Ver PlanLimitService.IsTrialExpired.
+    public DateTime? TrialOverrideEndsAt { get; set; }
+
     // ── Stripe Connect: destino de pago del afiliado (distinto de StripeCustomerId,
     // que es al afiliado como CLIENTE de MaalCa). Esta cuenta conectada es donde
     // el afiliado recibe el dinero de SUS PROPIOS clientes. Cuenta tipo Standard,

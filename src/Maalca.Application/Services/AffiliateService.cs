@@ -52,9 +52,6 @@ public class AffiliateService : IAffiliateService
         var affiliate = await _context.Affiliates.FindAsync(affiliateId);
         if (affiliate == null) return null;
 
-        if (_planLimit.IsTrialExpired(affiliate))
-            throw new InvalidOperationException(PlanLimitService.TrialExpiredMessage);
-
         if (request.Name != null)
         {
             if (request.Name.Length < 2 || request.Name.Length > 100)
@@ -111,9 +108,6 @@ public class AffiliateService : IAffiliateService
     {
         var affiliate = await _context.Affiliates.FindAsync(affiliateId);
         if (affiliate == null) return null;
-
-        if (_planLimit.IsTrialExpired(affiliate))
-            throw new InvalidOperationException(PlanLimitService.TrialExpiredMessage);
 
         if (request.ProcessSteps != null)
         {

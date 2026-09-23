@@ -8,5 +8,6 @@ public interface IPlanLimitService
     Task<bool> CanAddItemAsync(Guid affiliateId);
     Task<int> GetCurrentItemCountAsync(Guid affiliateId);
     int GetMaxItems(Plan plan);
+    int GetMaxItems(Affiliate affiliate);
     bool IsTrialExpired(Affiliate affiliate);
 }
