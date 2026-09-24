@@ -197,7 +197,9 @@ public class PublicCatalogService : IPublicCatalogService
             a.Timezone,
             a.Currency,
             JsonDictField.Parse(a.SectionVisibility),
-            JsonArrayField.Parse<string>(a.GalleryImages));
+            JsonArrayField.Parse<string>(a.GalleryImages),
+            JsonArrayField.Parse<CausaDto>(a.Causas),
+            JsonObjectField.Parse<CommunityImpactDto>(a.CommunityImpact));
     }
 
     // Single source of truth for what each plan unlocks — flip a value here to change it

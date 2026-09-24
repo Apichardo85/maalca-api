@@ -28,7 +28,11 @@ public record AffiliatePublicDto(
     // contenido; esto es un apagador explícito adicional, independiente del contenido.
     IReadOnlyDictionary<string, bool>? SectionVisibility = null,
     // Solo fotos (URLs), sin caption — máximo 12.
-    IReadOnlyList<string>? GalleryImages = null
+    IReadOnlyList<string>? GalleryImages = null,
+    // Comunidad — ver Affiliate.Causas / Affiliate.CommunityImpact. Vacío/null en cualquier
+    // businessType que no sea Community (el afiliado nunca tuvo forma de escribir ahí).
+    IReadOnlyList<CausaDto>? Causas = null,
+    CommunityImpactDto? CommunityImpact = null
 );
 
 public record FeaturedAffiliateDto(

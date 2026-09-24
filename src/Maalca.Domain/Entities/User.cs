@@ -56,6 +56,21 @@ public class Affiliate : BaseEntity
     // (default true), así secciones nuevas no requieren backfill. Ver SectionVisibilityDto.
     public string? SectionVisibility { get; set; }
 
+    // Comunidad — causas individuales (ej. "Cirugía de rodilla — Delia R.", tipo dinero/tiempo/
+    // especie) que el afiliado publica en su vitrina. Mismo patrón "JSON string, DTO tipado en
+    // el borde" que ProcessSteps/Faq — reemplazo total de la lista en cada guardado, no CRUD por
+    // fila. JSON string: array de CausaDto. Solo tiene sentido/UI para businessType Community,
+    // pero no se restringe a nivel de columna (mismo criterio que el resto de estos campos).
+    public string? Causas { get; set; }
+
+    // Comunidad — punto de entrega en persona y meta/recaudado del mes. Recaudado es lo que el
+    // afiliado REPORTA manualmente (no hay integración de donaciones vía Stripe Connect todavía
+    // — Fase 3 del backlog), por eso el dashboard lo pide como campo editable en vez de calcularlo
+    // de un pago real; la vitrina pública lo debe presentar como lo que es (reportado por el
+    // negocio), nunca como un contador automático en vivo. JSON string de UN objeto (no array),
+    // ver CommunityImpactDto.
+    public string? CommunityImpact { get; set; }
+
     // IANA timezone id (e.g. "America/New_York"), set explicitly per affiliate — never inferred.
     public string? Timezone { get; set; }
 
