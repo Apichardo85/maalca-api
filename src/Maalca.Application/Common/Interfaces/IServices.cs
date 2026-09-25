@@ -56,6 +56,27 @@ public interface IServiceService
     Task<bool> DeleteServiceAsync(Guid affiliateId, Guid id);
 }
 
+public interface IActivityService
+{
+    // upcomingOnly=true (usado por la pagina publica) filtra StartsAt >= ahora (UTC) y
+    // IsActive=true; el dashboard pide upcomingOnly=false para poder editar/archivar eventos
+    // pasados tambien.
+    Task<List<Maalca.Domain.Entities.Activity>> GetActivitiesAsync(Guid affiliateId, bool upcomingOnly = false);
+    Task<Maalca.Domain.Entities.Activity?> GetActivityAsync(Guid affiliateId, Guid id);
+    Task<Maalca.Domain.Entities.Activity> CreateActivityAsync(Guid affiliateId, Maalca.Domain.Entities.Activity activity);
+    Task<Maalca.Domain.Entities.Activity?> UpdateActivityAsync(Guid affiliateId, Guid id, Maalca.Domain.Entities.Activity activity);
+    Task<bool> DeleteActivityAsync(Guid affiliateId, Guid id);
+}
+
+public interface ICausaService
+{
+    Task<List<Maalca.Domain.Entities.Causa>> GetCausasAsync(Guid affiliateId, bool activeOnly = false);
+    Task<Maalca.Domain.Entities.Causa?> GetCausaAsync(Guid affiliateId, Guid id);
+    Task<Maalca.Domain.Entities.Causa> CreateCausaAsync(Guid affiliateId, Maalca.Domain.Entities.Causa causa);
+    Task<Maalca.Domain.Entities.Causa?> UpdateCausaAsync(Guid affiliateId, Guid id, Maalca.Domain.Entities.Causa causa);
+    Task<bool> DeleteCausaAsync(Guid affiliateId, Guid id);
+}
+
 public interface IInventoryService
 {
     Task<PaginatedResponse<InventoryItem>> GetInventoryAsync(Guid affiliateId, string? category = null, string? status = null, int page = 1, string? search = null, bool? lowStock = null);

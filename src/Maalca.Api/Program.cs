@@ -54,6 +54,8 @@ builder.Services.AddScoped<ITableReservationService, TableReservationService>();
 builder.Services.AddScoped<ITimeBlockService, TimeBlockService>();
 builder.Services.AddScoped<IProposalService, ProposalService>();
 builder.Services.AddScoped<IServiceService, ServiceService>();
+builder.Services.AddScoped<IActivityService, ActivityService>();
+builder.Services.AddScoped<ICausaService, CausaService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<IModifierService, ModifierService>();
 builder.Services.AddScoped<ICommunityService, CommunityService>();
@@ -1172,6 +1174,120 @@ app.MapDelete("/api/affiliates/{affiliateId:guid}/services/{id:guid}", async (IS
     if (ctx.User.FindFirst("role")?.Value == "Staff")
         return Results.Forbid();
     var result = await serviceService.DeleteServiceAsync(affiliateId, id);
+    if (!result)
+        return Results.NotFound();
+    return Results.NoContent();
+}).RequireAuthorization();
+
+// ============ ACTIVITIES (Eventos/Actividades -- backlog 2026-09-25) ============
+// Mismo gating que /services: lectura exige ser el afiliado activo, escritura ademas exige no
+// ser rol Staff. Lanzamiento inicial solo Community (gateado en el frontend, ver SpaceSidebar).
+app.MapGet("/api/affiliates/{affiliateId:guid}/activities", async (IActivityService activityService, Guid affiliateId, HttpContext ctx, bool upcomingOnly = false) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    var result = await activityService.GetActivitiesAsync(affiliateId, upcomingOnly);
+    return Results.Ok(result);
+}).RequireAuthorization();
+
+app.MapGet("/api/affiliates/{affiliateId:guid}/activities/{id:guid}", async (IActivityService activityService, Guid affiliateId, Guid id, HttpContext ctx) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    var result = await activityService.GetActivityAsync(affiliateId, id);
+    if (result == null)
+        return Results.NotFound();
+    return Results.Ok(result);
+}).RequireAuthorization();
+
+app.MapPost("/api/affiliates/{affiliateId:guid}/activities", async (IActivityService activityService, Guid affiliateId, Maalca.Domain.Entities.Activity activity, HttpContext ctx) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    var result = await activityService.CreateActivityAsync(affiliateId, activity);
+    return Results.Created($"/api/affiliates/{affiliateId}/activities/{result.Id}", result);
+}).RequireAuthorization();
+
+app.MapPut("/api/affiliates/{affiliateId:guid}/activities/{id:guid}", async (IActivityService activityService, Guid affiliateId, Guid id, Maalca.Domain.Entities.Activity activity, HttpContext ctx) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    var result = await activityService.UpdateActivityAsync(affiliateId, id, activity);
+    if (result == null)
+        return Results.NotFound();
+    return Results.Ok(result);
+}).RequireAuthorization();
+
+app.MapDelete("/api/affiliates/{affiliateId:guid}/activities/{id:guid}", async (IActivityService activityService, Guid affiliateId, Guid id, HttpContext ctx) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    var result = await activityService.DeleteActivityAsync(affiliateId, id);
+    if (!result)
+        return Results.NotFound();
+    return Results.NoContent();
+}).RequireAuthorization();
+
+// ============ CAUSAS (Community -- movido de columna JSON a tabla propia, backlog 2026-09-25) ============
+// Mismo gating que /services y /activities. Los errores de validacion (ArgumentException, ver
+// CausaService) se traducen a 400 igual que antes lo hacia AffiliateService.UpdateContentAsync.
+app.MapGet("/api/affiliates/{affiliateId:guid}/causas", async (ICausaService causaService, Guid affiliateId, HttpContext ctx) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    var result = await causaService.GetCausasAsync(affiliateId);
+    return Results.Ok(result);
+}).RequireAuthorization();
+
+app.MapPost("/api/affiliates/{affiliateId:guid}/causas", async (ICausaService causaService, Guid affiliateId, Maalca.Domain.Entities.Causa causa, HttpContext ctx) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    try
+    {
+        var result = await causaService.CreateCausaAsync(affiliateId, causa);
+        return Results.Created($"/api/affiliates/{affiliateId}/causas/{result.Id}", result);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+}).RequireAuthorization();
+
+app.MapPut("/api/affiliates/{affiliateId:guid}/causas/{id:guid}", async (ICausaService causaService, Guid affiliateId, Guid id, Maalca.Domain.Entities.Causa causa, HttpContext ctx) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    try
+    {
+        var result = await causaService.UpdateCausaAsync(affiliateId, id, causa);
+        if (result == null)
+            return Results.NotFound();
+        return Results.Ok(result);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+}).RequireAuthorization();
+
+app.MapDelete("/api/affiliates/{affiliateId:guid}/causas/{id:guid}", async (ICausaService causaService, Guid affiliateId, Guid id, HttpContext ctx) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    var result = await causaService.DeleteCausaAsync(affiliateId, id);
     if (!result)
         return Results.NotFound();
     return Results.NoContent();
@@ -3070,6 +3186,43 @@ app.MapGet("/api/public/affiliates/{slug}/community-metrics", async (ICommunityS
     var result = await communityService.GetPublicMetricsAsync(slug);
     if (result == null)
         return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
+    response.Headers.CacheControl = "public, max-age=60";
+    return Results.Ok(result);
+})
+.AllowAnonymous();
+
+// Vitrina Comunidad — proximos eventos/actividades publicados (modulo backlog 2026-09-25).
+// Solo lo que ya paso (StartsAt en el pasado) o esta inactivo queda fuera; devuelve [] (no 404)
+// para un afiliado que existe pero todavia no tiene actividades, a diferencia del 404 de arriba
+// que es "este slug no existe".
+app.MapGet("/api/public/affiliates/{slug}/activities", async (AppDbContext db, IActivityService activityService, string slug, HttpResponse response) =>
+{
+    var affiliate = await db.Affiliates
+        .Where(a => a.Slug == slug && a.Published)
+        .Select(a => new { a.Id })
+        .FirstOrDefaultAsync();
+    if (affiliate is null)
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
+
+    var result = await activityService.GetActivitiesAsync(affiliate.Id, upcomingOnly: true);
+    response.Headers.CacheControl = "public, max-age=60";
+    return Results.Ok(result);
+})
+.AllowAnonymous();
+
+// Vitrina Comunidad — causas activas publicadas, ordenadas por SortOrder (antes venia embebido
+// en /api/public/affiliates/{slug} y /catalog como campo Causas -- ver comentario en Causa.cs
+// para el porque del cambio a tabla propia).
+app.MapGet("/api/public/affiliates/{slug}/causas", async (AppDbContext db, ICausaService causaService, string slug, HttpResponse response) =>
+{
+    var affiliate = await db.Affiliates
+        .Where(a => a.Slug == slug && a.Published)
+        .Select(a => new { a.Id })
+        .FirstOrDefaultAsync();
+    if (affiliate is null)
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
+
+    var result = await causaService.GetCausasAsync(affiliate.Id, activeOnly: true);
     response.Headers.CacheControl = "public, max-age=60";
     return Results.Ok(result);
 })

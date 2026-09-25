@@ -173,26 +173,7 @@ public class AffiliateService : IAffiliateService
             affiliate.GalleryImages = JsonArrayField.Serialize(request.GalleryImages);
         }
 
-        if (request.Causas != null)
-        {
-            if (request.Causas.Count > 20)
-                throw new ArgumentException("Causas: máximo 20 causas.");
-            var validTypes = new[] { "money", "time", "in_kind" };
-            foreach (var causa in request.Causas)
-            {
-                if (string.IsNullOrWhiteSpace(causa.Id))
-                    throw new ArgumentException("Causas: id is required.");
-                if (string.IsNullOrWhiteSpace(causa.Title) || causa.Title.Length > 200)
-                    throw new ArgumentException("Causas: title is required (máx. 200 caracteres).");
-                if (!validTypes.Contains(causa.Type))
-                    throw new ArgumentException("Causas: type debe ser money, time o in_kind.");
-                if (causa.Description?.Length > 500)
-                    throw new ArgumentException("Causas: description máx. 500 caracteres.");
-                if (causa.GoalAmount is < 0 || causa.CurrentAmount is < 0)
-                    throw new ArgumentException("Causas: goalAmount/currentAmount no pueden ser negativos.");
-            }
-            affiliate.Causas = JsonArrayField.Serialize(request.Causas);
-        }
+        // Causas ya no se valida/guarda acá -- ver CausaService (backlog 2026-09-25).
 
         if (request.CommunityImpact != null)
         {
@@ -214,7 +195,6 @@ public class AffiliateService : IAffiliateService
             JsonArrayField.Parse<HorarioEntryDto>(affiliate.Horario),
             JsonDictField.Parse(affiliate.SectionVisibility),
             JsonArrayField.Parse<string>(affiliate.GalleryImages),
-            JsonArrayField.Parse<CausaDto>(affiliate.Causas),
             JsonObjectField.Parse<CommunityImpactDto>(affiliate.CommunityImpact));
     }
 }

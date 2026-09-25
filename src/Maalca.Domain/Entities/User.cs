@@ -56,12 +56,6 @@ public class Affiliate : BaseEntity
     // (default true), así secciones nuevas no requieren backfill. Ver SectionVisibilityDto.
     public string? SectionVisibility { get; set; }
 
-    // Comunidad — causas individuales (ej. "Cirugía de rodilla — Delia R.", tipo dinero/tiempo/
-    // especie) que el afiliado publica en su vitrina. Mismo patrón "JSON string, DTO tipado en
-    // el borde" que ProcessSteps/Faq — reemplazo total de la lista en cada guardado, no CRUD por
-    // fila. JSON string: array de CausaDto. Solo tiene sentido/UI para businessType Community,
-    // pero no se restringe a nivel de columna (mismo criterio que el resto de estos campos).
-    public string? Causas { get; set; }
 
     // Comunidad — punto de entrega en persona y meta/recaudado del mes. Recaudado es lo que el
     // afiliado REPORTA manualmente (no hay integración de donaciones vía Stripe Connect todavía
@@ -163,4 +157,7 @@ public class Affiliate : BaseEntity
     public ICollection<Product> Products { get; set; } = new List<Product>();
     public ICollection<Invoice> Invoices { get; set; } = new List<Invoice>();
     public ICollection<TableReservation> TableReservations { get; set; } = new List<TableReservation>();
+    public ICollection<Activity> Activities { get; set; } = new List<Activity>();
+    // Causas -- ver comentario junto a Causa.cs (movido de columna JSON, backlog 2026-09-25).
+    public ICollection<Causa> Causas { get; set; } = new List<Causa>();
 }

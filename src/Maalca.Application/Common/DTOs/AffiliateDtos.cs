@@ -71,11 +71,13 @@ public record UpdateAffiliateContentRequest(
     Dictionary<string, bool>? SectionVisibility = null,
     // Solo fotos (URLs), sin caption — máximo 12, validado en AffiliateService.
     List<string>? GalleryImages = null,
-    // Comunidad — reemplazo total de la lista (igual que ProcessSteps/Faq), no CRUD por fila.
-    List<CausaDto>? Causas = null,
     // Comunidad — reemplazo total del objeto. null = no se toca; un objeto con campos null
     // adentro SÍ actualiza (permite borrar un dato ya guardado, ej. quitar la meta del mes).
     CommunityImpactDto? CommunityImpact = null
+    // Causas ya NO vive acá (backlog 2026-09-25) -- tiene su propio CRUD en
+    // /api/affiliates/{id}/causas (ver ICausaService), igual que Activities. Se sacó del
+    // reemplazo-total-del-array porque ya tenía datos reales en producción y necesitaba
+    // poder editarse fila por fila.
 );
 
 public record AffiliateContentDto(
@@ -84,26 +86,11 @@ public record AffiliateContentDto(
     IReadOnlyList<HorarioEntryDto> Horario,
     IReadOnlyDictionary<string, bool> SectionVisibility,
     IReadOnlyList<string> GalleryImages,
-    IReadOnlyList<CausaDto> Causas,
     CommunityImpactDto? CommunityImpact
 );
 
-// ── Comunidad — causas y punto de entrega/meta (ver Affiliate.Causas / Affiliate.CommunityImpact) ──
-
-// Id lo genera el frontend (crypto.randomUUID()) solo para tener key de React estable entre
-// guardados — el backend no lo valida como único ni lo usa para nada, es reemplazo total de
-// la lista en cada PATCH, igual que ProcessSteps/Faq.
-public record CausaDto(
-    string Id,
-    string Title,
-    // "money" | "time" | "in_kind" — validado en AffiliateService.
-    string Type,
-    string? Description,
-    // Solo aplica/se muestra si Type == "money". GoalAmount null = sin meta (se puede
-    // reportar solo lo recaudado sin una meta fija).
-    decimal? GoalAmount,
-    decimal? CurrentAmount
-);
+// ── Comunidad — punto de entrega/meta (ver Affiliate.CommunityImpact). Causas tiene su
+// propia entidad ahora (Causa.cs) -- ver comentario junto a UpdateAffiliateContentRequest. ──
 
 public record CommunityImpactDto(
     // Reportado a mano por el afiliado — ver comentario en Affiliate.CommunityImpact.

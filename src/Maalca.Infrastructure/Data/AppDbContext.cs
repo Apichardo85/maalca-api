@@ -47,6 +47,8 @@ public class AppDbContext : DbContext
     public DbSet<Screen> Screens => Set<Screen>();
     public DbSet<TimeBlock> TimeBlocks => Set<TimeBlock>();
     public DbSet<Proposal> Proposals => Set<Proposal>();
+    public DbSet<Activity> Activities => Set<Activity>();
+    public DbSet<Causa> Causas => Set<Causa>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -158,6 +160,38 @@ public class AppDbContext : DbContext
                   .WithMany(a => a.Services)
                   .HasForeignKey(e => e.AffiliateId)
                   .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Activity -- modulo Eventos/Actividades (backlog 2026-09-25), ver comentario en
+        // Activity.cs. Indice compuesto AffiliateId+StartsAt porque la consulta mas comun es
+        // "proximos eventos de este afiliado" (dashboard y pagina publica), ordenada por fecha.
+        modelBuilder.Entity<Activity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Location).HasMaxLength(300);
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany(a => a.Activities)
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.AffiliateId, e.StartsAt });
+        });
+
+        // Causa -- movido de columna JSON en Affiliate a tabla propia (backlog 2026-09-25,
+        // migracion MoveCausasToTable), ver comentario en Causa.cs.
+        modelBuilder.Entity<Causa>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Type).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.Description).HasMaxLength(500);
+            entity.Property(e => e.GoalAmount).HasPrecision(18, 2);
+            entity.Property(e => e.CurrentAmount).HasPrecision(18, 2);
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany(a => a.Causas)
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.AffiliateId, e.SortOrder });
         });
 
         // Appointment

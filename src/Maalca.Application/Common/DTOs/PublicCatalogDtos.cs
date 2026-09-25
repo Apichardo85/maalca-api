@@ -29,10 +29,9 @@ public record AffiliatePublicDto(
     IReadOnlyDictionary<string, bool>? SectionVisibility = null,
     // Solo fotos (URLs), sin caption — máximo 12.
     IReadOnlyList<string>? GalleryImages = null,
-    // Comunidad — ver Affiliate.Causas / Affiliate.CommunityImpact. Vacío/null en cualquier
-    // businessType que no sea Community (el afiliado nunca tuvo forma de escribir ahí).
-    IReadOnlyList<CausaDto>? Causas = null,
     CommunityImpactDto? CommunityImpact = null
+    // Causas ya no viene acá -- tiene su propio endpoint público
+    // /api/public/affiliates/{slug}/causas (backlog 2026-09-25, ver Causa.cs).
 );
 
 public record FeaturedAffiliateDto(

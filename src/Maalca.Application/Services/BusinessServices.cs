@@ -459,6 +459,136 @@ public class ServiceService : IServiceService
     }
 }
 
+public class ActivityService : IActivityService
+{
+    private readonly AppDbContext _context;
+
+    public ActivityService(AppDbContext context) => _context = context;
+
+    public async Task<List<Maalca.Domain.Entities.Activity>> GetActivitiesAsync(Guid affiliateId, bool upcomingOnly = false)
+    {
+        var query = _context.Activities.Where(a => a.AffiliateId == affiliateId);
+        if (upcomingOnly)
+        {
+            var now = DateTime.UtcNow;
+            query = query.Where(a => a.IsActive && a.StartsAt >= now);
+        }
+        return await query.OrderBy(a => a.StartsAt).ToListAsync();
+    }
+
+    public async Task<Maalca.Domain.Entities.Activity?> GetActivityAsync(Guid affiliateId, Guid id)
+        => await _context.Activities.FirstOrDefaultAsync(a => a.Id == id && a.AffiliateId == affiliateId);
+
+    public async Task<Maalca.Domain.Entities.Activity> CreateActivityAsync(Guid affiliateId, Maalca.Domain.Entities.Activity activity)
+    {
+        activity.AffiliateId = affiliateId;
+        activity.Id = Guid.NewGuid();
+        activity.CreatedAt = DateTime.UtcNow;
+        _context.Activities.Add(activity);
+        await _context.SaveChangesAsync();
+        return activity;
+    }
+
+    public async Task<Maalca.Domain.Entities.Activity?> UpdateActivityAsync(Guid affiliateId, Guid id, Maalca.Domain.Entities.Activity activity)
+    {
+        var existing = await _context.Activities.FirstOrDefaultAsync(a => a.Id == id && a.AffiliateId == affiliateId);
+        if (existing == null) return null;
+        existing.Title = activity.Title;
+        existing.TitleEn = activity.TitleEn;
+        existing.Description = activity.Description;
+        existing.DescriptionEn = activity.DescriptionEn;
+        existing.Location = activity.Location;
+        existing.StartsAt = activity.StartsAt;
+        existing.EndsAt = activity.EndsAt;
+        existing.IsActive = activity.IsActive;
+        existing.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        return existing;
+    }
+
+    public async Task<bool> DeleteActivityAsync(Guid affiliateId, Guid id)
+    {
+        var activity = await _context.Activities.FirstOrDefaultAsync(a => a.Id == id && a.AffiliateId == affiliateId);
+        if (activity == null) return false;
+        _context.Activities.Remove(activity);
+        await _context.SaveChangesAsync();
+        return true;
+    }
+}
+
+public class CausaService : ICausaService
+{
+    private static readonly string[] ValidTypes = { "money", "time", "in_kind" };
+
+    private readonly AppDbContext _context;
+
+    public CausaService(AppDbContext context) => _context = context;
+
+    private static void Validate(Maalca.Domain.Entities.Causa causa)
+    {
+        if (string.IsNullOrWhiteSpace(causa.Title) || causa.Title.Length > 200)
+            throw new ArgumentException("Causas: title is required (máx. 200 caracteres).");
+        if (!ValidTypes.Contains(causa.Type))
+            throw new ArgumentException("Causas: type debe ser money, time o in_kind.");
+        if (causa.Description?.Length > 500)
+            throw new ArgumentException("Causas: description máx. 500 caracteres.");
+        if (causa.GoalAmount is < 0 || causa.CurrentAmount is < 0)
+            throw new ArgumentException("Causas: goalAmount/currentAmount no pueden ser negativos.");
+    }
+
+    public async Task<List<Maalca.Domain.Entities.Causa>> GetCausasAsync(Guid affiliateId, bool activeOnly = false)
+    {
+        var query = _context.Causas.Where(c => c.AffiliateId == affiliateId);
+        if (activeOnly) query = query.Where(c => c.IsActive);
+        return await query.OrderBy(c => c.SortOrder).ToListAsync();
+    }
+
+    public async Task<Maalca.Domain.Entities.Causa?> GetCausaAsync(Guid affiliateId, Guid id)
+        => await _context.Causas.FirstOrDefaultAsync(c => c.Id == id && c.AffiliateId == affiliateId);
+
+    public async Task<Maalca.Domain.Entities.Causa> CreateCausaAsync(Guid affiliateId, Maalca.Domain.Entities.Causa causa)
+    {
+        Validate(causa);
+        // Mismo límite que antes tenía AffiliateService para el array JSON (máx. 20 causas).
+        var count = await _context.Causas.CountAsync(c => c.AffiliateId == affiliateId);
+        if (count >= 20)
+            throw new ArgumentException("Causas: máximo 20 causas.");
+
+        causa.AffiliateId = affiliateId;
+        causa.Id = Guid.NewGuid();
+        causa.SortOrder = count;
+        causa.IsActive = true;
+        causa.CreatedAt = DateTime.UtcNow;
+        _context.Causas.Add(causa);
+        await _context.SaveChangesAsync();
+        return causa;
+    }
+
+    public async Task<Maalca.Domain.Entities.Causa?> UpdateCausaAsync(Guid affiliateId, Guid id, Maalca.Domain.Entities.Causa causa)
+    {
+        Validate(causa);
+        var existing = await _context.Causas.FirstOrDefaultAsync(c => c.Id == id && c.AffiliateId == affiliateId);
+        if (existing == null) return null;
+        existing.Title = causa.Title;
+        existing.Type = causa.Type;
+        existing.Description = causa.Description;
+        existing.GoalAmount = causa.GoalAmount;
+        existing.CurrentAmount = causa.CurrentAmount;
+        existing.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        return existing;
+    }
+
+    public async Task<bool> DeleteCausaAsync(Guid affiliateId, Guid id)
+    {
+        var causa = await _context.Causas.FirstOrDefaultAsync(c => c.Id == id && c.AffiliateId == affiliateId);
+        if (causa == null) return false;
+        _context.Causas.Remove(causa);
+        await _context.SaveChangesAsync();
+        return true;
+    }
+}
+
 public class InventoryService : IInventoryService
 {
     private readonly AppDbContext _context;

@@ -198,7 +198,6 @@ public class PublicCatalogService : IPublicCatalogService
             a.Currency,
             JsonDictField.Parse(a.SectionVisibility),
             JsonArrayField.Parse<string>(a.GalleryImages),
-            JsonArrayField.Parse<CausaDto>(a.Causas),
             JsonObjectField.Parse<CommunityImpactDto>(a.CommunityImpact));
     }
 
