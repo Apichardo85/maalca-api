@@ -11,28 +11,6 @@ namespace Maalca.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-                    migrationBuilder.Sql(@"
-            INSERT INTO ""Causas"" (""Id"", ""AffiliateId"", ""Title"", ""Type"", ""Description"", ""GoalAmount"", ""CurrentAmount"", ""IsActive"", ""SortOrder"", ""CreatedAt"")
-            SELECT
-                gen_random_uuid(),
-                a.""Id"",
-                elem->>'title',
-                COALESCE(elem->>'type', 'money'),
-                NULLIF(elem->>'description', ''),
-                NULLIF(elem->>'goalAmount', '')::numeric,
-                NULLIF(elem->>'currentAmount', '')::numeric,
-                true,
-                (ordinality - 1)::int,
-                now()
-            FROM ""Affiliates"" a
-            CROSS JOIN LATERAL jsonb_array_elements(a.""Causas""::jsonb) WITH ORDINALITY AS t(elem, ordinality)
-            WHERE a.""Causas"" IS NOT NULL AND trim(a.""Causas"") NOT IN ('', '[]');
-        ");
-
-            migrationBuilder.DropColumn(
-                name: "Causas",
-                table: "Affiliates");
-
             migrationBuilder.CreateTable(
                 name: "Activities",
                 columns: table => new
@@ -92,6 +70,24 @@ namespace Maalca.Infrastructure.Migrations
                         onDelete: ReferentialAction.Cascade);
                 });
 
+                    migrationBuilder.Sql(@"
+            INSERT INTO ""Causas"" (""Id"", ""AffiliateId"", ""Title"", ""Type"", ""Description"", ""GoalAmount"", ""CurrentAmount"", ""IsActive"", ""SortOrder"", ""CreatedAt"")
+            SELECT
+                gen_random_uuid(),
+                a.""Id"",
+                elem->>'title',
+                COALESCE(elem->>'type', 'money'),
+                NULLIF(elem->>'description', ''),
+                NULLIF(elem->>'goalAmount', '')::numeric,
+                NULLIF(elem->>'currentAmount', '')::numeric,
+                true,
+                (ordinality - 1)::int,
+                now()
+            FROM ""Affiliates"" a
+            CROSS JOIN LATERAL jsonb_array_elements(a.""Causas""::jsonb) WITH ORDINALITY AS t(elem, ordinality)
+            WHERE a.""Causas"" IS NOT NULL AND trim(a.""Causas"") NOT IN ('', '[]');
+        ");
+
             migrationBuilder.CreateIndex(
                 name: "IX_Activities_AffiliateId_StartsAt",
                 table: "Activities",
@@ -101,6 +97,13 @@ namespace Maalca.Infrastructure.Migrations
                 name: "IX_Causas_AffiliateId_SortOrder",
                 table: "Causas",
                 columns: new[] { "AffiliateId", "SortOrder" });
+
+            // Recien AHORA se borra la columna vieja -- despues de CreateTable "Causas" (para
+            // que exista al hacer el INSERT de arriba) y despues del propio INSERT (que todavia
+            // necesita leer Affiliates."Causas" para copiar los datos).
+            migrationBuilder.DropColumn(
+                name: "Causas",
+                table: "Affiliates");
         }
 
         /// <inheritdoc />
