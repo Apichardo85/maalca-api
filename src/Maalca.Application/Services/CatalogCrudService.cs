@@ -46,7 +46,7 @@ public class CatalogCrudService : ICatalogCrudService
 
         return affiliate.BusinessType switch
         {
-            BusinessType.Barber or BusinessType.Service or BusinessType.Professional =>
+            BusinessType.Barber or BusinessType.Service or BusinessType.Professional or BusinessType.Community =>
                 (await _db.Services
                     .Where(s => s.AffiliateId == affiliateId)
                     .OrderBy(s => s.SortOrder).ThenBy(s => s.Name)
@@ -81,7 +81,7 @@ public class CatalogCrudService : ICatalogCrudService
 
         return affiliate.BusinessType switch
         {
-            BusinessType.Barber or BusinessType.Service or BusinessType.Professional =>
+            BusinessType.Barber or BusinessType.Service or BusinessType.Professional or BusinessType.Community =>
                 MapNullable(await _db.Services
                     .FirstOrDefaultAsync(s => s.AffiliateId == affiliateId && s.Id == itemId),
                     CatalogItemMapper.FromService),
@@ -140,7 +140,7 @@ public class CatalogCrudService : ICatalogCrudService
             BusinessType.Restaurant or BusinessType.Creator or BusinessType.Publisher =>
                 await CreateProductAsync(affiliateId, request),
 
-            BusinessType.Barber or BusinessType.Service or BusinessType.Professional =>
+            BusinessType.Barber or BusinessType.Service or BusinessType.Professional or BusinessType.Community =>
                 await CreateServiceAsync(affiliateId, request),
 
             BusinessType.Retail =>
@@ -160,7 +160,7 @@ public class CatalogCrudService : ICatalogCrudService
             BusinessType.Restaurant or BusinessType.Creator or BusinessType.Publisher =>
                 await UpdateProductAsync(affiliateId, itemId, request),
 
-            BusinessType.Barber or BusinessType.Service or BusinessType.Professional =>
+            BusinessType.Barber or BusinessType.Service or BusinessType.Professional or BusinessType.Community =>
                 await UpdateServiceAsync(affiliateId, itemId, request),
 
             BusinessType.Retail =>
@@ -180,7 +180,7 @@ public class CatalogCrudService : ICatalogCrudService
             BusinessType.Restaurant or BusinessType.Creator or BusinessType.Publisher =>
                 await DeleteProductAsync(affiliateId, itemId),
 
-            BusinessType.Barber or BusinessType.Service or BusinessType.Professional =>
+            BusinessType.Barber or BusinessType.Service or BusinessType.Professional or BusinessType.Community =>
                 await DeleteServiceAsync(affiliateId, itemId),
 
             BusinessType.Retail =>
@@ -208,7 +208,7 @@ public class CatalogCrudService : ICatalogCrudService
             BusinessType.Restaurant or BusinessType.Creator or BusinessType.Publisher =>
                 await PatchProductAsync(affiliateId, itemId, request),
 
-            BusinessType.Barber or BusinessType.Service or BusinessType.Professional =>
+            BusinessType.Barber or BusinessType.Service or BusinessType.Professional or BusinessType.Community =>
                 await PatchServiceAsync(affiliateId, itemId, request),
 
             BusinessType.Retail =>

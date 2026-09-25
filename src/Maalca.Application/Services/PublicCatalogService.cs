@@ -97,7 +97,7 @@ public class PublicCatalogService : IPublicCatalogService
         {
             items = affiliate.BusinessType switch
             {
-                BusinessType.Barber or BusinessType.Service or BusinessType.Professional =>
+                BusinessType.Barber or BusinessType.Service or BusinessType.Professional or BusinessType.Community =>
                     (await _db.Services
                         .Where(s => s.AffiliateId == affiliate.Id && s.IsPubliclyVisible && s.Status == "Active")
                         .OrderBy(s => s.SortOrder).ThenBy(s => s.Name)

@@ -2925,7 +2925,7 @@ app.MapGet("/api/space/{slug}", async (
                     TokenList.Parse(p.Periods), TokenList.Parse(p.Flags), p.Featured, p.Popular))
                 .ToList(),
 
-        BusinessType.Barber or BusinessType.Service or BusinessType.Professional =>
+        BusinessType.Barber or BusinessType.Service or BusinessType.Professional or BusinessType.Community =>
             await db.Services
                 .Where(s => s.AffiliateId == affiliate.Id)
                 .OrderBy(s => s.SortOrder)
