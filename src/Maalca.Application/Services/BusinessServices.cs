@@ -470,8 +470,10 @@ public class ActivityService : IActivityService
         var query = _context.Activities.Where(a => a.AffiliateId == affiliateId);
         if (upcomingOnly)
         {
+            // Vence por EndsAt cuando existe (evento sigue visible mientras dura, no solo hasta
+            // que arranca) -- si no tiene EndsAt, cae a StartsAt como antes.
             var now = DateTime.UtcNow;
-            query = query.Where(a => a.IsActive && a.StartsAt >= now);
+            query = query.Where(a => a.IsActive && (a.EndsAt ?? a.StartsAt) >= now);
         }
         return await query.OrderBy(a => a.StartsAt).ToListAsync();
     }
