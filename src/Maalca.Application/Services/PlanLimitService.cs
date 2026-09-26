@@ -57,7 +57,7 @@ public class PlanLimitService : IPlanLimitService
             BusinessType.Restaurant or BusinessType.Creator or BusinessType.Publisher =>
                 await _db.Products.CountAsync(p => p.AffiliateId == affiliateId && !p.IsDemo),
 
-            BusinessType.Barber or BusinessType.Service or BusinessType.Professional or BusinessType.Community =>
+            BusinessType.Barber or BusinessType.Service or BusinessType.Professional =>
                 await _db.Services.CountAsync(s => s.AffiliateId == affiliateId && !s.IsDemo),
 
             BusinessType.Retail =>

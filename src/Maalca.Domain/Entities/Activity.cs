@@ -28,5 +28,10 @@ public class Activity : AuditableEntity
     // en vez de depender solo de StartsAt < ahora para ocultarlo del publico.
     public bool IsActive { get; set; } = true;
 
+    // Foto opcional (backlog 2026-09-26, companion del rediseno de Programas) -- igual
+    // patron que CommunityProgram.ImageUrl: null = sin foto, el card publico se ve bien en
+    // ambos casos (ver Community.tsx), no es obligatoria.
+    public string? ImageUrl { get; set; }
+
     public Affiliate? Affiliate { get; set; }
 }

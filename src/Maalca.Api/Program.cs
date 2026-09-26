@@ -55,6 +55,7 @@ builder.Services.AddScoped<ITimeBlockService, TimeBlockService>();
 builder.Services.AddScoped<IProposalService, ProposalService>();
 builder.Services.AddScoped<IServiceService, ServiceService>();
 builder.Services.AddScoped<IActivityService, ActivityService>();
+builder.Services.AddScoped<ICommunityProgramService, CommunityProgramService>();
 builder.Services.AddScoped<ICausaService, CausaService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<IModifierService, ModifierService>();
@@ -1230,6 +1231,60 @@ app.MapDelete("/api/affiliates/{affiliateId:guid}/activities/{id:guid}", async (
     if (ctx.User.FindFirst("role")?.Value == "Staff")
         return Results.Forbid();
     var result = await activityService.DeleteActivityAsync(affiliateId, id);
+    if (!result)
+        return Results.NotFound();
+    return Results.NoContent();
+}).RequireAuthorization();
+
+// ============ COMMUNITY PROGRAMS ("Programas" -- rediseno backlog 2026-09-26, reemplaza la
+// tabla Service reutilizada. Mismo gating que /activities y /causas. ============
+app.MapGet("/api/affiliates/{affiliateId:guid}/programs", async (ICommunityProgramService programService, Guid affiliateId, HttpContext ctx, bool activeOnly = false) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    var result = await programService.GetProgramsAsync(affiliateId, activeOnly);
+    return Results.Ok(result);
+}).RequireAuthorization();
+
+app.MapGet("/api/affiliates/{affiliateId:guid}/programs/{id:guid}", async (ICommunityProgramService programService, Guid affiliateId, Guid id, HttpContext ctx) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    var result = await programService.GetProgramAsync(affiliateId, id);
+    if (result == null)
+        return Results.NotFound();
+    return Results.Ok(result);
+}).RequireAuthorization();
+
+app.MapPost("/api/affiliates/{affiliateId:guid}/programs", async (ICommunityProgramService programService, Guid affiliateId, Maalca.Domain.Entities.CommunityProgram program, HttpContext ctx) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    var result = await programService.CreateProgramAsync(affiliateId, program);
+    return Results.Created($"/api/affiliates/{affiliateId}/programs/{result.Id}", result);
+}).RequireAuthorization();
+
+app.MapPut("/api/affiliates/{affiliateId:guid}/programs/{id:guid}", async (ICommunityProgramService programService, Guid affiliateId, Guid id, Maalca.Domain.Entities.CommunityProgram program, HttpContext ctx) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    var result = await programService.UpdateProgramAsync(affiliateId, id, program);
+    if (result == null)
+        return Results.NotFound();
+    return Results.Ok(result);
+}).RequireAuthorization();
+
+app.MapDelete("/api/affiliates/{affiliateId:guid}/programs/{id:guid}", async (ICommunityProgramService programService, Guid affiliateId, Guid id, HttpContext ctx) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    var result = await programService.DeleteProgramAsync(affiliateId, id);
     if (!result)
         return Results.NotFound();
     return Results.NoContent();
@@ -3206,6 +3261,23 @@ app.MapGet("/api/public/affiliates/{slug}/activities", async (AppDbContext db, I
         return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
 
     var result = await activityService.GetActivitiesAsync(affiliate.Id, upcomingOnly: true);
+    response.Headers.CacheControl = "public, max-age=60";
+    return Results.Ok(result);
+})
+.AllowAnonymous();
+
+// Vitrina Comunidad — programas activos publicados, ordenados por SortOrder (rediseno
+// backlog 2026-09-26, reemplaza el catalog reusado -- ver comentario en CommunityProgram.cs).
+app.MapGet("/api/public/affiliates/{slug}/programs", async (AppDbContext db, ICommunityProgramService programService, string slug, HttpResponse response) =>
+{
+    var affiliate = await db.Affiliates
+        .Where(a => a.Slug == slug && a.Published)
+        .Select(a => new { a.Id })
+        .FirstOrDefaultAsync();
+    if (affiliate is null)
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
+
+    var result = await programService.GetProgramsAsync(affiliate.Id, activeOnly: true);
     response.Headers.CacheControl = "public, max-age=60";
     return Results.Ok(result);
 })

@@ -68,6 +68,18 @@ public interface IActivityService
     Task<bool> DeleteActivityAsync(Guid affiliateId, Guid id);
 }
 
+public interface ICommunityProgramService
+{
+    // activeOnly=true (usado por la pagina publica) filtra IsActive=true, igual patron que
+    // ICausaService.GetCausasAsync -- el dashboard pide activeOnly=false para poder editar/
+    // archivar programas inactivos tambien.
+    Task<List<Maalca.Domain.Entities.CommunityProgram>> GetProgramsAsync(Guid affiliateId, bool activeOnly = false);
+    Task<Maalca.Domain.Entities.CommunityProgram?> GetProgramAsync(Guid affiliateId, Guid id);
+    Task<Maalca.Domain.Entities.CommunityProgram> CreateProgramAsync(Guid affiliateId, Maalca.Domain.Entities.CommunityProgram program);
+    Task<Maalca.Domain.Entities.CommunityProgram?> UpdateProgramAsync(Guid affiliateId, Guid id, Maalca.Domain.Entities.CommunityProgram program);
+    Task<bool> DeleteProgramAsync(Guid affiliateId, Guid id);
+}
+
 public interface ICausaService
 {
     Task<List<Maalca.Domain.Entities.Causa>> GetCausasAsync(Guid affiliateId, bool activeOnly = false);

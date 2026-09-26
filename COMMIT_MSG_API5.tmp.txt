@@ -1,0 +1,32 @@
+feat(comunidad): rediseno del modulo Programas (CommunityProgram propia, ya no Services reusado)
+
+"Programas" dejaba de ser un parche sobre el catalogo generico (tabla Services con Precio
+relabeled a "Meta") y pasa a tener su propia entidad, igual patron que Activity/Causa:
+
+- CommunityProgram.cs (AuditableEntity): Title/TitleEn, Description/DescriptionEn, ImageUrl
+  (foto opcional), GoalAmount (meta opcional), Capacity (cupos), Schedule (horario en texto
+  libre), WeekDays (CSV, mismo formato que Product.WeekDays/TokenList), VolunteersNeeded,
+  IsActive, SortOrder. Nombrada "CommunityProgram" (no "Program") para no chocar con la clase
+  top-level Program de Maalca.Api/Program.cs.
+- ICommunityProgramService/CommunityProgramService: CRUD completo, mismo patron que
+  ActivityService (entidad directa, sin capa de DTOs).
+- Endpoints: CRUD dashboard /api/affiliates/{id}/programs, publico
+  GET /api/public/affiliates/{slug}/programs (activeOnly, ordenado por SortOrder).
+- AppDbContext: DbSet<CommunityProgram> + configuracion fluent (precision decimal en
+  GoalAmount, indice AffiliateId+SortOrder).
+- Activity.cs: agrega ImageUrl opcional (companion del rediseno -- eventos tambien pueden
+  tener foto, mismo patron "se ve bien con o sin ella" que Programas).
+- BusinessType.Community removido de los switches de CatalogCrudService/PublicCatalogService/
+  PlanLimitService que reusaban la tabla Services -- afiliados Community ya no leen/escriben
+  ahi, ver comentario en CatalogCrudService.cs.
+
+Companion en maalca-web: dashboard propio (/space/[slug]/programs), Community.tsx consume
+business.programs (ya no items), Eventos gana foto opcional para mantener coherencia visual
+con Programas.
+
+Migracion pendiente (dotnet ef, ver instrucciones): crea la tabla CommunityPrograms y copia
+los Services existentes de afiliados Community hacia ella (Price -> GoalAmount solo si > 0,
+para no mostrar "Meta: $0.00" falso). Los Services viejos quedan intactos sin usarse.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01R2QKsutmGsrVonxKk6wEQN

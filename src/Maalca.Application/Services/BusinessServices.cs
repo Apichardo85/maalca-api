@@ -518,6 +518,64 @@ public class ActivityService : IActivityService
     }
 }
 
+public class CommunityProgramService : ICommunityProgramService
+{
+    private readonly AppDbContext _context;
+
+    public CommunityProgramService(AppDbContext context) => _context = context;
+
+    public async Task<List<Maalca.Domain.Entities.CommunityProgram>> GetProgramsAsync(Guid affiliateId, bool activeOnly = false)
+    {
+        var query = _context.CommunityPrograms.Where(p => p.AffiliateId == affiliateId);
+        if (activeOnly)
+            query = query.Where(p => p.IsActive);
+        return await query.OrderBy(p => p.SortOrder).ThenBy(p => p.Title).ToListAsync();
+    }
+
+    public async Task<Maalca.Domain.Entities.CommunityProgram?> GetProgramAsync(Guid affiliateId, Guid id)
+        => await _context.CommunityPrograms.FirstOrDefaultAsync(p => p.Id == id && p.AffiliateId == affiliateId);
+
+    public async Task<Maalca.Domain.Entities.CommunityProgram> CreateProgramAsync(Guid affiliateId, Maalca.Domain.Entities.CommunityProgram program)
+    {
+        program.AffiliateId = affiliateId;
+        program.Id = Guid.NewGuid();
+        program.CreatedAt = DateTime.UtcNow;
+        _context.CommunityPrograms.Add(program);
+        await _context.SaveChangesAsync();
+        return program;
+    }
+
+    public async Task<Maalca.Domain.Entities.CommunityProgram?> UpdateProgramAsync(Guid affiliateId, Guid id, Maalca.Domain.Entities.CommunityProgram program)
+    {
+        var existing = await _context.CommunityPrograms.FirstOrDefaultAsync(p => p.Id == id && p.AffiliateId == affiliateId);
+        if (existing == null) return null;
+        existing.Title = program.Title;
+        existing.TitleEn = program.TitleEn;
+        existing.Description = program.Description;
+        existing.DescriptionEn = program.DescriptionEn;
+        existing.ImageUrl = program.ImageUrl;
+        existing.GoalAmount = program.GoalAmount;
+        existing.Capacity = program.Capacity;
+        existing.Schedule = program.Schedule;
+        existing.WeekDays = program.WeekDays;
+        existing.VolunteersNeeded = program.VolunteersNeeded;
+        existing.IsActive = program.IsActive;
+        existing.SortOrder = program.SortOrder;
+        existing.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        return existing;
+    }
+
+    public async Task<bool> DeleteProgramAsync(Guid affiliateId, Guid id)
+    {
+        var program = await _context.CommunityPrograms.FirstOrDefaultAsync(p => p.Id == id && p.AffiliateId == affiliateId);
+        if (program == null) return false;
+        _context.CommunityPrograms.Remove(program);
+        await _context.SaveChangesAsync();
+        return true;
+    }
+}
+
 public class CausaService : ICausaService
 {
     private static readonly string[] ValidTypes = { "money", "time", "in_kind" };

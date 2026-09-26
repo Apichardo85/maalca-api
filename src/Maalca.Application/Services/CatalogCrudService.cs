@@ -8,6 +8,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Maalca.Application.Services;
 
+// BusinessType.Community fue removido del switch de abajo (backlog 2026-09-26) -- ya no
+// usa el catalogo generico (tabla Services relabeled). Ver CommunityProgram.cs / 
+// CommunityProgramService: "Programas" ahora tiene su propio CRUD (/api/affiliates/
+// {id}/programs), afiliados Community existentes cayeron a la lista vacia aqui a
+// proposito -- sus Services viejos se migraron a CommunityPrograms en la misma migracion
+// que agrego la tabla (ver AddCommunityPrograms.cs), no se leen mas desde este servicio.
 public class CatalogCrudService : ICatalogCrudService
 {
     private readonly AppDbContext _db;
@@ -46,7 +52,7 @@ public class CatalogCrudService : ICatalogCrudService
 
         return affiliate.BusinessType switch
         {
-            BusinessType.Barber or BusinessType.Service or BusinessType.Professional or BusinessType.Community =>
+            BusinessType.Barber or BusinessType.Service or BusinessType.Professional =>
                 (await _db.Services
                     .Where(s => s.AffiliateId == affiliateId)
                     .OrderBy(s => s.SortOrder).ThenBy(s => s.Name)
@@ -81,7 +87,7 @@ public class CatalogCrudService : ICatalogCrudService
 
         return affiliate.BusinessType switch
         {
-            BusinessType.Barber or BusinessType.Service or BusinessType.Professional or BusinessType.Community =>
+            BusinessType.Barber or BusinessType.Service or BusinessType.Professional =>
                 MapNullable(await _db.Services
                     .FirstOrDefaultAsync(s => s.AffiliateId == affiliateId && s.Id == itemId),
                     CatalogItemMapper.FromService),
@@ -140,7 +146,7 @@ public class CatalogCrudService : ICatalogCrudService
             BusinessType.Restaurant or BusinessType.Creator or BusinessType.Publisher =>
                 await CreateProductAsync(affiliateId, request),
 
-            BusinessType.Barber or BusinessType.Service or BusinessType.Professional or BusinessType.Community =>
+            BusinessType.Barber or BusinessType.Service or BusinessType.Professional =>
                 await CreateServiceAsync(affiliateId, request),
 
             BusinessType.Retail =>
@@ -160,7 +166,7 @@ public class CatalogCrudService : ICatalogCrudService
             BusinessType.Restaurant or BusinessType.Creator or BusinessType.Publisher =>
                 await UpdateProductAsync(affiliateId, itemId, request),
 
-            BusinessType.Barber or BusinessType.Service or BusinessType.Professional or BusinessType.Community =>
+            BusinessType.Barber or BusinessType.Service or BusinessType.Professional =>
                 await UpdateServiceAsync(affiliateId, itemId, request),
 
             BusinessType.Retail =>
@@ -180,7 +186,7 @@ public class CatalogCrudService : ICatalogCrudService
             BusinessType.Restaurant or BusinessType.Creator or BusinessType.Publisher =>
                 await DeleteProductAsync(affiliateId, itemId),
 
-            BusinessType.Barber or BusinessType.Service or BusinessType.Professional or BusinessType.Community =>
+            BusinessType.Barber or BusinessType.Service or BusinessType.Professional =>
                 await DeleteServiceAsync(affiliateId, itemId),
 
             BusinessType.Retail =>
@@ -208,7 +214,7 @@ public class CatalogCrudService : ICatalogCrudService
             BusinessType.Restaurant or BusinessType.Creator or BusinessType.Publisher =>
                 await PatchProductAsync(affiliateId, itemId, request),
 
-            BusinessType.Barber or BusinessType.Service or BusinessType.Professional or BusinessType.Community =>
+            BusinessType.Barber or BusinessType.Service or BusinessType.Professional =>
                 await PatchServiceAsync(affiliateId, itemId, request),
 
             BusinessType.Retail =>

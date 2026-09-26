@@ -50,6 +50,7 @@ public class AppDbContext : DbContext
     public DbSet<Activity> Activities => Set<Activity>();
     public DbSet<Causa> Causas => Set<Causa>();
     public DbSet<Donation> Donations => Set<Donation>();
+    public DbSet<CommunityProgram> CommunityPrograms => Set<CommunityProgram>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -171,6 +172,7 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
             entity.Property(e => e.Location).HasMaxLength(300);
+            entity.Property(e => e.ImageUrl).HasMaxLength(500);
             entity.HasOne(e => e.Affiliate)
                   .WithMany(a => a.Activities)
                   .HasForeignKey(e => e.AffiliateId)
@@ -213,6 +215,25 @@ public class AppDbContext : DbContext
                   .HasForeignKey(e => e.AffiliateId)
                   .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.AffiliateId, e.Status, e.CreatedAt });
+        });
+
+        // CommunityProgram -- rediseno del modulo "Programas" de Community (backlog
+        // 2026-09-26), reemplaza la tabla Service reutilizada -- ver comentario en
+        // CommunityProgram.cs sobre el porque del nombre completo (choque con la clase Program
+        // top-level de Maalca.Api).
+        modelBuilder.Entity<CommunityProgram>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.ImageUrl).HasMaxLength(500);
+            entity.Property(e => e.Schedule).HasMaxLength(200);
+            entity.Property(e => e.WeekDays).HasMaxLength(100);
+            entity.Property(e => e.GoalAmount).HasPrecision(18, 2);
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.AffiliateId, e.SortOrder });
         });
 
         // Appointment
