@@ -86,6 +86,7 @@ builder.Services.AddScoped<IInvoiceNotificationService, InvoiceNotificationServi
 builder.Services.AddScoped<IProposalNotificationService, ProposalNotificationService>();
 builder.Services.AddScoped<Maalca.Application.Common.Interfaces.IOrderRealtimeNotifier, Maalca.Api.Hubs.SignalROrderRealtimeNotifier>();
 builder.Services.AddScoped<IOrderService, OrderService>();
+builder.Services.AddScoped<IDonationService, DonationService>();
 builder.Services.AddScoped<IScreenAdService, ScreenAdService>();
 builder.Services.AddScoped<IScreenService, ScreenService>();
 builder.Services.AddScoped<IPublicBookingService, PublicBookingService>();
@@ -3420,6 +3421,45 @@ app.MapPost("/api/public/orders/{orderId}/confirm", async (
     var result = await orderService.ConfirmCheckoutAsync(orderId, request.CheckoutSessionId);
     if (result is null)
         return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Order not found" } });
+    return Results.Ok(result);
+})
+.AllowAnonymous();
+
+// ============ PUBLIC DONATIONS (Comunidad — cobro real via Stripe Connect) ============
+// Mismo patron que PUBLIC ORDERS arriba: crea la donacion siempre (Pending), y ademas una
+// Checkout Session direct-charge si el afiliado tiene Stripe Connect activo. Sin Connect
+// activo, CheckoutUrl viene null y el storefront cae al link de WhatsApp existente.
+app.MapPost("/api/public/affiliates/{slug}/donations", async (
+    IDonationService donationService, string slug, CreateDonationRequest request) =>
+{
+    try
+    {
+        var result = await donationService.CreateDonationAsync(slug, request);
+        if (result is null)
+            return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
+        return Results.Ok(result);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+    catch (Stripe.StripeException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "STRIPE_ERROR", message = ex.Message } });
+    }
+})
+.AllowAnonymous();
+
+// Vitrina Comunidad — total real recaudado este mes (Status=Paid), solo si el afiliado tiene
+// Stripe Connect activo. RaisedThisMonth viene null si no lo tiene todavia -- el frontend cae
+// al monto reportado a mano en Affiliate.CommunityImpact en ese caso, nunca a un $0 falso.
+app.MapGet("/api/public/affiliates/{slug}/donations/summary", async (
+    IDonationService donationService, string slug, HttpResponse response) =>
+{
+    var result = await donationService.GetPublicSummaryAsync(slug);
+    if (result is null)
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
+    response.Headers.CacheControl = "public, max-age=60";
     return Results.Ok(result);
 })
 .AllowAnonymous();

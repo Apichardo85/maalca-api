@@ -1,0 +1,31 @@
+feat(comunidad): donaciones reales via Stripe Connect (reemplaza recaudado reportado a mano)
+
+Antes de esto, "Recaudado este mes" en Affiliate.CommunityImpact era un numero que el
+afiliado reportaba a mano -- no habia ningun cobro real detras del boton "Donar ahora"
+salvo el fallback de WhatsApp. Se agrega una Donation real, mismo patron que Order
+(OrderService): checkout session en modo "payment" contra la cuenta Stripe Connect del
+afiliado (RequestOptions.StripeAccount = direct charge, MaalCa nunca toca el dinero).
+
+Nuevo:
+- Donation.cs (AuditableEntity) + DonationStatus (Pending/Paid/Canceled).
+- IDonationService/DonationService: CreateDonationAsync (crea la donacion siempre, y ademas
+  la Checkout Session si el afiliado tiene Connect con cargos habilitados -- null si no,
+  igual que Order), ConfirmFromWebhookAsync (mismo patron idempotente que Order/Invoice),
+  GetPublicSummaryAsync (suma real de donaciones Paid del mes calendario, zona horaria del
+  afiliado -- null si el afiliado no tiene Connect activo, para que el frontend caiga al
+  monto reportado a mano en ese caso).
+- Endpoints publicos: POST /api/public/affiliates/{slug}/donations,
+  GET /api/public/affiliates/{slug}/donations/summary.
+- StripeConnectService.HandleWebhookEventAsync ahora tambien llama
+  DonationService.ConfirmFromWebhookAsync en checkout.session.completed (no-op silencioso
+  si el Session no le pertenece a una Donation, mismo patron que Order/Invoice).
+- AppDbContext: DbSet<Donation> + configuracion fluent (precision decimal, indice
+  AffiliateId+Status+CreatedAt para la suma mensual).
+
+Companion en maalca-web: boton "Donar ahora" + slider de la calculadora de impacto ahora
+intentan cobro real con tarjeta primero, caen a WhatsApp si el afiliado no tiene Connect
+activo. "Recaudado este mes" en la pagina publica prefiere el total real calculado sobre
+el reportado a mano.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01R2QKsutmGsrVonxKk6wEQN

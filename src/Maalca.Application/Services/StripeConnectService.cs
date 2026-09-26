@@ -28,12 +28,14 @@ public class StripeConnectService : IStripeConnectService
     private readonly AppDbContext _db;
     private readonly IOrderService _orderService;
     private readonly IInvoiceService _invoiceService;
+    private readonly IDonationService _donationService;
 
-    public StripeConnectService(AppDbContext db, IOrderService orderService, IInvoiceService invoiceService)
+    public StripeConnectService(AppDbContext db, IOrderService orderService, IInvoiceService invoiceService, IDonationService donationService)
     {
         _db = db;
         _orderService = orderService;
         _invoiceService = invoiceService;
+        _donationService = donationService;
     }
 
     public async Task<ConnectOnboardingLinkResponseDto> CreateOnboardingLinkAsync(Guid affiliateId, CreateConnectOnboardingLinkRequest request)
@@ -157,12 +159,14 @@ public class StripeConnectService : IStripeConnectService
         if (stripeEvent.Type == "checkout.session.completed" && stripeEvent.Data.Object is Session session
             && session.PaymentStatus == "paid")
         {
-            // Un mismo checkout.session.completed solo le pertenece a Order O a Invoice, nunca a
-            // ambos (ClientReferenceId/StripeCheckoutSessionId son exclusivos por entidad) — cada
-            // Confirm...Async es un no-op silencioso si el Session no le pertenece (busca por
-            // StripeCheckoutSessionId y no encuentra nada), así que llamar a los dos es seguro.
+            // Un mismo checkout.session.completed solo le pertenece a Order, Invoice O Donation,
+            // nunca a más de uno (ClientReferenceId/StripeCheckoutSessionId son exclusivos por
+            // entidad) — cada Confirm...Async es un no-op silencioso si el Session no le
+            // pertenece (busca por StripeCheckoutSessionId y no encuentra nada), así que llamar
+            // a los tres es seguro.
             await _orderService.ConfirmFromWebhookAsync(session.Id, session.PaymentIntentId);
             await _invoiceService.ConfirmFromWebhookAsync(session.Id, session.PaymentIntentId);
+            await _donationService.ConfirmFromWebhookAsync(session.Id, session.PaymentIntentId);
         }
 
         _db.StripeProcessedEvents.Add(new StripeProcessedEvent

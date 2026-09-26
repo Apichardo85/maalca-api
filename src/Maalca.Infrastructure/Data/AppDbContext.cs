@@ -49,6 +49,7 @@ public class AppDbContext : DbContext
     public DbSet<Proposal> Proposals => Set<Proposal>();
     public DbSet<Activity> Activities => Set<Activity>();
     public DbSet<Causa> Causas => Set<Causa>();
+    public DbSet<Donation> Donations => Set<Donation>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -192,6 +193,26 @@ public class AppDbContext : DbContext
                   .HasForeignKey(e => e.AffiliateId)
                   .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.AffiliateId, e.SortOrder });
+        });
+
+        // Donation -- donaciones reales de Community via Stripe Connect (backlog 2026-09-26),
+        // reemplaza Affiliate.CommunityImpact.FundraisingCurrentAmount reportado a mano cuando
+        // el afiliado tiene Connect activo, ver comentario en Donation.cs y DonationService.
+        modelBuilder.Entity<Donation>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.DonorName).HasMaxLength(200);
+            entity.Property(e => e.DonorEmail).HasMaxLength(320);
+            entity.Property(e => e.Message).HasMaxLength(500);
+            entity.Property(e => e.Currency).HasMaxLength(3).IsRequired();
+            entity.Property(e => e.Amount).HasPrecision(18, 2);
+            entity.Property(e => e.StripeCheckoutSessionId).HasMaxLength(255);
+            entity.Property(e => e.StripePaymentIntentId).HasMaxLength(255);
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.AffiliateId, e.Status, e.CreatedAt });
         });
 
         // Appointment
