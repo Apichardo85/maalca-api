@@ -1015,6 +1015,8 @@ app.MapGet("/api/public/proposals/{token:guid}", async (IProposalService proposa
     return Results.Ok(new
     {
         businessName = result.Affiliate?.Name ?? "",
+        businessLogoUrl = result.Affiliate?.LogoUrl,
+        businessPrimaryColor = result.Affiliate?.PrimaryColor,
         title = result.Title,
         description = result.Description,
         amount = result.Amount,
