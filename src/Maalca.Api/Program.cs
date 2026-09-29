@@ -3166,6 +3166,7 @@ app.MapGet("/api/space/{slug}", async (
             affiliate.Plan.ToString().ToLower(),
             affiliate.PlanStatus.ToString(),
             affiliate.WhatsApp, affiliate.PrimaryColor,
+            affiliate.LogoUrl,
             affiliate.DescriptionEn,
             canales, ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()),
             JsonArrayField.Parse<ProcessStepDto>(affiliate.ProcessSteps),

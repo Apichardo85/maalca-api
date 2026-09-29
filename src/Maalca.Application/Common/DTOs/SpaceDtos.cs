@@ -23,6 +23,7 @@ public record BusinessDto(
     string PlanStatus,
     string? Whatsapp,
     string? PrimaryColor,
+    string? LogoUrl,
     string? DescriptionEn,
     IReadOnlyList<CanalDto> Canales,
     IReadOnlyList<string> ModulosActivos,
