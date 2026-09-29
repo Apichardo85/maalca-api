@@ -41,6 +41,11 @@ public class OrderService : IOrderService
         if (affiliate is null) return null;
         if (request.Items.Count == 0) throw new ArgumentException("Order must have at least one item.");
 
+        // El navegador NO es fuente de verdad de precios: nombre y precio salen del catálogo del
+        // afiliado, y subtotal/total se recalculan aquí. Sin esto, un cliente podía mandar
+        // price=0.01 y Stripe cobraba eso (UnitAmount se arma con estos valores).
+        var priced = await RepriceItemsAsync(affiliate.Id, request.Items, request.Tax, request.Tip);
+
         var order = new Order
         {
             AffiliateId = affiliate.Id,
@@ -48,11 +53,11 @@ public class OrderService : IOrderService
             CustomerPhone = request.CustomerPhone,
             CustomerEmail = request.CustomerEmail,
             Notes = request.Notes,
-            ItemsJson = JsonArrayField.Serialize(request.Items),
-            Subtotal = request.Subtotal,
-            Tax = request.Tax,
-            Tip = request.Tip,
-            Total = request.Total,
+            ItemsJson = JsonArrayField.Serialize(priced.Items),
+            Subtotal = priced.Subtotal,
+            Tax = priced.Tax,
+            Tip = priced.Tip,
+            Total = priced.Total,
             Currency = string.IsNullOrWhiteSpace(request.Currency) ? "USD" : request.Currency.ToUpperInvariant(),
             Status = OrderStatus.Pending,
         };
@@ -70,7 +75,7 @@ public class OrderService : IOrderService
         StripeConfiguration.ApiKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY") ?? "";
         var requestOptions = new RequestOptions { StripeAccount = affiliate.StripeConnectAccountId };
 
-        var lineItems = request.Items.Select(i => new SessionLineItemOptions
+        var lineItems = priced.Items.Select(i => new SessionLineItemOptions
         {
             Quantity = i.Qty,
             PriceData = new SessionLineItemPriceDataOptions
@@ -84,7 +89,7 @@ public class OrderService : IOrderService
             },
         }).ToList();
 
-        if (request.Tax > 0)
+        if (priced.Tax > 0)
         {
             lineItems.Add(new SessionLineItemOptions
             {
@@ -92,13 +97,13 @@ public class OrderService : IOrderService
                 PriceData = new SessionLineItemPriceDataOptions
                 {
                     Currency = order.Currency.ToLowerInvariant(),
-                    UnitAmount = (long)Math.Round(request.Tax * 100),
+                    UnitAmount = (long)Math.Round(priced.Tax * 100),
                     ProductData = new SessionLineItemPriceDataProductDataOptions { Name = "Tax" },
                 },
             });
         }
 
-        if (request.Tip > 0)
+        if (priced.Tip > 0)
         {
             lineItems.Add(new SessionLineItemOptions
             {
@@ -106,7 +111,7 @@ public class OrderService : IOrderService
                 PriceData = new SessionLineItemPriceDataOptions
                 {
                     Currency = order.Currency.ToLowerInvariant(),
-                    UnitAmount = (long)Math.Round(request.Tip * 100),
+                    UnitAmount = (long)Math.Round(priced.Tip * 100),
                     ProductData = new SessionLineItemPriceDataProductDataOptions { Name = "Tip" },
                 },
             });
@@ -126,6 +131,82 @@ public class OrderService : IOrderService
         await _db.SaveChangesAsync();
 
         return new CreateOrderResponseDto(order.Id, session.Url);
+    }
+
+    private const int MaxQtyPerLine = 99;
+
+    // Todavía no hay tasa de impuesto configurable por afiliado (el storefront manda taxRate=0),
+    // así que el servidor no puede recalcular el impuesto: solo lo acota. Cuando exista
+    // Affiliate.TaxRate, este tope se reemplaza por el cálculo real (subtotal * tasa).
+    private const decimal MaxTaxFractionOfSubtotal = 0.25m;
+
+    private sealed record PricedOrder(
+        IReadOnlyList<OrderItemDto> Items, decimal Subtotal, decimal Tax, decimal Tip, decimal Total);
+
+    /// <summary>
+    /// Reconstruye las líneas del pedido con nombre y precio del catálogo real del afiliado
+    /// (Product, Service o InventoryItem publicado y activo — mismo criterio que
+    /// PublicCatalogService), ignorando los precios que mandó el navegador. Rechaza artículos
+    /// ajenos, ocultos, inactivos o inexistentes, cantidades fuera de rango y montos negativos.
+    /// </summary>
+    private async Task<PricedOrder> RepriceItemsAsync(
+        Guid affiliateId, IReadOnlyList<OrderItemDto> requested, decimal clientTax, decimal clientTip)
+    {
+        if (requested.Any(i => i.Qty < 1 || i.Qty > MaxQtyPerLine))
+            throw new ArgumentException($"Cantidad inválida (debe ser entre 1 y {MaxQtyPerLine}).");
+        if (clientTax < 0 || clientTip < 0)
+            throw new ArgumentException("Impuesto y propina no pueden ser negativos.");
+
+        var ids = new List<Guid>(requested.Count);
+        foreach (var line in requested)
+        {
+            if (!Guid.TryParse(line.ItemId, out var id))
+                throw new ArgumentException("Artículo inválido.");
+            ids.Add(id);
+        }
+        var distinctIds = ids.Distinct().ToList();
+
+        var catalog = new Dictionary<Guid, (string Name, decimal Price)>();
+
+        var products = await _db.Products
+            .Where(p => p.AffiliateId == affiliateId && distinctIds.Contains(p.Id)
+                        && p.IsPubliclyVisible && p.Status == "Active")
+            .Select(p => new { p.Id, p.Name, p.Price })
+            .ToListAsync();
+        foreach (var p in products) catalog[p.Id] = (p.Name, p.Price);
+
+        var services = await _db.Services
+            .Where(s => s.AffiliateId == affiliateId && distinctIds.Contains(s.Id)
+                        && s.IsPubliclyVisible && s.Status == "Active")
+            .Select(s => new { s.Id, s.Name, s.Price })
+            .ToListAsync();
+        foreach (var s in services) catalog.TryAdd(s.Id, (s.Name, s.Price));
+
+        var inventory = await _db.InventoryItems
+            .Where(i => i.AffiliateId == affiliateId && distinctIds.Contains(i.Id)
+                        && i.IsPubliclyVisible && i.Status == "Active")
+            .Select(i => new { i.Id, i.Name, Price = i.UnitPrice })
+            .ToListAsync();
+        foreach (var i in inventory) catalog.TryAdd(i.Id, (i.Name, i.Price));
+
+        var lines = new List<OrderItemDto>(requested.Count);
+        decimal subtotal = 0;
+        for (var idx = 0; idx < requested.Count; idx++)
+        {
+            var req = requested[idx];
+            if (!catalog.TryGetValue(ids[idx], out var entry))
+                throw new ArgumentException("Uno de los artículos ya no está disponible.");
+            lines.Add(new OrderItemDto(req.ItemId, entry.Name, entry.Price, req.Qty, req.Notes));
+            subtotal += entry.Price * req.Qty;
+        }
+
+        subtotal = Math.Round(subtotal, 2);
+        var tax = Math.Round(clientTax, 2);
+        var tip = Math.Round(clientTip, 2);
+        if (tax > Math.Round(subtotal * MaxTaxFractionOfSubtotal, 2))
+            throw new ArgumentException("Impuesto inválido para este pedido.");
+
+        return new PricedOrder(lines, subtotal, tax, tip, subtotal + tax + tip);
     }
 
     public async Task<OrderDto?> CreatePosOrderAsync(Guid affiliateId, CreatePosOrderRequest request)
