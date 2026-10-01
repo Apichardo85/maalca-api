@@ -70,4 +70,53 @@ public class InvoiceNotificationService : IInvoiceNotificationService
             _logger.LogWarning(ex, "[InvoiceNotification] Threw");
         }
     }
+
+    public async Task NotifyInvoicePaidAsync(Invoice invoice, Customer customer, string businessName, string currency)
+    {
+        if (string.IsNullOrWhiteSpace(customer.Email))
+            return; // sin correo del cliente no hay a quien mandarle el recibo
+
+        var baseUrl = Environment.GetEnvironmentVariable("MAALCA_WEB_URL");
+        var secret = Environment.GetEnvironmentVariable("INTERNAL_NOTIFICATIONS_SECRET");
+        if (string.IsNullOrWhiteSpace(baseUrl) || string.IsNullOrWhiteSpace(secret))
+        {
+            _logger.LogInformation("[InvoiceNotification] Paid-notify skipped — MAALCA_WEB_URL/INTERNAL_NOTIFICATIONS_SECRET not set");
+            return;
+        }
+
+        try
+        {
+            var payload = new
+            {
+                customerEmail = customer.Email,
+                customerName = customer.Name,
+                businessName,
+                invoiceNumber = invoice.InvoiceNumber,
+                total = invoice.Total,
+                currency,
+                paidDate = invoice.PaidDate,
+            };
+
+            var client = _httpClientFactory.CreateClient();
+            client.Timeout = TimeSpan.FromSeconds(10);
+
+            using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl.TrimEnd('/')}/api/internal/notifications/invoice-paid")
+            {
+                Content = content,
+            };
+            request.Headers.Add("X-Internal-Secret", secret);
+
+            var response = await client.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                _logger.LogWarning("[InvoiceNotification] Paid-notify failed ({Status}): {Body}", response.StatusCode, body);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[InvoiceNotification] Paid-notify threw");
+        }
+    }
 }

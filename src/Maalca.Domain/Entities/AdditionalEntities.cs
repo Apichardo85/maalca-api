@@ -232,6 +232,11 @@ public class Invoice : AuditableEntity
     public Guid? ReplacesInvoiceId { get; set; }
     public Guid? ReplacedByInvoiceId { get; set; }
 
+    // Recordatorio de factura por vencer (backlog documentos/correos, 2026-09-29) — mismo patrón
+    // que Appointment.ReminderSentAt/Proposal.ReminderSentAt: nulo hasta que el barrido de
+    // /api/internal/invoices/due-reminders manda el correo. Una sola vez por factura.
+    public DateTime? ReminderSentAt { get; set; }
+
     public Affiliate? Affiliate { get; set; }
     public Customer? Customer { get; set; }
     public ICollection<InvoiceItem> Items { get; set; } = new List<InvoiceItem>();

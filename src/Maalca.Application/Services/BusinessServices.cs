@@ -1437,7 +1437,7 @@ public class InvoiceService : IInvoiceService
 
     public async Task<Invoice?> UpdateInvoiceAsync(Guid affiliateId, Guid id, Invoice invoice, List<InvoiceItem>? items = null, string? actorId = null, string? actorName = null)
     {
-        var existing = await _context.Invoices.Include(i => i.Items).FirstOrDefaultAsync(i => i.Id == id && i.AffiliateId == affiliateId);
+        var existing = await _context.Invoices.Include(i => i.Items).Include(i => i.Customer).Include(i => i.Affiliate).FirstOrDefaultAsync(i => i.Id == id && i.AffiliateId == affiliateId);
         if (existing == null) return null;
 
         // Editar de verdad (cliente/líneas/vencimiento) solo mientras sigue Pending/Overdue —
@@ -1484,8 +1484,15 @@ public class InvoiceService : IInvoiceService
         await _context.SaveChangesAsync();
 
         if (!wasPaid && existing.Status == "Paid")
+        {
             await _audit.LogAsync(affiliateId, "invoice.paid", "Invoice", existing.Id,
                 $"Factura {existing.InvoiceNumber} marcada como pagada ({existing.Total:C})", actorId, actorName);
+            if (existing.Customer is not null)
+            {
+                var currency = string.IsNullOrWhiteSpace(existing.Affiliate?.Currency) ? "USD" : existing.Affiliate!.Currency.ToUpperInvariant();
+                await _notifications.NotifyInvoicePaidAsync(existing, existing.Customer, existing.Affiliate?.Name ?? "", currency);
+            }
+        }
         else if (items is { Count: > 0 })
             await _audit.LogAsync(affiliateId, "invoice.edited", "Invoice", existing.Id,
                 $"Factura {existing.InvoiceNumber} editada (cliente/líneas/vencimiento) — nuevo total {existing.Total:C}", actorId, actorName);

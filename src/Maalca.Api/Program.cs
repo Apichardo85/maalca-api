@@ -931,6 +931,173 @@ app.MapPost("/api/internal/appointments/{id:guid}/mark-reminded", async (HttpCon
     return Results.NoContent();
 });
 
+
+// Recordatorio de propuesta sin firmar (backlog documentos/correos, 2026-09-29) — mismo patrón
+// que appointments/due-reminders arriba: maalca-web (cron) pide qué propuestas necesitan
+// recordatorio, manda el correo con Resend, y confirma acá para no repetir en el próximo barrido.
+app.MapGet("/api/internal/proposals/due-reminders", async (HttpContext ctx, AppDbContext db, int minDaysSinceSent = 3) =>
+{
+    if (!ValidInternalSecret(ctx)) return Results.Unauthorized();
+
+    var now = DateTime.UtcNow;
+    var cutoff = now.AddDays(-Math.Clamp(minDaysSinceSent, 1, 30));
+
+    var due = await db.Proposals
+        .AsNoTracking()
+        .Where(p =>
+            p.Status == "Sent" &&
+            p.ReminderSentAt == null &&
+            p.SentAt != null && p.SentAt <= cutoff &&
+            (p.ExpiresAt == null || p.ExpiresAt > now) &&
+            p.CustomerEmail != null && p.CustomerEmail != "")
+        .Include(p => p.Affiliate)
+        .Select(p => new
+        {
+            id = p.Id,
+            customerEmail = p.CustomerEmail,
+            customerName = p.CustomerName,
+            businessName = p.Affiliate != null ? p.Affiliate.Name : "",
+            title = p.Title,
+            amount = p.Amount,
+            currency = p.Currency,
+            expiresAt = p.ExpiresAt,
+            token = p.Token,
+        })
+        .ToListAsync();
+
+    return Results.Ok(due);
+});
+
+app.MapPost("/api/internal/proposals/{id:guid}/mark-reminded", async (HttpContext ctx, AppDbContext db, Guid id) =>
+{
+    if (!ValidInternalSecret(ctx)) return Results.Unauthorized();
+
+    var proposal = await db.Proposals.FirstOrDefaultAsync(p => p.Id == id);
+    if (proposal is null) return Results.NotFound();
+    proposal.ReminderSentAt = DateTime.UtcNow;
+    await db.SaveChangesAsync();
+    return Results.NoContent();
+});
+
+// Recordatorio de factura por vencer/vencida (backlog documentos/correos, 2026-09-29) — mismo
+// patrón. daysBeforeDue controla qué tan cerca del vencimiento empieza a avisar; una factura ya
+// vencida (dueDate en el pasado) siempre entra, sin importar el parámetro.
+app.MapGet("/api/internal/invoices/due-reminders", async (HttpContext ctx, AppDbContext db, int daysBeforeDue = 3) =>
+{
+    if (!ValidInternalSecret(ctx)) return Results.Unauthorized();
+
+    var now = DateTime.UtcNow;
+    var horizon = now.AddDays(Math.Clamp(daysBeforeDue, 1, 30));
+
+    var due = await db.Invoices
+        .AsNoTracking()
+        .Where(i =>
+            (i.Status == "Pending" || i.Status == "Overdue") &&
+            i.ReminderSentAt == null &&
+            i.DueDate != null && i.DueDate <= horizon)
+        .Include(i => i.Affiliate)
+        .Include(i => i.Customer)
+        .Where(i => i.Customer != null && i.Customer.Email != null && i.Customer.Email != "")
+        .Select(i => new
+        {
+            id = i.Id,
+            customerEmail = i.Customer!.Email,
+            customerName = i.Customer!.Name,
+            businessName = i.Affiliate != null ? i.Affiliate.Name : "",
+            invoiceNumber = i.InvoiceNumber,
+            total = i.Total,
+            currency = i.Affiliate != null && i.Affiliate.Currency != null && i.Affiliate.Currency != "" ? i.Affiliate.Currency : "USD",
+            dueDate = i.DueDate,
+            isOverdue = i.DueDate < now,
+        })
+        .ToListAsync();
+
+    return Results.Ok(due);
+});
+
+app.MapPost("/api/internal/invoices/{id:guid}/mark-reminded", async (HttpContext ctx, AppDbContext db, Guid id) =>
+{
+    if (!ValidInternalSecret(ctx)) return Results.Unauthorized();
+
+    var invoice = await db.Invoices.FirstOrDefaultAsync(i => i.Id == id);
+    if (invoice is null) return Results.NotFound();
+    invoice.ReminderSentAt = DateTime.UtcNow;
+    await db.SaveChangesAsync();
+    return Results.NoContent();
+});
+
+
+// Digest semanal a afiliados (backlog documentos/correos, 2026-09-29, tarea #4 cierre) — corre
+// vía Vercel Cron (/api/cron/affiliate-digest, lunes) y le pide a maalca-api un resumen de la
+// semana anterior por afiliado: ingresos cobrados, propuestas enviadas/aceptadas, clientes
+// nuevos. Genérico entre tipos de negocio a propósito (no incluye citas/pedidos, que varían
+// según el tipo) -- ver docs/audits/business-type-flows-audit.md. Se manda siempre, incluso sin
+// actividad, para construir el hábito semanal; solo a afiliados activos con ContactEmail.
+app.MapGet("/api/internal/affiliates/weekly-digest", async (HttpContext ctx, AppDbContext db) =>
+{
+    if (!ValidInternalSecret(ctx)) return Results.Unauthorized();
+
+    var now = DateTime.UtcNow;
+    var weekStart = now.Date.AddDays(-7);
+
+    var affiliates = await db.Affiliates
+        .AsNoTracking()
+        .Where(a => a.IsActive && a.ContactEmail != null && a.ContactEmail != "")
+        .Select(a => new { a.Id, a.Name, a.Slug, a.ContactEmail, a.Currency })
+        .ToListAsync();
+
+    if (affiliates.Count == 0) return Results.Ok(new List<object>());
+
+    var affiliateIds = affiliates.Select(a => a.Id).ToHashSet();
+
+    var revenueByAffiliate = await db.Invoices
+        .AsNoTracking()
+        .Where(i => affiliateIds.Contains(i.AffiliateId) && i.Status == "Paid" && i.PaidDate != null && i.PaidDate >= weekStart)
+        .GroupBy(i => i.AffiliateId)
+        .Select(g => new { AffiliateId = g.Key, Revenue = g.Sum(x => x.Total), Count = g.Count() })
+        .ToDictionaryAsync(g => g.AffiliateId, g => (g.Revenue, g.Count));
+
+    var proposalsSentByAffiliate = await db.Proposals
+        .AsNoTracking()
+        .Where(p => affiliateIds.Contains(p.AffiliateId) && p.SentAt != null && p.SentAt >= weekStart)
+        .GroupBy(p => p.AffiliateId)
+        .Select(g => new { AffiliateId = g.Key, Count = g.Count() })
+        .ToDictionaryAsync(g => g.AffiliateId, g => g.Count);
+
+    var proposalsAcceptedByAffiliate = await db.Proposals
+        .AsNoTracking()
+        .Where(p => affiliateIds.Contains(p.AffiliateId) && p.AcceptedAt != null && p.AcceptedAt >= weekStart)
+        .GroupBy(p => p.AffiliateId)
+        .Select(g => new { AffiliateId = g.Key, Count = g.Count() })
+        .ToDictionaryAsync(g => g.AffiliateId, g => g.Count);
+
+    var newCustomersByAffiliate = await db.Customers
+        .AsNoTracking()
+        .Where(c => affiliateIds.Contains(c.AffiliateId) && c.CreatedAt >= weekStart)
+        .GroupBy(c => c.AffiliateId)
+        .Select(g => new { AffiliateId = g.Key, Count = g.Count() })
+        .ToDictionaryAsync(g => g.AffiliateId, g => g.Count);
+
+    var result = affiliates.Select(a =>
+    {
+        var (revenue, invoicesPaidCount) = revenueByAffiliate.TryGetValue(a.Id, out var r) ? r : (0m, 0);
+        return new
+        {
+            businessEmail = a.ContactEmail,
+            businessName = a.Name,
+            slug = a.Slug,
+            currency = string.IsNullOrWhiteSpace(a.Currency) ? "USD" : a.Currency.ToUpperInvariant(),
+            revenueThisWeek = revenue,
+            invoicesPaidCount,
+            proposalsSentCount = proposalsSentByAffiliate.GetValueOrDefault(a.Id, 0),
+            proposalsAcceptedCount = proposalsAcceptedByAffiliate.GetValueOrDefault(a.Id, 0),
+            newCustomersCount = newCustomersByAffiliate.GetValueOrDefault(a.Id, 0),
+        };
+    }).ToList();
+
+    return Results.Ok(result);
+});
+
 // ============ TIME BLOCK ENDPOINTS (Agenda — bloqueo de horario, task #192) ============
 app.MapGet("/api/affiliates/{affiliateId:guid}/time-blocks", async (HttpContext ctx, ITimeBlockService timeBlockService, Guid affiliateId, DateTime? from = null, DateTime? to = null) =>
 {

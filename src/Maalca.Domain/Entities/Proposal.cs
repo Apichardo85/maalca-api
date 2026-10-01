@@ -49,6 +49,12 @@ public class Proposal : AuditableEntity
     public string? AcceptedIp { get; set; }
     public string? AcceptedUserAgent { get; set; }
 
+    // Recordatorio de propuesta sin firmar (backlog documentos/correos, 2026-09-29) — mismo
+    // patrón que Appointment.ReminderSentAt: nulo hasta que el barrido de
+    // /api/internal/proposals/due-reminders manda el correo, así el próximo barrido no repite.
+    // Una sola vez por propuesta, no un recordatorio recurrente.
+    public DateTime? ReminderSentAt { get; set; }
+
     public Affiliate? Affiliate { get; set; }
     public Customer? Customer { get; set; }
 }
