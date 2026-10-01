@@ -17,7 +17,18 @@ public class CanalService : ICanalService
 
     private static readonly HashSet<CanalTipo> EnlaceTipos = new()
     {
-        CanalTipo.Facebook, CanalTipo.Instagram, CanalTipo.TikTok
+        CanalTipo.Facebook, CanalTipo.Instagram, CanalTipo.TikTok,
+        CanalTipo.DoorDash, CanalTipo.UberEats, CanalTipo.Grubhub
+    };
+
+    // Dominios aceptados por proveedor de delivery. El enlace se guarda y se pinta como href en la
+    // página pública, así que solo se admite https hacia el dominio real del proveedor (o su
+    // acortador oficial) — nunca un esquema arbitrario ni un host ajeno.
+    private static readonly Dictionary<CanalTipo, (string Nombre, string[] Hosts)> DeliveryProviders = new()
+    {
+        [CanalTipo.DoorDash] = ("DoorDash", new[] { "doordash.com", "drd.sh" }),
+        [CanalTipo.UberEats] = ("Uber Eats", new[] { "ubereats.com", "ubr.to" }),
+        [CanalTipo.Grubhub]  = ("Grubhub", new[] { "grubhub.com" }),
     };
 
     private static readonly Regex EmailRegex = new(@"^[^@\s]+@[^@\s]+\.[^@\s]+$", RegexOptions.Compiled);
@@ -60,7 +71,7 @@ public class CanalService : ICanalService
 
         if (!Enum.TryParse<CanalTipo>(request.Tipo, ignoreCase: true, out var tipo) ||
             (!ManualTipos.Contains(tipo) && !EnlaceTipos.Contains(tipo)))
-            throw new ArgumentException($"Unsupported Tipo: {request.Tipo}. Only WhatsApp, Email, Telefono, Facebook, Instagram, TikTok are supported in this phase.");
+            throw new ArgumentException($"Unsupported Tipo: {request.Tipo}. Only WhatsApp, Email, Telefono, Facebook, Instagram, TikTok, DoorDash, UberEats, Grubhub are supported in this phase.");
 
         if (!Enum.TryParse<CanalMetodo>(request.Metodo, ignoreCase: true, out var metodo))
             throw new ArgumentException($"Unsupported Metodo: {request.Metodo}.");
@@ -135,6 +146,7 @@ public class CanalService : ICanalService
         CanalTipo.Facebook => BuildFacebookLink(valorCrudo),
         CanalTipo.Instagram => BuildInstagramLink(valorCrudo),
         CanalTipo.TikTok => BuildTikTokLink(valorCrudo),
+        CanalTipo.DoorDash or CanalTipo.UberEats or CanalTipo.Grubhub => BuildDeliveryLink(tipo, valorCrudo),
         _ => throw new ArgumentException($"Cannot generate link for Tipo {tipo} in this phase.")
     };
 
@@ -184,6 +196,26 @@ public class CanalService : ICanalService
         if (!match.Success)
             throw new ArgumentException("Ese no parece un link de TikTok válido.");
         return $"https://tiktok.com/@{match.Groups[1].Value}";
+    }
+
+    private static string BuildDeliveryLink(CanalTipo tipo, string raw)
+    {
+        var (nombre, hosts) = DeliveryProviders[tipo];
+        var invalid = new ArgumentException($"Ese no parece un link de {nombre} válido.");
+
+        var trimmed = raw.Trim();
+        if (!trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+            !trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            trimmed = "https://" + trimmed;
+
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri)) throw invalid;
+        if (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp) throw invalid;
+
+        var host = uri.Host.ToLowerInvariant();
+        if (!hosts.Any(h => host == h || host.EndsWith("." + h))) throw invalid;
+
+        // Siempre se normaliza a https, sin credenciales ni puerto.
+        return $"https://{host}{uri.PathAndQuery}";
     }
 
     private static CanalDto Map(Canal c) => new(
