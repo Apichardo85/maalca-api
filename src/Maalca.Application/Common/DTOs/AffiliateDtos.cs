@@ -81,7 +81,10 @@ public record UpdateAffiliateContentRequest(
     CommunityImpactDto? CommunityImpact = null,
     // Horarios de los momentos de comida (clave = breakfast/lunch/dinner/late_night). Reemplazo
     // total del objeto; null = no se toca; {} = borrar y volver a los cortes por defecto.
-    Dictionary<string, MealPeriodRangeDto>? MealPeriodHours = null
+    Dictionary<string, MealPeriodRangeDto>? MealPeriodHours = null,
+    // Traducción de los nombres de categoría (clave = nombre guardado). Reemplazo total;
+    // null = no se toca; {} = borrar todas.
+    Dictionary<string, CategoryTranslationDto>? CategoryTranslations = null
     // Causas ya NO vive acá (backlog 2026-09-25) -- tiene su propio CRUD en
     // /api/affiliates/{id}/causas (ver ICausaService), igual que Activities. Se sacó del
     // reemplazo-total-del-array porque ya tenía datos reales en producción y necesitaba
@@ -95,8 +98,12 @@ public record AffiliateContentDto(
     IReadOnlyDictionary<string, bool> SectionVisibility,
     IReadOnlyList<string> GalleryImages,
     CommunityImpactDto? CommunityImpact,
-    IReadOnlyDictionary<string, MealPeriodRangeDto>? MealPeriodHours = null
+    IReadOnlyDictionary<string, MealPeriodRangeDto>? MealPeriodHours = null,
+    IReadOnlyDictionary<string, CategoryTranslationDto>? CategoryTranslations = null
 );
+
+/// <summary>Nombre de una categoría del catálogo en cada idioma (ambos opcionales).</summary>
+public record CategoryTranslationDto(string? Es, string? En);
 
 /// <summary>Rango "HH:mm" 24h de un momento de comida. end &lt; start = cruza medianoche.</summary>
 public record MealPeriodRangeDto(string Start, string End);

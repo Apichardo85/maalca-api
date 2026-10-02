@@ -202,6 +202,9 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<string>("LogoUrl")
                         .HasColumnType("text");
 
+                    b.Property<string>("CategoryTranslations")
+                        .HasColumnType("text");
+
                     b.Property<string>("MealPeriodHours")
                         .HasColumnType("text");
 

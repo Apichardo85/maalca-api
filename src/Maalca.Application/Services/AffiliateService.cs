@@ -203,6 +203,26 @@ public class AffiliateService : IAffiliateService
             affiliate.MealPeriodHours = clean.Count == 0 ? null : JsonObjectField.Serialize(clean);
         }
 
+        if (request.CategoryTranslations != null)
+        {
+            if (request.CategoryTranslations.Count > 60)
+                throw new ArgumentException("CategoryTranslations: máximo 60 categorías.");
+            var cleanCats = new Dictionary<string, CategoryTranslationDto>();
+            foreach (var (key, tr) in request.CategoryTranslations)
+            {
+                var k = (key ?? "").Trim();
+                if (k.Length == 0) continue;
+                if (k.Length > 80) throw new ArgumentException("CategoryTranslations: el nombre de la categoría es demasiado largo.");
+                var es = string.IsNullOrWhiteSpace(tr?.Es) ? null : tr!.Es!.Trim();
+                var en = string.IsNullOrWhiteSpace(tr?.En) ? null : tr!.En!.Trim();
+                if ((es?.Length ?? 0) > 80 || (en?.Length ?? 0) > 80)
+                    throw new ArgumentException("CategoryTranslations: la traducción es demasiado larga.");
+                if (es is null && en is null) continue; // sin traducción = no se guarda
+                cleanCats[k] = new CategoryTranslationDto(es, en);
+            }
+            affiliate.CategoryTranslations = cleanCats.Count == 0 ? null : JsonObjectField.Serialize(cleanCats);
+        }
+
         // Causas ya no se valida/guarda acá -- ver CausaService (backlog 2026-09-25).
 
         if (request.CommunityImpact != null)
@@ -226,6 +246,7 @@ public class AffiliateService : IAffiliateService
             JsonDictField.Parse(affiliate.SectionVisibility),
             JsonArrayField.Parse<string>(affiliate.GalleryImages),
             JsonObjectField.Parse<CommunityImpactDto>(affiliate.CommunityImpact),
-            JsonObjectField.Parse<Dictionary<string, MealPeriodRangeDto>>(affiliate.MealPeriodHours));
+            JsonObjectField.Parse<Dictionary<string, MealPeriodRangeDto>>(affiliate.MealPeriodHours),
+            JsonObjectField.Parse<Dictionary<string, CategoryTranslationDto>>(affiliate.CategoryTranslations));
     }
 }

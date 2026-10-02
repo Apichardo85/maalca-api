@@ -57,6 +57,12 @@ public class Affiliate : BaseEntity
     // Es la fuente de verdad de "qué momento de comida es ahora" en la página pública.
     public string? MealPeriodHours { get; set; }
 
+    // Traducciones de los nombres de categoría del catálogo (las categorías son texto libre en
+    // Product.Category). JSON objeto: { "Combo del día": {"es":"Combo del día","en":"Daily combo"} }.
+    // Clave = el nombre tal como está guardado en los productos; es/en son opcionales. Si falta
+    // el idioma pedido, la web muestra el nombre guardado.
+    public string? CategoryTranslations { get; set; }
+
     // Galería de fotos de la página pública — solo fotos, sin texto/caption por diseño.
     // JSON string: array de URLs (string), máximo 12. Parseado con JsonArrayField<string>.
     public string? GalleryImages { get; set; }

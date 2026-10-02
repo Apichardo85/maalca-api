@@ -201,7 +201,8 @@ public class PublicCatalogService : IPublicCatalogService
             JsonObjectField.Parse<CommunityImpactDto>(a.CommunityImpact),
             a.SecondaryColor,
             a.AccentColor,
-            JsonObjectField.Parse<Dictionary<string, MealPeriodRangeDto>>(a.MealPeriodHours));
+            JsonObjectField.Parse<Dictionary<string, MealPeriodRangeDto>>(a.MealPeriodHours),
+            JsonObjectField.Parse<Dictionary<string, CategoryTranslationDto>>(a.CategoryTranslations));
     }
 
     // Single source of truth for what each plan unlocks — flip a value here to change it

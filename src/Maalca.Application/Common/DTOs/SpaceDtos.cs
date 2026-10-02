@@ -37,7 +37,8 @@ public record BusinessDto(
     string? ZoomLink = null,
     string? SecondaryColor = null,
     string? AccentColor = null,
-    IReadOnlyDictionary<string, MealPeriodRangeDto>? MealPeriodHours = null
+    IReadOnlyDictionary<string, MealPeriodRangeDto>? MealPeriodHours = null,
+    IReadOnlyDictionary<string, CategoryTranslationDto>? CategoryTranslations = null
 );
 
 public record ProcessStepDto(string Title, string Description);
