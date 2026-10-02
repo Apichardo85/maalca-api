@@ -50,6 +50,7 @@ public class AppDbContext : DbContext
     public DbSet<Activity> Activities => Set<Activity>();
     public DbSet<Causa> Causas => Set<Causa>();
     public DbSet<OwnerNotification> OwnerNotifications => Set<OwnerNotification>();
+    public DbSet<CommunitySignup> CommunitySignups => Set<CommunitySignup>();
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
     public DbSet<Donation> Donations => Set<Donation>();
     public DbSet<CommunityProgram> CommunityPrograms => Set<CommunityProgram>();
@@ -199,6 +200,26 @@ public class AppDbContext : DbContext
                   .HasForeignKey(e => e.AffiliateId)
                   .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.AffiliateId, e.SortOrder });
+        });
+
+        // Inscripciones públicas de Comunidad (voluntarios y eventos) -- ver CommunitySignup.cs.
+        modelBuilder.Entity<CommunitySignup>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Kind).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.TargetTitle).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Phone).HasMaxLength(30);
+            entity.Property(e => e.Email).HasMaxLength(200);
+            entity.Property(e => e.Notes).HasMaxLength(500);
+            entity.Property(e => e.Language).IsRequired().HasMaxLength(5);
+            entity.Property(e => e.Status).IsRequired().HasMaxLength(20);
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.AffiliateId, e.Status, e.CreatedAt });
+            entity.HasIndex(e => e.ActivityId);
         });
 
         // Avisos para el dueño (badges/campana/push) y suscripciones de Web Push -- ver OwnerNotification.cs.

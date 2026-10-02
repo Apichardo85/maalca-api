@@ -31,6 +31,9 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<Guid>("AffiliateId")
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("Capacity")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -835,6 +838,82 @@ namespace Maalca.Infrastructure.Migrations
                     b.HasIndex("AffiliateId", "SortOrder");
 
                     b.ToTable("CommunityPrograms");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.CommunitySignup", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ActivityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AffiliateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CausaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Language")
+                        .IsRequired()
+                        .HasMaxLength(5)
+                        .HasColumnType("character varying(5)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("PartySize")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("TargetTitle")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActivityId");
+
+                    b.HasIndex("AffiliateId", "Status", "CreatedAt");
+
+                    b.ToTable("CommunitySignups");
                 });
 
             modelBuilder.Entity("Maalca.Domain.Entities.Customer", b =>
@@ -2709,6 +2788,17 @@ namespace Maalca.Infrastructure.Migrations
                 });
 
             modelBuilder.Entity("Maalca.Domain.Entities.CommunityProgram", b =>
+                {
+                    b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
+                        .WithMany()
+                        .HasForeignKey("AffiliateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Affiliate");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.CommunitySignup", b =>
                 {
                     b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
                         .WithMany()

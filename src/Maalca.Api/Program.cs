@@ -87,6 +87,8 @@ builder.Services.AddScoped<IAffiliateBrandResolver, AffiliateBrandResolver>();
 builder.Services.AddScoped<IAppointmentNotificationService, AppointmentNotificationService>();
 builder.Services.AddScoped<IInvoiceNotificationService, InvoiceNotificationService>();
 builder.Services.AddScoped<IReservationNotificationService, ReservationNotificationService>();
+builder.Services.AddScoped<ICommunitySignupNotificationService, CommunitySignupNotificationService>();
+builder.Services.AddScoped<ICommunitySignupService, CommunitySignupService>();
 builder.Services.AddScoped<IProposalNotificationService, ProposalNotificationService>();
 builder.Services.AddScoped<Maalca.Application.Common.Interfaces.IOrderRealtimeNotifier, Maalca.Api.Hubs.SignalROrderRealtimeNotifier>();
 builder.Services.AddScoped<IOrderService, OrderService>();
@@ -927,6 +929,9 @@ app.MapGet("/api/internal/appointments/due-reminders", async (HttpContext ctx, A
             // Marca del negocio para que el recordatorio salga con su logo/color (como la confirmación).
             logoUrl = string.IsNullOrWhiteSpace(x.appt.Affiliate?.LogoUrl) ? x.appt.Affiliate?.Logo : x.appt.Affiliate?.LogoUrl,
             brandColor = x.appt.Affiliate?.PrimaryColor,
+            // Cita virtual: el recordatorio lleva el boton para entrar (antes solo la confirmacion).
+            isVirtual = x.appt.IsVirtual,
+            zoomLink = x.appt.IsVirtual ? x.appt.Affiliate?.ZoomLink : null,
         })
         .ToList();
 
@@ -1417,6 +1422,50 @@ app.MapDelete("/api/affiliates/{affiliateId:guid}/activities/{id:guid}", async (
     if (ctx.User.FindFirst("role")?.Value == "Staff")
         return Results.Forbid();
     var result = await activityService.DeleteActivityAsync(affiliateId, id);
+    if (!result)
+        return Results.NotFound();
+    return Results.NoContent();
+}).RequireAuthorization();
+
+// ============ COMMUNITY SIGNUPS (inscripciones de voluntarios y eventos -- ver CommunitySignup.cs) ============
+// Lectura y cambio de estado: cualquier miembro del negocio (incluido Staff, es trabajo del dia a
+// dia, igual que las reservas). Borrar: solo no-Staff.
+app.MapGet("/api/affiliates/{affiliateId:guid}/signups", async (ICommunitySignupService signupService, Guid affiliateId, HttpContext ctx, string? kind = null, string? status = null) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    var result = await signupService.ListAsync(affiliateId, kind, status);
+    return Results.Ok(result);
+}).RequireAuthorization();
+
+app.MapPatch("/api/affiliates/{affiliateId:guid}/signups/{id:guid}", async (ICommunitySignupService signupService, Guid affiliateId, Guid id, string status, HttpContext ctx) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    try
+    {
+        var result = await signupService.UpdateStatusAsync(affiliateId, id, status);
+        if (result == null)
+            return Results.NotFound();
+        return Results.Ok(result);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.Conflict(new { error = new { code = "NO_CAPACITY", message = ex.Message } });
+    }
+}).RequireAuthorization();
+
+app.MapDelete("/api/affiliates/{affiliateId:guid}/signups/{id:guid}", async (ICommunitySignupService signupService, Guid affiliateId, Guid id, HttpContext ctx) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff")
+        return Results.Forbid();
+    var result = await signupService.DeleteAsync(affiliateId, id);
     if (!result)
         return Results.NotFound();
     return Results.NoContent();
@@ -3492,7 +3541,7 @@ app.MapGet("/api/public/affiliates/{slug}/community-metrics", async (ICommunityS
 // Solo lo que ya paso (StartsAt en el pasado) o esta inactivo queda fuera; devuelve [] (no 404)
 // para un afiliado que existe pero todavia no tiene actividades, a diferencia del 404 de arriba
 // que es "este slug no existe".
-app.MapGet("/api/public/affiliates/{slug}/activities", async (AppDbContext db, IActivityService activityService, string slug, HttpResponse response) =>
+app.MapGet("/api/public/affiliates/{slug}/activities", async (AppDbContext db, IActivityService activityService, ICommunitySignupService signupService, string slug, HttpResponse response) =>
 {
     var affiliate = await db.Affiliates
         .Where(a => a.Slug == slug && a.Published)
@@ -3502,8 +3551,26 @@ app.MapGet("/api/public/affiliates/{slug}/activities", async (AppDbContext db, I
         return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
 
     var result = await activityService.GetActivitiesAsync(affiliate.Id, upcomingOnly: true);
+    // Cupo: spotsLeft = Capacity - inscritos (no cancelados); null = sin limite. La vitrina lo usa
+    // para mostrar "quedan N lugares" / "cupo lleno" y ofrecer "Anotarme".
+    var taken = await signupService.GetTakenByActivityAsync(result.Select(a => a.Id));
+    var payload = result.Select(a => new
+    {
+        a.Id,
+        a.Title,
+        a.TitleEn,
+        a.Description,
+        a.DescriptionEn,
+        a.Location,
+        a.StartsAt,
+        a.EndsAt,
+        a.IsActive,
+        a.ImageUrl,
+        a.Capacity,
+        SpotsLeft = a.Capacity.HasValue ? (int?)Math.Max(0, a.Capacity.Value - taken.GetValueOrDefault(a.Id)) : null,
+    });
     response.Headers.CacheControl = "public, max-age=60";
-    return Results.Ok(result);
+    return Results.Ok(payload);
 })
 .AllowAnonymous();
 
@@ -3605,6 +3672,26 @@ app.MapPost("/api/public/affiliates/{slug}/queue", async (
     try
     {
         var result = await bookingService.CreatePublicQueueEntryAsync(slug, request);
+        return Results.Ok(result);
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+})
+.AllowAnonymous();
+
+// Vitrina Comunidad -- inscripcion publica de voluntarios (causas "time") y a eventos (con cupo).
+app.MapPost("/api/public/affiliates/{slug}/signups", async (
+    ICommunitySignupService signupService, string slug, CreatePublicSignupRequest request) =>
+{
+    try
+    {
+        var result = await signupService.CreatePublicAsync(slug, request);
         return Results.Ok(result);
     }
     catch (KeyNotFoundException)

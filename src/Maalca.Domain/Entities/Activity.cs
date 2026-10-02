@@ -33,5 +33,9 @@ public class Activity : AuditableEntity
     // ambos casos (ver Community.tsx), no es obligatoria.
     public string? ImageUrl { get; set; }
 
+    // Cupo del evento (personas). Null = sin límite. Las inscripciones públicas (CommunitySignup)
+    // lo respetan: suman PartySize de las no canceladas y rechazan lo que exceda.
+    public int? Capacity { get; set; }
+
     public Affiliate? Affiliate { get; set; }
 }

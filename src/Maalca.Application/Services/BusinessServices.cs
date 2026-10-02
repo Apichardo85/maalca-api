@@ -537,6 +537,7 @@ public class ActivityService : IActivityService
         existing.StartsAt = activity.StartsAt;
         existing.EndsAt = activity.EndsAt;
         existing.IsActive = activity.IsActive;
+        existing.Capacity = activity.Capacity;
         existing.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
         return existing;
