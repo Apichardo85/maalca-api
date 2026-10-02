@@ -1,0 +1,76 @@
+using System.Text;
+using System.Text.Json;
+using Maalca.Application.Common.Interfaces;
+using Maalca.Domain.Entities;
+using Microsoft.Extensions.Logging;
+
+namespace Maalca.Application.Services;
+
+/// <summary>
+/// Ver IReservationNotificationService. Falla en silencio (log + return), mismo criterio que
+/// InvoiceNotificationService: el email es best-effort, la reserva ya quedó guardada.
+/// </summary>
+public class ReservationNotificationService : IReservationNotificationService
+{
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ILogger<ReservationNotificationService> _logger;
+
+    public ReservationNotificationService(IHttpClientFactory httpClientFactory, ILogger<ReservationNotificationService> logger)
+    {
+        _httpClientFactory = httpClientFactory;
+        _logger = logger;
+    }
+
+    public async Task NotifyReservationRequestedAsync(TableReservation reservation, Affiliate affiliate)
+    {
+        // Sin ningún destinatario (ni correo del negocio ni del comensal) no hay nada que mandar.
+        if (string.IsNullOrWhiteSpace(affiliate.ContactEmail) && string.IsNullOrWhiteSpace(reservation.CustomerEmail))
+            return;
+
+        var baseUrl = Environment.GetEnvironmentVariable("MAALCA_WEB_URL");
+        var secret = Environment.GetEnvironmentVariable("INTERNAL_NOTIFICATIONS_SECRET");
+        if (string.IsNullOrWhiteSpace(baseUrl) || string.IsNullOrWhiteSpace(secret))
+        {
+            _logger.LogInformation("[ReservationNotification] Skipped — MAALCA_WEB_URL/INTERNAL_NOTIFICATIONS_SECRET not set");
+            return;
+        }
+
+        try
+        {
+            var payload = new
+            {
+                businessName = affiliate.Name,
+                businessEmail = affiliate.ContactEmail,
+                slug = affiliate.Slug,
+                customerName = reservation.CustomerName,
+                customerPhone = reservation.CustomerPhone,
+                customerEmail = reservation.CustomerEmail,
+                date = reservation.Date.ToString("yyyy-MM-dd"),
+                time = reservation.Time,
+                partySize = reservation.PartySize,
+                notes = reservation.Notes,
+            };
+
+            var client = _httpClientFactory.CreateClient();
+            client.Timeout = TimeSpan.FromSeconds(10);
+
+            using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl.TrimEnd('/')}/api/internal/notifications/reservation-requested")
+            {
+                Content = content,
+            };
+            request.Headers.Add("X-Internal-Secret", secret);
+
+            var response = await client.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                _logger.LogWarning("[ReservationNotification] Failed ({Status}): {Body}", response.StatusCode, body);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[ReservationNotification] Threw");
+        }
+    }
+}

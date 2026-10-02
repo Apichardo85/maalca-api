@@ -171,9 +171,33 @@ public class OrderService : IOrderService
         var products = await _db.Products
             .Where(p => p.AffiliateId == affiliateId && distinctIds.Contains(p.Id)
                         && p.IsPubliclyVisible && p.Status == "Active")
-            .Select(p => new { p.Id, p.Name, p.Price })
+            .Select(p => new { p.Id, p.Name, p.Price, p.WeekDays })
             .ToListAsync();
         foreach (var p in products) catalog[p.Id] = (p.Name, p.Price);
+
+        // Disponibilidad por día de la semana (Product.WeekDays, tokens monday..sunday): un plato
+        // del sábado no se puede pedir un martes aunque alguien tenga la página abierta desde
+        // el sábado. Se evalúa en la zona horaria del NEGOCIO. Sin WeekDays = todos los días.
+        // Periods (desayuno/almuerzo/cena) NO se hace cumplir acá a propósito: el rango por
+        // defecto de cada período no coincide con el horario real de cada negocio.
+        var restricted = products.Where(p => !string.IsNullOrWhiteSpace(p.WeekDays)).ToList();
+        if (restricted.Count > 0)
+        {
+            var ianaTz = await _db.Affiliates.Where(a => a.Id == affiliateId).Select(a => a.Timezone).FirstOrDefaultAsync();
+            var tz = TimeZoneInfo.Utc;
+            if (!string.IsNullOrWhiteSpace(ianaTz))
+            {
+                try { tz = TimeZoneInfo.FindSystemTimeZoneById(ianaTz); }
+                catch (Exception) { /* zona inválida: cae a UTC */ }
+            }
+            var today = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz).DayOfWeek.ToString().ToLowerInvariant();
+            foreach (var p in restricted)
+            {
+                var days = TokenList.Parse(p.WeekDays);
+                if (!days.Contains(today, StringComparer.OrdinalIgnoreCase))
+                    throw new ArgumentException($"\"{p.Name}\" no está disponible hoy.");
+            }
+        }
 
         var services = await _db.Services
             .Where(s => s.AffiliateId == affiliateId && distinctIds.Contains(s.Id)

@@ -1,3 +1,4 @@
+using Maalca.Application.Common;
 using Maalca.Application.Common.DTOs;
 using Maalca.Application.Common.Interfaces;
 using Maalca.Domain.Entities;
@@ -22,9 +23,11 @@ public class PublicBookingService : IPublicBookingService
     private readonly IQueueService _queueService;
     private readonly ICustomerService _customerService;
     private readonly IAppointmentNotificationService _appointmentNotifications;
+    private readonly IReservationNotificationService _reservationNotifications;
 
-    public PublicBookingService(AppDbContext db, IQueueService queueService, ICustomerService customerService, IAppointmentNotificationService appointmentNotifications)
+    public PublicBookingService(AppDbContext db, IQueueService queueService, ICustomerService customerService, IAppointmentNotificationService appointmentNotifications, IReservationNotificationService reservationNotifications)
     {
+        _reservationNotifications = reservationNotifications;
         _db = db;
         _queueService = queueService;
         _customerService = customerService;
@@ -275,6 +278,36 @@ public class PublicBookingService : IPublicBookingService
         return new PublicAppointmentResultDto(appointment.Id, appointment.Date, appointment.Time, appointment.Status, appointment.Token, appointment.IsVirtual, isVirtual ? affiliate.ZoomLink : null);
     }
 
+    private const int MaxPartySize = 20;
+    private const int MaxDaysAhead = 30;
+
+    // Mismos tokens (español, sin acento) que DiaSemanaTokens / Affiliate.Horario.
+    private static string DiaTokenFor(DayOfWeek d) => d switch
+    {
+        DayOfWeek.Monday => "lunes",
+        DayOfWeek.Tuesday => "martes",
+        DayOfWeek.Wednesday => "miercoles",
+        DayOfWeek.Thursday => "jueves",
+        DayOfWeek.Friday => "viernes",
+        DayOfWeek.Saturday => "sabado",
+        _ => "domingo",
+    };
+
+    // "HH:mm" -> minutos desde medianoche.
+    private readonly record struct TimeOfDay(int Minutes)
+    {
+        public static bool TryParse(string? value, out TimeOfDay result)
+        {
+            result = default;
+            if (string.IsNullOrWhiteSpace(value)) return false;
+            var parts = value.Split(':');
+            if (parts.Length != 2 || !int.TryParse(parts[0], out var h) || !int.TryParse(parts[1], out var m)) return false;
+            if (h is < 0 or > 23 || m is < 0 or > 59) return false;
+            result = new TimeOfDay(h * 60 + m);
+            return true;
+        }
+    }
+
     public async Task<PublicTableReservationResultDto> CreatePublicTableReservationAsync(string affiliateSlug, CreatePublicTableReservationRequest request)
     {
         var affiliate = await _db.Affiliates
@@ -282,16 +315,71 @@ public class PublicBookingService : IPublicBookingService
         if (affiliate is null)
             throw new KeyNotFoundException();
 
+        // Reservas solo si el módulo está activo para este afiliado (mismo criterio que el
+        // dashboard: ModulosActivos explícito manda, null cae al default por tipo de negocio).
+        var activeModules = ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString());
+        if (!activeModules.Contains("reservations", StringComparer.OrdinalIgnoreCase))
+            throw new ArgumentException("Este negocio no acepta reservas en línea.");
+
         if (string.IsNullOrWhiteSpace(request.CustomerName))
             throw new ArgumentException("El nombre es requerido.");
+        if (request.CustomerName.Trim().Length > 100)
+            throw new ArgumentException("El nombre es demasiado largo.");
         if (string.IsNullOrWhiteSpace(request.CustomerPhone))
             throw new ArgumentException("El teléfono es requerido.");
+        if (request.CustomerPhone.Trim().Length > 30)
+            throw new ArgumentException("El teléfono no es válido.");
+        if (request.CustomerEmail?.Length > 200 || request.Notes?.Length > 500)
+            throw new ArgumentException("Email o notas demasiado largos.");
         if (string.IsNullOrWhiteSpace(request.Time))
             throw new ArgumentException("La hora es requerida.");
-        if (request.Date.Date < DateTime.UtcNow.Date)
-            throw new ArgumentException("La fecha no puede ser en el pasado.");
+        if (!TimeOfDay.TryParse(request.Time, out var requestedTime))
+            throw new ArgumentException("La hora debe tener formato HH:mm.");
         if (request.PartySize < 1)
             throw new ArgumentException("El número de personas debe ser al menos 1.");
+        if (request.PartySize > MaxPartySize)
+            throw new ArgumentException($"Para grupos de más de {MaxPartySize} personas, contacta directamente al restaurante.");
+
+        // "Hoy" y "ahora" se miden en la zona horaria del NEGOCIO, no en UTC: a las 9pm de Nueva
+        // York ya es "mañana" en UTC y la reserva de hoy se rechazaba como "en el pasado".
+        var tz = TimeZoneInfo.Utc;
+        if (!string.IsNullOrWhiteSpace(affiliate.Timezone))
+        {
+            try { tz = TimeZoneInfo.FindSystemTimeZoneById(affiliate.Timezone); }
+            catch (Exception) { /* zona inválida: cae a UTC, mismo criterio que CommunityService */ }
+        }
+        var localNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+        var requestedDate = request.Date.Date;
+        if (requestedDate < localNow.Date)
+            throw new ArgumentException("La fecha no puede ser en el pasado.");
+        if (requestedDate > localNow.Date.AddDays(MaxDaysAhead))
+            throw new ArgumentException($"Solo se puede reservar con hasta {MaxDaysAhead} días de anticipación.");
+        if (requestedDate == localNow.Date && requestedTime.Minutes <= localNow.Hour * 60 + localNow.Minute)
+            throw new ArgumentException("Esa hora ya pasó. Elige una hora posterior.");
+
+        // Horario configurado en Identidad. Sin entrada para ese día = no se restringe (negocio
+        // que nunca lo configuró); con entrada, se respeta cerrado y la ventana abre–cierra.
+        var diaToken = DiaTokenFor(requestedDate.DayOfWeek);
+        var hoy = JsonArrayField.Parse<HorarioEntryDto>(affiliate.Horario)
+            .FirstOrDefault(h => string.Equals(h.Dia, diaToken, StringComparison.OrdinalIgnoreCase));
+        if (hoy is not null)
+        {
+            if (hoy.Cerrado)
+                throw new ArgumentException("El restaurante está cerrado ese día. Elige otra fecha.");
+            if (TimeOfDay.TryParse(hoy.Abre, out var abre) && TimeOfDay.TryParse(hoy.Cierra, out var cierra)
+                && (requestedTime.Minutes < abre.Minutes || requestedTime.Minutes >= cierra.Minutes))
+                throw new ArgumentException($"Ese día atendemos de {hoy.Abre} a {hoy.Cierra}.");
+        }
+
+        // Doble envío (doble click, reintento): mismo teléfono + misma fecha/hora ya activa.
+        var phone = request.CustomerPhone.Trim();
+        var requestedDateUtc = DateTime.SpecifyKind(requestedDate, DateTimeKind.Utc);
+        var duplicate = await _db.TableReservations.AnyAsync(r =>
+            r.AffiliateId == affiliate.Id && r.CustomerPhone == phone
+            && r.Date == requestedDateUtc && r.Time == request.Time
+            && r.Status != "Cancelled" && r.Status != "NoShow");
+        if (duplicate)
+            throw new ArgumentException("Ya tienes una reserva para esa fecha y hora.");
 
         // Tarea #244 — mismo dedup por teléfono que Appointment, para que un comensal recurrente
         // acumule sus reservas en el mismo Customer que sus citas/visitas a la fila.
@@ -301,12 +389,12 @@ public class PublicBookingService : IPublicBookingService
         {
             AffiliateId = affiliate.Id,
             CustomerId = reservationCustomer?.Id,
-            CustomerName = request.CustomerName,
-            CustomerPhone = request.CustomerPhone,
-            CustomerEmail = request.CustomerEmail,
+            CustomerName = request.CustomerName.Trim(),
+            CustomerPhone = phone,
+            CustomerEmail = string.IsNullOrWhiteSpace(request.CustomerEmail) ? null : request.CustomerEmail.Trim(),
             // Misma razón que en CreatePublicAppointmentAsync — fecha "bare" deserializa
             // Kind=Unspecified, la columna es timestamptz.
-            Date = DateTime.SpecifyKind(request.Date.Date, DateTimeKind.Utc),
+            Date = requestedDateUtc,
             Time = request.Time,
             PartySize = request.PartySize,
             Status = "Requested",
@@ -314,6 +402,10 @@ public class PublicBookingService : IPublicBookingService
         };
         _db.TableReservations.Add(reservation);
         await _db.SaveChangesAsync();
+
+        // Se espera (no fire-and-forget): ver nota en CreatePublicAppointmentAsync sobre el runtime
+        // de Railway. El servicio atrapa sus errores; nunca tumba la reserva ya guardada.
+        await _reservationNotifications.NotifyReservationRequestedAsync(reservation, affiliate);
 
         return new PublicTableReservationResultDto(reservation.Id, reservation.Date, reservation.Time, reservation.PartySize, reservation.Status);
     }
