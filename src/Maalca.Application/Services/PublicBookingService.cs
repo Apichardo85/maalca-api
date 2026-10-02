@@ -181,6 +181,8 @@ public class PublicBookingService : IPublicBookingService
             throw new ArgumentException("El nombre es requerido.");
         if (string.IsNullOrWhiteSpace(request.CustomerPhone))
             throw new ArgumentException("El teléfono es requerido.");
+        if (!Maalca.Application.Common.PhoneRules.IsValid(request.CustomerPhone))
+            throw new ArgumentException("El teléfono no es válido: escribe 10 dígitos.");
         if (string.IsNullOrWhiteSpace(request.Time))
             throw new ArgumentException("La hora es requerida.");
         if (request.Date.Date < DateTime.UtcNow.Date)
@@ -327,6 +329,8 @@ public class PublicBookingService : IPublicBookingService
             throw new ArgumentException("El nombre es demasiado largo.");
         if (string.IsNullOrWhiteSpace(request.CustomerPhone))
             throw new ArgumentException("El teléfono es requerido.");
+        if (!Maalca.Application.Common.PhoneRules.IsValid(request.CustomerPhone))
+            throw new ArgumentException("El teléfono no es válido: escribe 10 dígitos.");
         if (request.CustomerPhone.Trim().Length > 30)
             throw new ArgumentException("El teléfono no es válido.");
         if (request.CustomerEmail?.Length > 200 || request.Notes?.Length > 500)
