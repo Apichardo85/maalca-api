@@ -79,6 +79,7 @@ public class OrderService : IOrderService
         // (realtime) para que lo acepte; no entra a cocina hasta entonces.
         if (order.PaymentMethod == PayAtTableMethod)
         {
+            await _notifications.NotifyPayAtTableRequestedAsync(order);
             await _realtime.NotifyOrderUpdatedAsync(affiliate.Id, ToDto(order));
             return new CreateOrderResponseDto(order.Id, CheckoutUrl: null);
         }
@@ -411,6 +412,16 @@ public class OrderService : IOrderService
         if (order is null) return null;
         if (!Enum.TryParse<OrderStatus>(status, ignoreCase: true, out var parsed))
             throw new ArgumentException($"Invalid status '{status}'.");
+
+        // Aceptar / "Marcar pagado" desde el panel (Pending -> Paid) pasa por el mismo camino que el pago con
+        // Stripe: descuenta inventario, enlaza al cliente y avisa. Antes solo cambiaba el estado y el stock
+        // nunca se descontaba. PaymentMethod queda como PayAtTable (mesa) o Manual (cobro fuera de Stripe).
+        if (parsed == OrderStatus.Paid && order.Status == OrderStatus.Pending)
+        {
+            order.PaymentMethod ??= "Manual";
+            await MarkPaidAsync(order, null);
+            return ToDto(order);
+        }
 
         order.Status = parsed;
         order.UpdatedAt = DateTime.UtcNow;

@@ -51,6 +51,23 @@ public class OrderNotificationService : IOrderNotificationService
             "orders", order.Id);
     }
 
+    public Task NotifyPayAtTableRequestedAsync(Order order)
+    {
+        // Sin esto el personal solo se enteraba al aceptar el pedido (que es cuando pasa a Paid): un pedido
+        // de mesa por aceptar no avisaba justo cuando más urgente es.
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        var who = string.IsNullOrWhiteSpace(order.CustomerName) ? null : order.CustomerName.Trim();
+        var total = $"{order.Total.ToString("0.00", inv)} {order.Currency}";
+        var table = order.TableNumber;
+        var es = string.Join(" · ", new[] { who, total, string.IsNullOrWhiteSpace(table) ? null : $"Mesa {table}" }.Where(x => x is not null));
+        var en = string.Join(" · ", new[] { who, total, string.IsNullOrWhiteSpace(table) ? null : $"Table {table}" }.Where(x => x is not null));
+        return _owner.NotifyAsync(
+            order.AffiliateId, "order",
+            "Pedido de mesa por aceptar", es,
+            "Table order to accept", en,
+            "orders", order.Id);
+    }
+
     public Task NotifyOrderConfirmedAsync(Order order) => SendAsync(order, "confirmed");
 
     public Task NotifyOrderFulfilledAsync(Order order) => SendAsync(order, "fulfilled");
@@ -59,7 +76,8 @@ public class OrderNotificationService : IOrderNotificationService
     {
         // Aviso al dueño (badge + push): solo cuando entra un pedido (pagado / confirmado), no al cumplirlo.
         // Va ANTES de los early-returns del correo: el pedido avisa aunque el cliente no haya dado correo.
-        if (kind == "confirmed")
+        // Un pedido de mesa "pagar al mesero" ya avisó al llegar (NotifyPayAtTableRequestedAsync): al aceptarlo no se repite.
+        if (kind == "confirmed" && order.PaymentMethod != "PayAtTable")
             await NotifyOwnerAsync(order);
 
         if (string.IsNullOrWhiteSpace(order.CustomerEmail))

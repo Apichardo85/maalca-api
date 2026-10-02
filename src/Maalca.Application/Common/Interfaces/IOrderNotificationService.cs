@@ -15,4 +15,7 @@ public interface IOrderNotificationService
 
     /// <summary>Afiliado marcó el pedido como Fulfilled — dispara desde UpdateStatusAsync.</summary>
     Task NotifyOrderFulfilledAsync(Order order);
+
+    /// <summary>Pedido de mesa "pagar al mesero" recién creado (queda Pending): avisa al personal para que lo acepte.</summary>
+    Task NotifyPayAtTableRequestedAsync(Order order);
 }
