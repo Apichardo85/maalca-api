@@ -3353,7 +3353,8 @@ app.MapGet("/api/space/{slug}", async (
             JsonArrayField.Parse<HorarioEntryDto>(affiliate.Horario),
             affiliate.Timezone,
             trialDaysRemaining, trialEndsAt, affiliate.Currency, affiliate.ZoomLink,
-            affiliate.SecondaryColor, affiliate.AccentColor),
+            affiliate.SecondaryColor, affiliate.AccentColor,
+            JsonObjectField.Parse<Dictionary<string, MealPeriodRangeDto>>(affiliate.MealPeriodHours)),
         items, realCount,
         new ProgressDto(
             FirstProductAdded: completedKeys.Contains(MilestoneKeys.FirstProductAdded),

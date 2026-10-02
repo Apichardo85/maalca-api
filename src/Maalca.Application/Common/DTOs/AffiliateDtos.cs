@@ -78,7 +78,10 @@ public record UpdateAffiliateContentRequest(
     List<string>? GalleryImages = null,
     // Comunidad — reemplazo total del objeto. null = no se toca; un objeto con campos null
     // adentro SÍ actualiza (permite borrar un dato ya guardado, ej. quitar la meta del mes).
-    CommunityImpactDto? CommunityImpact = null
+    CommunityImpactDto? CommunityImpact = null,
+    // Horarios de los momentos de comida (clave = breakfast/lunch/dinner/late_night). Reemplazo
+    // total del objeto; null = no se toca; {} = borrar y volver a los cortes por defecto.
+    Dictionary<string, MealPeriodRangeDto>? MealPeriodHours = null
     // Causas ya NO vive acá (backlog 2026-09-25) -- tiene su propio CRUD en
     // /api/affiliates/{id}/causas (ver ICausaService), igual que Activities. Se sacó del
     // reemplazo-total-del-array porque ya tenía datos reales en producción y necesitaba
@@ -91,8 +94,12 @@ public record AffiliateContentDto(
     IReadOnlyList<HorarioEntryDto> Horario,
     IReadOnlyDictionary<string, bool> SectionVisibility,
     IReadOnlyList<string> GalleryImages,
-    CommunityImpactDto? CommunityImpact
+    CommunityImpactDto? CommunityImpact,
+    IReadOnlyDictionary<string, MealPeriodRangeDto>? MealPeriodHours = null
 );
+
+/// <summary>Rango "HH:mm" 24h de un momento de comida. end &lt; start = cruza medianoche.</summary>
+public record MealPeriodRangeDto(string Start, string End);
 
 // ── Comunidad — punto de entrega/meta (ver Affiliate.CommunityImpact). Causas tiene su
 // propia entidad ahora (Causa.cs) -- ver comentario junto a UpdateAffiliateContentRequest. ──

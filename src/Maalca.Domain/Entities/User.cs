@@ -51,6 +51,12 @@ public class Affiliate : BaseEntity
     public string? Faq { get; set; }
     public string? Horario { get; set; }
 
+    // Horarios de los momentos de comida del negocio (restaurantes). JSON objeto:
+    // { "breakfast": {"start":"10:00","end":"12:00"}, "lunch": {...}, ... } con claves de
+    // MealPeriodTokens (sin all_day). null o clave ausente = la web usa el corte por defecto.
+    // Es la fuente de verdad de "qué momento de comida es ahora" en la página pública.
+    public string? MealPeriodHours { get; set; }
+
     // Galería de fotos de la página pública — solo fotos, sin texto/caption por diseño.
     // JSON string: array de URLs (string), máximo 12. Parseado con JsonArrayField<string>.
     public string? GalleryImages { get; set; }

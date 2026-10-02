@@ -186,6 +186,23 @@ public class AffiliateService : IAffiliateService
             affiliate.GalleryImages = JsonArrayField.Serialize(request.GalleryImages);
         }
 
+        if (request.MealPeriodHours != null)
+        {
+            var clean = new Dictionary<string, MealPeriodRangeDto>(StringComparer.OrdinalIgnoreCase);
+            foreach (var (key, range) in request.MealPeriodHours)
+            {
+                var k = (key ?? "").Trim().ToLowerInvariant();
+                if (k == "all_day" || !MealPeriodTokens.Whitelist.Contains(k))
+                    throw new ArgumentException($"MealPeriodHours: '{key}' is not a valid meal period.");
+                if (range is null || !TimeFormat.IsMatch(range.Start ?? "") || !TimeFormat.IsMatch(range.End ?? ""))
+                    throw new ArgumentException($"MealPeriodHours: Start/End must be in HH:mm format for '{k}'.");
+                if (range.Start == range.End)
+                    throw new ArgumentException($"MealPeriodHours: '{k}' no puede empezar y terminar a la misma hora.");
+                clean[k] = new MealPeriodRangeDto(range.Start, range.End);
+            }
+            affiliate.MealPeriodHours = clean.Count == 0 ? null : JsonObjectField.Serialize(clean);
+        }
+
         // Causas ya no se valida/guarda acá -- ver CausaService (backlog 2026-09-25).
 
         if (request.CommunityImpact != null)
@@ -208,6 +225,7 @@ public class AffiliateService : IAffiliateService
             JsonArrayField.Parse<HorarioEntryDto>(affiliate.Horario),
             JsonDictField.Parse(affiliate.SectionVisibility),
             JsonArrayField.Parse<string>(affiliate.GalleryImages),
-            JsonObjectField.Parse<CommunityImpactDto>(affiliate.CommunityImpact));
+            JsonObjectField.Parse<CommunityImpactDto>(affiliate.CommunityImpact),
+            JsonObjectField.Parse<Dictionary<string, MealPeriodRangeDto>>(affiliate.MealPeriodHours));
     }
 }

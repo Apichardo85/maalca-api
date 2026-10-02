@@ -32,7 +32,8 @@ public record AffiliatePublicDto(
     CommunityImpactDto? CommunityImpact = null,
     // Paleta del negocio (null = la plantilla deriva los neutros del primario).
     string? SecondaryColor = null,
-    string? AccentColor = null
+    string? AccentColor = null,
+    IReadOnlyDictionary<string, MealPeriodRangeDto>? MealPeriodHours = null
     // Causas ya no viene acá -- tiene su propio endpoint público
     // /api/public/affiliates/{slug}/causas (backlog 2026-09-25, ver Causa.cs).
 );

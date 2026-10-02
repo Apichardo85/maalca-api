@@ -36,7 +36,8 @@ public record BusinessDto(
     string Currency = "USD",
     string? ZoomLink = null,
     string? SecondaryColor = null,
-    string? AccentColor = null
+    string? AccentColor = null,
+    IReadOnlyDictionary<string, MealPeriodRangeDto>? MealPeriodHours = null
 );
 
 public record ProcessStepDto(string Title, string Description);
