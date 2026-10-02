@@ -14,11 +14,13 @@ public class ProposalNotificationService : IProposalNotificationService
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<ProposalNotificationService> _logger;
+    private readonly IAffiliateBrandResolver _brand;
 
-    public ProposalNotificationService(IHttpClientFactory httpClientFactory, ILogger<ProposalNotificationService> logger)
+    public ProposalNotificationService(IHttpClientFactory httpClientFactory, ILogger<ProposalNotificationService> logger, IAffiliateBrandResolver brand)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
+        _brand = brand;
     }
 
     public async Task NotifyProposalSentAsync(Proposal proposal, string businessName, string proposalLink)
@@ -36,8 +38,11 @@ public class ProposalNotificationService : IProposalNotificationService
 
         try
         {
+            var brand = await _brand.GetAsync(proposal.AffiliateId);
             var payload = new
             {
+                logoUrl = brand.LogoUrl,
+                brandColor = brand.Color,
                 customerEmail = proposal.CustomerEmail,
                 customerName = proposal.CustomerName,
                 businessName,

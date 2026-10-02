@@ -17,11 +17,27 @@ public class AppointmentService : IAppointmentService
 {
     private readonly AppDbContext _context;
     private readonly ICustomerService _customerService;
+    private readonly IAppointmentNotificationService _notifications;
 
-    public AppointmentService(AppDbContext context, ICustomerService customerService)
+    public AppointmentService(AppDbContext context, ICustomerService customerService, IAppointmentNotificationService notifications)
     {
         _context = context;
         _customerService = customerService;
+        _notifications = notifications;
+    }
+
+    // Confirmar/cancelar desde el panel le avisa al cliente por correo (si tiene). Best-effort.
+    private async Task NotifyStatusChangeAsync(Guid appointmentId, string previousStatus)
+    {
+        var appt = await _context.Appointments.AsNoTracking()
+            .Include(a => a.Customer).Include(a => a.Service).Include(a => a.AssignedTo).Include(a => a.Affiliate)
+            .FirstOrDefaultAsync(a => a.Id == appointmentId);
+        if (appt == null || appt.Status == previousStatus || appt.Customer == null || appt.Affiliate == null) return;
+        var kind = appt.Status switch { "Confirmed" => "confirmed", "Cancelled" => "cancelled", _ => null };
+        if (kind == null || string.IsNullOrWhiteSpace(appt.Customer.Email)) return;
+        await _notifications.NotifyAppointmentStatusAsync(
+            appt, appt.Customer, appt.Affiliate.Name, appt.Affiliate.Slug ?? "", appt.Service?.Name ?? "",
+            appt.AssignedTo?.Name, kind, appt.IsVirtual ? appt.Affiliate.ZoomLink : null);
     }
 
     public async Task<PaginatedResponse<Appointment>> GetAppointmentsAsync(Guid affiliateId, DateTime? date = null, string? status = null, int page = 1)
@@ -121,6 +137,7 @@ public class AppointmentService : IAppointmentService
         if (previousStatus != "Completed" && existing.Status == "Completed")
             await _customerService.MarkVisitCompletedAsync(existing.CustomerId);
 
+        await NotifyStatusChangeAsync(existing.Id, previousStatus);
         return existing;
     }
 
@@ -136,6 +153,7 @@ public class AppointmentService : IAppointmentService
         if (previousStatus != "Completed" && appointment.Status == "Completed")
             await _customerService.MarkVisitCompletedAsync(appointment.CustomerId);
 
+        await NotifyStatusChangeAsync(appointment.Id, previousStatus);
         return appointment;
     }
 

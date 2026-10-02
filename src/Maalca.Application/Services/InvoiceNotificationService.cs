@@ -15,11 +15,13 @@ public class InvoiceNotificationService : IInvoiceNotificationService
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<InvoiceNotificationService> _logger;
+    private readonly IAffiliateBrandResolver _brand;
 
-    public InvoiceNotificationService(IHttpClientFactory httpClientFactory, ILogger<InvoiceNotificationService> logger)
+    public InvoiceNotificationService(IHttpClientFactory httpClientFactory, ILogger<InvoiceNotificationService> logger, IAffiliateBrandResolver brand)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
+        _brand = brand;
     }
 
     public async Task NotifyInvoicePaymentLinkAsync(Invoice invoice, Customer customer, string businessName, string currency, string paymentLink)
@@ -37,8 +39,11 @@ public class InvoiceNotificationService : IInvoiceNotificationService
 
         try
         {
+            var brand = await _brand.GetAsync(invoice.AffiliateId);
             var payload = new
             {
+                logoUrl = brand.LogoUrl,
+                brandColor = brand.Color,
                 customerEmail = customer.Email,
                 customerName = customer.Name,
                 businessName,
@@ -86,8 +91,11 @@ public class InvoiceNotificationService : IInvoiceNotificationService
 
         try
         {
+            var brand = await _brand.GetAsync(invoice.AffiliateId);
             var payload = new
             {
+                logoUrl = brand.LogoUrl,
+                brandColor = brand.Color,
                 customerEmail = customer.Email,
                 customerName = customer.Name,
                 businessName,

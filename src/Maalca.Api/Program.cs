@@ -82,6 +82,7 @@ builder.Services.AddScoped<IInteractionEventService, InteractionEventService>();
 builder.Services.AddScoped<IStripeBillingService, StripeBillingService>();
 builder.Services.AddScoped<IStripeConnectService, StripeConnectService>();
 builder.Services.AddScoped<IOrderNotificationService, OrderNotificationService>();
+builder.Services.AddScoped<IAffiliateBrandResolver, AffiliateBrandResolver>();
 builder.Services.AddScoped<IAppointmentNotificationService, AppointmentNotificationService>();
 builder.Services.AddScoped<IInvoiceNotificationService, InvoiceNotificationService>();
 builder.Services.AddScoped<IReservationNotificationService, ReservationNotificationService>();

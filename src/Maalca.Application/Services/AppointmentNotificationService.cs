@@ -14,11 +14,13 @@ public class AppointmentNotificationService : IAppointmentNotificationService
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<AppointmentNotificationService> _logger;
+    private readonly IAffiliateBrandResolver _brand;
 
-    public AppointmentNotificationService(IHttpClientFactory httpClientFactory, ILogger<AppointmentNotificationService> logger)
+    public AppointmentNotificationService(IHttpClientFactory httpClientFactory, ILogger<AppointmentNotificationService> logger, IAffiliateBrandResolver brand)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
+        _brand = brand;
     }
 
     public async Task NotifyAppointmentBookedAsync(Appointment appointment, Customer customer, string businessName, string slug, string serviceName, string? staffName, string? zoomLink = null)
@@ -36,8 +38,11 @@ public class AppointmentNotificationService : IAppointmentNotificationService
 
         try
         {
+            var brand = await _brand.GetAsync(appointment.AffiliateId);
             var payload = new
             {
+                logoUrl = brand.LogoUrl,
+                brandColor = brand.Color,
                 token = appointment.Token.ToString(),
                 slug,
                 businessName,
@@ -56,6 +61,63 @@ public class AppointmentNotificationService : IAppointmentNotificationService
 
             using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
             using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl.TrimEnd('/')}/api/internal/notifications/appointment")
+            {
+                Content = content,
+            };
+            request.Headers.Add("X-Internal-Secret", secret);
+
+            var response = await client.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                _logger.LogWarning("[AppointmentNotification] Failed ({Status}): {Body}", response.StatusCode, body);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[AppointmentNotification] Threw");
+        }
+    }
+
+    public async Task NotifyAppointmentStatusAsync(Appointment appointment, Customer customer, string businessName, string slug, string serviceName, string? staffName, string kind, string? zoomLink = null)
+    {
+        if (string.IsNullOrWhiteSpace(customer.Email))
+            return; // sin correo del cliente no hay a quién notificar
+
+        var baseUrl = Environment.GetEnvironmentVariable("MAALCA_WEB_URL");
+        var secret = Environment.GetEnvironmentVariable("INTERNAL_NOTIFICATIONS_SECRET");
+        if (string.IsNullOrWhiteSpace(baseUrl) || string.IsNullOrWhiteSpace(secret))
+        {
+            _logger.LogInformation("[AppointmentNotification] Status Skipped — MAALCA_WEB_URL/INTERNAL_NOTIFICATIONS_SECRET not set");
+            return;
+        }
+
+        try
+        {
+            var brand = await _brand.GetAsync(appointment.AffiliateId);
+            var payload = new
+            {
+                logoUrl = brand.LogoUrl,
+                brandColor = brand.Color,
+                kind,
+                token = appointment.Token.ToString(),
+                slug,
+                businessName,
+                customerEmail = customer.Email,
+                customerName = customer.Name,
+                serviceName,
+                date = appointment.Date.ToString("yyyy-MM-dd"),
+                time = appointment.Time,
+                staffName,
+                isVirtual = appointment.IsVirtual,
+                zoomLink = appointment.IsVirtual ? zoomLink : null,
+            };
+
+            var client = _httpClientFactory.CreateClient();
+            client.Timeout = TimeSpan.FromSeconds(10);
+
+            using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl.TrimEnd('/')}/api/internal/notifications/appointment-status")
             {
                 Content = content,
             };

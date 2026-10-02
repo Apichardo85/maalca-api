@@ -13,4 +13,7 @@ public interface IAppointmentNotificationService
     /// <summary>Cliente reservó por el widget público y dejó su email — dispara desde
     /// PublicBookingService.CreatePublicAppointmentAsync.</summary>
     Task NotifyAppointmentBookedAsync(Appointment appointment, Customer customer, string businessName, string slug, string serviceName, string? staffName, string? zoomLink = null);
+
+    /// <summary>El negocio confirmó o canceló la cita desde el panel (kind = "confirmed" | "cancelled"). Nunca lanza.</summary>
+    Task NotifyAppointmentStatusAsync(Appointment appointment, Customer customer, string businessName, string slug, string serviceName, string? staffName, string kind, string? zoomLink = null);
 }
