@@ -56,4 +56,9 @@ public class Order : BaseEntity
     // teléfono. Null si el cliente no dejó ningún dato de contacto. Sin FK a propósito: es solo
     // para el historial del cliente, y borrar un cliente no debe tocar sus pedidos.
     public Guid? CustomerId { get; set; }
+
+    // Pedido programado: fecha (en la zona horaria del negocio) para la que se pidió, cuando el
+    // negocio estaba cerrado al momento de ordenar — apunta a su próxima apertura. Null = pedido
+    // para ahora. El menú que se valida es el de ESA fecha, no el de hoy.
+    public DateOnly? ScheduledFor { get; set; }
 }

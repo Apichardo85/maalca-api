@@ -1399,6 +1399,9 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<string>("PaymentMethod")
                         .HasColumnType("text");
 
+                    b.Property<DateOnly?>("ScheduledFor")
+                        .HasColumnType("date");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 

@@ -44,7 +44,10 @@ public class OrderService : IOrderService
         // El navegador NO es fuente de verdad de precios: nombre y precio salen del catálogo del
         // afiliado, y subtotal/total se recalculan aquí. Sin esto, un cliente podía mandar
         // price=0.01 y Stripe cobraba eso (UnitAmount se arma con estos valores).
-        var priced = await RepriceItemsAsync(affiliate.Id, request.Items, request.Tax, request.Tip);
+        // Cerrado ahora => el pedido solo se acepta programado para la próxima apertura, y el menú
+        // que se valida es el de esa fecha (no el de hoy).
+        var scheduledFor = ResolveSchedule(affiliate, request);
+        var priced = await RepriceItemsAsync(affiliate.Id, request.Items, request.Tax, request.Tip, scheduledFor);
 
         var tableNumber = await ValidateTableAsync(affiliate, request);
         var customer = await LinkCustomerAsync(affiliate.Id, request.CustomerName, request.CustomerPhone, request.CustomerEmail);
@@ -67,6 +70,7 @@ public class OrderService : IOrderService
             CustomerId = customer?.Id,
             Channel = tableNumber is null ? "Online" : "Table",
             PaymentMethod = tableNumber is not null && request.PayAtTable ? PayAtTableMethod : null,
+            ScheduledFor = scheduledFor,
         };
         _db.Orders.Add(order);
         await _db.SaveChangesAsync();
@@ -168,7 +172,8 @@ public class OrderService : IOrderService
     /// ajenos, ocultos, inactivos o inexistentes, cantidades fuera de rango y montos negativos.
     /// </summary>
     private async Task<PricedOrder> RepriceItemsAsync(
-        Guid affiliateId, IReadOnlyList<OrderItemDto> requested, decimal clientTax, decimal clientTip)
+        Guid affiliateId, IReadOnlyList<OrderItemDto> requested, decimal clientTax, decimal clientTip,
+        DateOnly? scheduledFor = null)
     {
         if (requested.Any(i => i.Qty < 1 || i.Qty > MaxQtyPerLine))
             throw new ArgumentException($"Cantidad inválida (debe ser entre 1 y {MaxQtyPerLine}).");
@@ -201,19 +206,31 @@ public class OrderService : IOrderService
         var restricted = products.Where(p => !string.IsNullOrWhiteSpace(p.WeekDays)).ToList();
         if (restricted.Count > 0)
         {
-            var ianaTz = await _db.Affiliates.Where(a => a.Id == affiliateId).Select(a => a.Timezone).FirstOrDefaultAsync();
-            var tz = TimeZoneInfo.Utc;
-            if (!string.IsNullOrWhiteSpace(ianaTz))
+            // Programado: el día de la fecha elegida. Inmediato: hoy en la zona del negocio.
+            DayOfWeek dow;
+            if (scheduledFor is { } sf)
             {
-                try { tz = TimeZoneInfo.FindSystemTimeZoneById(ianaTz); }
-                catch (Exception) { /* zona inválida: cae a UTC */ }
+                dow = sf.DayOfWeek;
             }
-            var today = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz).DayOfWeek.ToString().ToLowerInvariant();
+            else
+            {
+                var ianaTz = await _db.Affiliates.Where(a => a.Id == affiliateId).Select(a => a.Timezone).FirstOrDefaultAsync();
+                var tz = TimeZoneInfo.Utc;
+                if (!string.IsNullOrWhiteSpace(ianaTz))
+                {
+                    try { tz = TimeZoneInfo.FindSystemTimeZoneById(ianaTz); }
+                    catch (Exception) { /* zona inválida: cae a UTC */ }
+                }
+                dow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz).DayOfWeek;
+            }
+            var day = dow.ToString().ToLowerInvariant();
             foreach (var p in restricted)
             {
                 var days = TokenList.Parse(p.WeekDays);
-                if (!days.Contains(today, StringComparer.OrdinalIgnoreCase))
-                    throw new ArgumentException($"\"{p.Name}\" no está disponible hoy.");
+                if (!days.Contains(day, StringComparer.OrdinalIgnoreCase))
+                    throw new ArgumentException(scheduledFor is null
+                        ? $"\"{p.Name}\" no está disponible hoy."
+                        : $"\"{p.Name}\" no está disponible el día para el que programaste el pedido.");
             }
         }
 
@@ -619,6 +636,44 @@ public class OrderService : IOrderService
         return table;
     }
 
+    private static readonly Dictionary<string, string> DiaLabelEs = new()
+    {
+        ["lunes"] = "el lunes", ["martes"] = "el martes", ["miercoles"] = "el miércoles", ["jueves"] = "el jueves",
+        ["viernes"] = "el viernes", ["sabado"] = "el sábado", ["domingo"] = "el domingo",
+    };
+
+    /// <summary>
+    /// Regla de "cerrado": con Horario y zona horaria configurados, si el negocio está cerrado ahora
+    /// el pedido debe venir programado (<c>ScheduledFor</c>) para la próxima apertura. Abierto, o
+    /// sin horario configurado, devuelve null (pedido para ahora). Lo mismo que la web valida al
+    /// instante; esto cubre pestañas abiertas desde hace horas y llamadas directas al API.
+    /// </summary>
+    private static DateOnly? ResolveSchedule(Affiliate affiliate, CreateOrderRequest request)
+    {
+        var hours = BusinessHoursCheck.Evaluate(
+            JsonArrayField.Parse<HorarioEntryDto>(affiliate.Horario), affiliate.Timezone, DateTime.UtcNow);
+        if (!hours.Known || hours.IsOpen) return null;
+
+        if (hours.NextOpenDate is not { } next)
+            throw new ArgumentException("Estamos cerrados por ahora y no hay una próxima apertura configurada.");
+
+        var when = hours.DaysAhead switch
+        {
+            0 => "hoy",
+            1 => "mañana",
+            _ => hours.NextDayToken is not null && DiaLabelEs.TryGetValue(hours.NextDayToken, out var label) ? label : "la próxima apertura",
+        };
+        var hint = $"Estamos cerrados. Programa tu pedido para {when} a las {hours.NextOpensAt}.";
+
+        if (!string.IsNullOrWhiteSpace(request.TableNumber))
+            throw new ArgumentException("Los pedidos de mesa solo se pueden hacer mientras estamos abiertos.");
+        if (!DateOnly.TryParseExact(request.ScheduledFor, "yyyy-MM-dd", out var requested))
+            throw new ArgumentException(hint);
+        if (requested != next)
+            throw new ArgumentException("La fecha del pedido programado ya no es válida. Actualiza la página e inténtalo de nuevo.");
+        return requested;
+    }
+
     private static OrderDto ToDto(Order o) => new(
         o.Id,
         o.CustomerName,
@@ -635,6 +690,7 @@ public class OrderService : IOrderService
         o.Channel,
         o.PaymentMethod,
         o.Tip,
-        o.TableNumber
+        o.TableNumber,
+        o.ScheduledFor?.ToString("yyyy-MM-dd")
     );
 }

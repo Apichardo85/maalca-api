@@ -10,6 +10,7 @@ public record OrderItemDto(string ItemId, string Name, decimal Price, int Qty, s
 /// <param name="CancelUrl">A dónde vuelve el cliente si canceló el pago.</param>
 /// <param name="Tip">Propina — Restaurante. 0 si el negocio no la ofrece o el cliente no dejó.</param>
 /// <param name="TableNumber">Mesa (QR por mesa). Solo Restaurante; null = pedido normal.</param>
+/// <param name="ScheduledFor">"yyyy-MM-dd": pedido programado para la próxima apertura. Obligatorio cuando el negocio está cerrado (y tiene Horario + zona horaria); se ignora si está abierto.</param>
 /// <param name="PayAtTable">true = el cliente paga al mesero (requiere TableNumber): sin Stripe, queda Pending hasta que el personal lo acepta.</param>
 public record CreateOrderRequest(
     IReadOnlyList<OrderItemDto> Items,
@@ -25,7 +26,8 @@ public record CreateOrderRequest(
     string? CancelUrl,
     decimal Tip = 0,
     string? TableNumber = null,
-    bool PayAtTable = false
+    bool PayAtTable = false,
+    string? ScheduledFor = null
 );
 
 /// <param name="CheckoutUrl">
@@ -51,7 +53,8 @@ public record OrderDto(
     string Channel = "Online",
     string? PaymentMethod = null,
     decimal Tip = 0,
-    string? TableNumber = null
+    string? TableNumber = null,
+    string? ScheduledFor = null
 );
 
 public record UpdateOrderStatusRequest(string Status);
