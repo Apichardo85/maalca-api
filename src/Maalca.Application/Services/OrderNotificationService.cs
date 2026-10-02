@@ -50,6 +50,8 @@ public class OrderNotificationService : IOrderNotificationService
                 orderId = order.Id.ToString(),
                 businessName = order.Affiliate?.Name ?? "",
                 slug = order.Affiliate?.Slug ?? "",
+                logoUrl = string.IsNullOrWhiteSpace(order.Affiliate?.LogoUrl) ? order.Affiliate?.Logo : order.Affiliate?.LogoUrl,
+                brandColor = order.Affiliate?.PrimaryColor,
                 customerEmail = order.CustomerEmail,
                 customerName = order.CustomerName,
                 items = items.Select(i => new { name = i.Name, price = i.Price, qty = i.Qty }),

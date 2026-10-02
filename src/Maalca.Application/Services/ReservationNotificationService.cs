@@ -42,6 +42,8 @@ public class ReservationNotificationService : IReservationNotificationService
                 businessName = affiliate.Name,
                 businessEmail = affiliate.ContactEmail,
                 slug = affiliate.Slug,
+                logoUrl = string.IsNullOrWhiteSpace(affiliate.LogoUrl) ? affiliate.Logo : affiliate.LogoUrl,
+                brandColor = affiliate.PrimaryColor,
                 customerName = reservation.CustomerName,
                 customerPhone = reservation.CustomerPhone,
                 customerEmail = reservation.CustomerEmail,
