@@ -164,7 +164,8 @@ public class StripeConnectService : IStripeConnectService
             // entidad) — cada Confirm...Async es un no-op silencioso si el Session no le
             // pertenece (busca por StripeCheckoutSessionId y no encuentra nada), así que llamar
             // a los tres es seguro.
-            await _orderService.ConfirmFromWebhookAsync(session.Id, session.PaymentIntentId);
+            await _orderService.ConfirmFromWebhookAsync(session.Id, session.PaymentIntentId,
+                session.CustomerDetails?.Name, session.CustomerDetails?.Email, session.CustomerDetails?.Phone);
             await _invoiceService.ConfirmFromWebhookAsync(session.Id, session.PaymentIntentId);
             await _donationService.ConfirmFromWebhookAsync(session.Id, session.PaymentIntentId);
         }

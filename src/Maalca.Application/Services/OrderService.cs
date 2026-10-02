@@ -47,6 +47,7 @@ public class OrderService : IOrderService
         var priced = await RepriceItemsAsync(affiliate.Id, request.Items, request.Tax, request.Tip);
 
         var tableNumber = await ValidateTableAsync(affiliate, request);
+        var customer = await LinkCustomerAsync(affiliate.Id, request.CustomerName, request.CustomerPhone, request.CustomerEmail);
 
         var order = new Order
         {
@@ -63,6 +64,7 @@ public class OrderService : IOrderService
             Currency = string.IsNullOrWhiteSpace(request.Currency) ? "USD" : request.Currency.ToUpperInvariant(),
             Status = OrderStatus.Pending,
             TableNumber = tableNumber,
+            CustomerId = customer?.Id,
             Channel = tableNumber is null ? "Online" : "Table",
             PaymentMethod = tableNumber is not null && request.PayAtTable ? PayAtTableMethod : null,
         };
@@ -138,6 +140,9 @@ public class OrderService : IOrderService
             CancelUrl = request.CancelUrl,
             ClientReferenceId = order.Id.ToString(),
             CustomerEmail = string.IsNullOrEmpty(request.CustomerEmail) ? null : request.CustomerEmail,
+            // Pide el teléfono en el Checkout: junto con el nombre/correo que Stripe ya captura,
+            // completa el cliente cuando no lo dio antes de pagar (ver MarkPaidAsync).
+            PhoneNumberCollection = new SessionPhoneNumberCollectionOptions { Enabled = true },
         }, requestOptions);
 
         order.StripeCheckoutSessionId = session.Id;
@@ -415,13 +420,15 @@ public class OrderService : IOrderService
             var session = await new SessionService().GetAsync(checkoutSessionId, requestOptions: requestOptions);
 
             if (session.PaymentStatus == "paid")
-                await MarkPaidAsync(order, session.PaymentIntentId);
+                await MarkPaidAsync(order, session.PaymentIntentId,
+                    session.CustomerDetails?.Name, session.CustomerDetails?.Email, session.CustomerDetails?.Phone);
         }
 
         return ToDto(order);
     }
 
-    public async Task ConfirmFromWebhookAsync(string checkoutSessionId, string? paymentIntentId)
+    public async Task ConfirmFromWebhookAsync(string checkoutSessionId, string? paymentIntentId,
+        string? customerName = null, string? customerEmail = null, string? customerPhone = null)
     {
         // Busca por StripeCheckoutSessionId, no por Id de pedido — el webhook solo trae el id de
         // la Session de Stripe, no el nuestro (nunca lo mandamos en la URL del webhook).
@@ -429,14 +436,26 @@ public class OrderService : IOrderService
             .FirstOrDefaultAsync(o => o.StripeCheckoutSessionId == checkoutSessionId);
         if (order is null || order.Status != OrderStatus.Pending) return; // ya confirmado por el camino síncrono, o no es nuestro
 
-        await MarkPaidAsync(order, paymentIntentId);
+        await MarkPaidAsync(order, paymentIntentId, customerName, customerEmail, customerPhone);
     }
 
-    private async Task MarkPaidAsync(Order order, string? paymentIntentId)
+    private async Task MarkPaidAsync(Order order, string? paymentIntentId,
+        string? stripeName = null, string? stripeEmail = null, string? stripePhone = null)
     {
         order.Status = OrderStatus.Paid;
         order.StripePaymentIntentId = paymentIntentId;
         order.UpdatedAt = DateTime.UtcNow;
+
+        // Lo que el cliente escribió antes de pagar manda; lo que Stripe capturó en el Checkout
+        // (nombre de la tarjeta, correo, teléfono) solo completa lo que falte.
+        if (string.IsNullOrWhiteSpace(order.CustomerName)) order.CustomerName = Clean(stripeName);
+        if (string.IsNullOrWhiteSpace(order.CustomerEmail)) order.CustomerEmail = Clean(stripeEmail);
+        if (string.IsNullOrWhiteSpace(order.CustomerPhone)) order.CustomerPhone = Clean(stripePhone);
+        if (order.CustomerId is null)
+        {
+            var customer = await LinkCustomerAsync(order.AffiliateId, order.CustomerName, order.CustomerPhone, order.CustomerEmail);
+            order.CustomerId = customer?.Id;
+        }
         await DecrementStockAsync(order);
         await _db.SaveChangesAsync();
 
@@ -526,6 +545,41 @@ public class OrderService : IOrderService
                 });
             }
         }
+    }
+
+    private static string? Clean(string? v) => string.IsNullOrWhiteSpace(v) ? null : v.Trim();
+
+    /// <summary>
+    /// Enlaza el pedido con un Customer del negocio (mismo criterio que reservas y citas: dedup
+    /// por teléfono; si no hay teléfono, por correo). Sin teléfono ni correo no se crea nada —
+    /// no hay cómo reconocer al cliente la próxima vez.
+    /// </summary>
+    private async Task<Maalca.Domain.Entities.Customer?> LinkCustomerAsync(Guid affiliateId, string? name, string? phone, string? email)
+    {
+        phone = Clean(phone);
+        email = Clean(email);
+        name = Clean(name);
+        if (phone is null && email is null) return null;
+
+        var customer = await _db.Customers.FirstOrDefaultAsync(c =>
+            c.AffiliateId == affiliateId &&
+            ((phone != null && c.Phone == phone) || (phone == null && email != null && c.Email == email)));
+        if (customer is not null)
+        {
+            if (customer.Email is null && email is not null) customer.Email = email;
+            return customer;
+        }
+
+        customer = new Maalca.Domain.Entities.Customer
+        {
+            AffiliateId = affiliateId,
+            Name = name ?? phone ?? email!,
+            Phone = phone,
+            Email = email,
+        };
+        _db.Customers.Add(customer);
+        await _db.SaveChangesAsync();
+        return customer;
     }
 
     private const string PayAtTableMethod = "PayAtTable";

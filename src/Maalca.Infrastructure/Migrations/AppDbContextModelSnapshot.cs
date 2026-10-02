@@ -1372,6 +1372,9 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("CustomerId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Currency")
                         .IsRequired()
                         .HasMaxLength(3)
@@ -1433,6 +1436,8 @@ namespace Maalca.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("AffiliateId", "CreatedAt");
+
+                    b.HasIndex("CustomerId");
 
                     b.ToTable("Orders");
                 });

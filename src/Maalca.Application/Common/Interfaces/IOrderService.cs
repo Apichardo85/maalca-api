@@ -46,5 +46,6 @@ public interface IOrderService
     /// Idempotente por diseño (solo transiciona si sigue Pending) — puede correr después de
     /// ConfirmCheckoutAsync sin duplicar nada, en cualquier orden.
     /// </summary>
-    Task ConfirmFromWebhookAsync(string checkoutSessionId, string? paymentIntentId);
+    Task ConfirmFromWebhookAsync(string checkoutSessionId, string? paymentIntentId,
+        string? customerName = null, string? customerEmail = null, string? customerPhone = null);
 }

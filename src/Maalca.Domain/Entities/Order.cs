@@ -51,4 +51,9 @@ public class Order : BaseEntity
     // al mesero: el pedido queda Pending hasta que el personal lo acepta desde el panel (Pending
     // -> Paid lo manda a cocina, mismo botón que ya existe); si pagó online sigue el flujo Stripe.
     public string? TableNumber { get; set; }
+
+    // Cliente (Customers) al que se enlazó este pedido — por teléfono, o por correo si no hubo
+    // teléfono. Null si el cliente no dejó ningún dato de contacto. Sin FK a propósito: es solo
+    // para el historial del cliente, y borrar un cliente no debe tocar sus pedidos.
+    public Guid? CustomerId { get; set; }
 }

@@ -772,7 +772,14 @@ app.MapGet("/api/affiliates/{affiliateId:guid}/customers/{id:guid}/history", asy
         .Select(p => new { p.Id, p.Title, p.Amount, p.Currency, p.Status })
         .ToListAsync();
 
-    return Results.Ok(new { customer, appointments, invoices, reservations, queueVisits, proposals });
+    // Pedidos del storefront enlazados a este cliente (por teléfono/correo al crearlos o al pagar).
+    var orders = await db.Orders.AsNoTracking()
+        .Where(o => o.AffiliateId == affiliateId && o.CustomerId == id)
+        .OrderByDescending(o => o.CreatedAt)
+        .Select(o => new { o.Id, o.Total, Status = o.Status.ToString(), o.CreatedAt, o.TableNumber, o.Channel })
+        .ToListAsync();
+
+    return Results.Ok(new { customer, appointments, invoices, reservations, queueVisits, proposals, orders });
 });
 
 // ============ APPOINTMENT ENDPOINTS (dashboard — agenda manual del negocio; el flujo de
