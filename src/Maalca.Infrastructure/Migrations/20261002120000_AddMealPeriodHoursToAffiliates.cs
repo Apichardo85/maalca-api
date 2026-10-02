@@ -17,18 +17,13 @@ namespace Maalca.Infrastructure.Migrations
     {
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<string>(
-                name: "MealPeriodHours",
-                table: "Affiliates",
-                type: "text",
-                nullable: true);
+            // IF NOT EXISTS: la columna pudo crearse a mano antes del deploy; la migracion no debe tumbar el arranque.
+            migrationBuilder.Sql("ALTER TABLE \"Affiliates\" ADD COLUMN IF NOT EXISTS \"MealPeriodHours\" text NULL;");
         }
 
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "MealPeriodHours",
-                table: "Affiliates");
+            migrationBuilder.Sql("ALTER TABLE \"Affiliates\" DROP COLUMN IF EXISTS \"MealPeriodHours\";");
         }
     }
 }
