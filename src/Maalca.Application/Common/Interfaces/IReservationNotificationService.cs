@@ -15,4 +15,10 @@ public interface IReservationNotificationService
     /// lanza: un correo que no salió no debe tumbar la reserva.
     /// </summary>
     Task NotifyReservationRequestedAsync(TableReservation reservation, Affiliate affiliate);
+
+    /// <summary>
+    /// El negocio confirmó o canceló una reserva (<paramref name="kind"/> = "confirmed" | "cancelled").
+    /// Avisa al comensal si dejó correo. Nunca lanza.
+    /// </summary>
+    Task NotifyReservationStatusAsync(TableReservation reservation, Affiliate affiliate, string kind);
 }

@@ -308,11 +308,25 @@ public class TableReservationService : ITableReservationService
 {
     private readonly AppDbContext _context;
     private readonly ICustomerService _customerService;
+    private readonly IReservationNotificationService _notifications;
 
-    public TableReservationService(AppDbContext context, ICustomerService customerService)
+    public TableReservationService(AppDbContext context, ICustomerService customerService, IReservationNotificationService notifications)
     {
         _context = context;
         _customerService = customerService;
+        _notifications = notifications;
+    }
+
+    // Confirmar o cancelar una reserva le avisa al comensal por correo (si dejó uno). Best-effort:
+    // el servicio de notificación no lanza y esto solo corre cuando el estado realmente cambió.
+    private async Task NotifyStatusChangeAsync(TableReservation reservation, string previousStatus)
+    {
+        if (previousStatus == reservation.Status || string.IsNullOrWhiteSpace(reservation.CustomerEmail)) return;
+        var kind = reservation.Status switch { "Confirmed" => "confirmed", "Cancelled" => "cancelled", _ => null };
+        if (kind == null) return;
+        var affiliate = await _context.Affiliates.AsNoTracking().FirstOrDefaultAsync(a => a.Id == reservation.AffiliateId);
+        if (affiliate == null) return;
+        await _notifications.NotifyReservationStatusAsync(reservation, affiliate, kind);
     }
 
     public async Task<PaginatedResponse<TableReservation>> GetReservationsAsync(Guid affiliateId, DateTime? date = null, string? status = null, int page = 1)
@@ -379,6 +393,7 @@ public class TableReservationService : ITableReservationService
         if (previousStatus != "Completed" && existing.Status == "Completed" && existing.CustomerId.HasValue)
             await _customerService.MarkVisitCompletedAsync(existing.CustomerId.Value);
 
+        await NotifyStatusChangeAsync(existing, previousStatus);
         return existing;
     }
 
@@ -394,6 +409,7 @@ public class TableReservationService : ITableReservationService
         if (previousStatus != "Completed" && reservation.Status == "Completed" && reservation.CustomerId.HasValue)
             await _customerService.MarkVisitCompletedAsync(reservation.CustomerId.Value);
 
+        await NotifyStatusChangeAsync(reservation, previousStatus);
         return reservation;
     }
 

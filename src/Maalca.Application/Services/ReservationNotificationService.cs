@@ -75,4 +75,60 @@ public class ReservationNotificationService : IReservationNotificationService
             _logger.LogWarning(ex, "[ReservationNotification] Threw");
         }
     }
+
+    public async Task NotifyReservationStatusAsync(TableReservation reservation, Affiliate affiliate, string kind)
+    {
+        // Solo se le escribe al comensal; sin su correo no hay a quién avisar.
+        if (string.IsNullOrWhiteSpace(reservation.CustomerEmail))
+            return;
+
+        var baseUrl = Environment.GetEnvironmentVariable("MAALCA_WEB_URL");
+        var secret = Environment.GetEnvironmentVariable("INTERNAL_NOTIFICATIONS_SECRET");
+        if (string.IsNullOrWhiteSpace(baseUrl) || string.IsNullOrWhiteSpace(secret))
+        {
+            _logger.LogInformation("[ReservationNotification] Status Skipped — MAALCA_WEB_URL/INTERNAL_NOTIFICATIONS_SECRET not set");
+            return;
+        }
+
+        try
+        {
+            var payload = new
+            {
+                kind,
+                businessName = affiliate.Name,
+                businessEmail = affiliate.ContactEmail,
+                slug = affiliate.Slug,
+                logoUrl = string.IsNullOrWhiteSpace(affiliate.LogoUrl) ? affiliate.Logo : affiliate.LogoUrl,
+                brandColor = affiliate.PrimaryColor,
+                customerName = reservation.CustomerName,
+                customerPhone = reservation.CustomerPhone,
+                customerEmail = reservation.CustomerEmail,
+                date = reservation.Date.ToString("yyyy-MM-dd"),
+                time = reservation.Time,
+                partySize = reservation.PartySize,
+                notes = reservation.Notes,
+            };
+
+            var client = _httpClientFactory.CreateClient();
+            client.Timeout = TimeSpan.FromSeconds(10);
+
+            using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl.TrimEnd('/')}/api/internal/notifications/reservation-status")
+            {
+                Content = content,
+            };
+            request.Headers.Add("X-Internal-Secret", secret);
+
+            var response = await client.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                _logger.LogWarning("[ReservationNotification] Failed ({Status}): {Body}", response.StatusCode, body);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[ReservationNotification] Threw");
+        }
+    }
 }
