@@ -40,7 +40,10 @@ public record UpdateAffiliateProfileRequest(
     string? Language = null,    // Fase 9 — "es" | "en", preferencia del board (no del visitante)
     string? BoardTheme = null,  // Fase 9 — "Dark" | "Light"
     string? TransitionEffect = null,  // Fase 9 — "Fade" | "Slide" | "Zoom" | "None"
-    string? ZoomLink = null    // Link fijo de la sala de Zoom del negocio (ver Affiliate.ZoomLink)
+    string? ZoomLink = null,   // Link fijo de la sala de Zoom del negocio (ver Affiliate.ZoomLink)
+    // Paleta (ver Affiliate.SecondaryColor/AccentColor): "#RRGGBB"; "" = borrar y volver al cálculo automático.
+    string? SecondaryColor = null,
+    string? AccentColor = null
 );
 
 public record AffiliatePublicProfileDto(
@@ -59,7 +62,9 @@ public record AffiliatePublicProfileDto(
     string? Website,
     string? Country = null,
     string? Currency = null,
-    string? ZoomLink = null
+    string? ZoomLink = null,
+    string? SecondaryColor = null,
+    string? AccentColor = null
 );
 
 public record UpdateAffiliateContentRequest(

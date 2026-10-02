@@ -13,6 +13,16 @@ namespace Maalca.Application.Services;
 public class AffiliateService : IAffiliateService
 {
     private static readonly Regex TimeFormat = new(@"^([01]\d|2[0-3]):[0-5]\d$", RegexOptions.Compiled);
+    private static readonly Regex HexColor = new(@"^#[0-9a-fA-F]{6}$", RegexOptions.Compiled);
+
+    // "" = borrar (vuelve al cálculo automático de la plantilla); null = no tocar; resto = #RRGGBB.
+    private static string? NormalizeColor(string value, string field)
+    {
+        var v = value.Trim();
+        if (v.Length == 0) return null;
+        if (!HexColor.IsMatch(v)) throw new ArgumentException($"{field} must be a hex color like #RRGGBB.");
+        return v.ToUpperInvariant();
+    }
 
     private readonly AppDbContext _context;
     private readonly IPlanLimitService _planLimit;
@@ -67,6 +77,8 @@ public class AffiliateService : IAffiliateService
         if (request.Website != null) affiliate.Website = request.Website.Trim();
         if (request.ZoomLink != null) affiliate.ZoomLink = request.ZoomLink.Trim();
         if (request.PrimaryColor != null) affiliate.PrimaryColor = request.PrimaryColor.Trim();
+        if (request.SecondaryColor != null) affiliate.SecondaryColor = NormalizeColor(request.SecondaryColor, "SecondaryColor");
+        if (request.AccentColor != null) affiliate.AccentColor = NormalizeColor(request.AccentColor, "AccentColor");
         // Country solo se setea si todavía no hay una — Stripe no permite cambiar el país
         // de una cuenta conectada ya creada, así que una vez fijado no debería sobreescribirse
         // silenciosamente. Si el afiliado necesita corregirlo, es un caso manual.
@@ -101,7 +113,8 @@ public class AffiliateService : IAffiliateService
             affiliate.Description, affiliate.DescriptionEn, affiliate.PrimaryColor,
             affiliate.LogoUrl, affiliate.CoverImageUrl,
             affiliate.ContactEmail,
-            affiliate.Address, affiliate.Website, affiliate.Country, affiliate.Currency, affiliate.ZoomLink);
+            affiliate.Address, affiliate.Website, affiliate.Country, affiliate.Currency, affiliate.ZoomLink,
+            affiliate.SecondaryColor, affiliate.AccentColor);
     }
 
     public async Task<AffiliateContentDto?> UpdateContentAsync(Guid affiliateId, UpdateAffiliateContentRequest request)

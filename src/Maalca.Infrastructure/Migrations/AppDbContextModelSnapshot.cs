@@ -127,6 +127,9 @@ namespace Maalca.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AccentColor")
+                        .HasColumnType("text");
+
                     b.Property<int?>("AdFrequency")
                         .HasColumnType("integer");
 

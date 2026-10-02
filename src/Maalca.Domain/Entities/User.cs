@@ -24,7 +24,12 @@ public class Affiliate : BaseEntity
     public string? DescriptionEn { get; set; }
     public string? Logo { get; set; }
     public string? PrimaryColor { get; set; }
+    // Paleta de 3 colores del negocio (las plantillas públicas derivan el resto de neutros de
+    // acá). Roles: Primary = acciones (botones, badges); Secondary = superficies oscuras/hero/texto
+    // fuerte; Accent = detalles (franja, resaltes). #RRGGBB o null = la plantilla lo calcula a
+    // partir del primario. SecondaryColor ya existía (legacy, sin uso en el sitio público).
     public string? SecondaryColor { get; set; }
+    public string? AccentColor { get; set; }
     public string? HeroImage { get; set; }
     public string Modules { get; set; } = ""; // Legacy comma-separated list — still read by GET /api/affiliates/{id} for the pre-Espacio-v2 dashboard. Do not repurpose or overwrite.
     public string Features { get; set; } = "{}"; // JSON string

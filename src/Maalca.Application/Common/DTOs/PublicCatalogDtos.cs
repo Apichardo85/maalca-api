@@ -29,7 +29,10 @@ public record AffiliatePublicDto(
     IReadOnlyDictionary<string, bool>? SectionVisibility = null,
     // Solo fotos (URLs), sin caption — máximo 12.
     IReadOnlyList<string>? GalleryImages = null,
-    CommunityImpactDto? CommunityImpact = null
+    CommunityImpactDto? CommunityImpact = null,
+    // Paleta del negocio (null = la plantilla deriva los neutros del primario).
+    string? SecondaryColor = null,
+    string? AccentColor = null
     // Causas ya no viene acá -- tiene su propio endpoint público
     // /api/public/affiliates/{slug}/causas (backlog 2026-09-25, ver Causa.cs).
 );

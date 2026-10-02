@@ -198,7 +198,9 @@ public class PublicCatalogService : IPublicCatalogService
             a.Currency,
             JsonDictField.Parse(a.SectionVisibility),
             JsonArrayField.Parse<string>(a.GalleryImages),
-            JsonObjectField.Parse<CommunityImpactDto>(a.CommunityImpact));
+            JsonObjectField.Parse<CommunityImpactDto>(a.CommunityImpact),
+            a.SecondaryColor,
+            a.AccentColor);
     }
 
     // Single source of truth for what each plan unlocks — flip a value here to change it
