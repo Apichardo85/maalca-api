@@ -46,6 +46,8 @@ public class OrderService : IOrderService
         // price=0.01 y Stripe cobraba eso (UnitAmount se arma con estos valores).
         var priced = await RepriceItemsAsync(affiliate.Id, request.Items, request.Tax, request.Tip);
 
+        var tableNumber = await ValidateTableAsync(affiliate, request);
+
         var order = new Order
         {
             AffiliateId = affiliate.Id,
@@ -60,9 +62,20 @@ public class OrderService : IOrderService
             Total = priced.Total,
             Currency = string.IsNullOrWhiteSpace(request.Currency) ? "USD" : request.Currency.ToUpperInvariant(),
             Status = OrderStatus.Pending,
+            TableNumber = tableNumber,
+            Channel = tableNumber is null ? "Online" : "Table",
+            PaymentMethod = tableNumber is not null && request.PayAtTable ? PayAtTableMethod : null,
         };
         _db.Orders.Add(order);
         await _db.SaveChangesAsync();
+
+        // Pagar al mesero: sin Stripe. Queda Pending y le aparece al personal en el panel
+        // (realtime) para que lo acepte; no entra a cocina hasta entonces.
+        if (order.PaymentMethod == PayAtTableMethod)
+        {
+            await _realtime.NotifyOrderUpdatedAsync(affiliate.Id, ToDto(order));
+            return new CreateOrderResponseDto(order.Id, CheckoutUrl: null);
+        }
 
         // Sin Connect activo: el pedido queda guardado igual (visible en el panel admin), pero
         // no hay cobro online — el storefront cae al botón de WhatsApp de siempre.
@@ -515,6 +528,43 @@ public class OrderService : IOrderService
         }
     }
 
+    private const string PayAtTableMethod = "PayAtTable";
+    private const int MaxTableLength = 20;
+    private const int MaxPendingPayAtTablePerTable = 3;
+
+    /// <summary>
+    /// Valida el pedido de mesa y devuelve el número normalizado (o null si no es de mesa).
+    /// Solo Restaurante. El tope de pedidos "pagar al mesero" pendientes por mesa evita que
+    /// alguien fotografíe el QR y llene el panel de pedidos falsos sin pasar por Stripe.
+    /// </summary>
+    private async Task<string?> ValidateTableAsync(Affiliate affiliate, CreateOrderRequest request)
+    {
+        var table = request.TableNumber?.Trim();
+        if (string.IsNullOrEmpty(table))
+        {
+            if (request.PayAtTable) throw new ArgumentException("Pay-at-table requires a table number.");
+            return null;
+        }
+
+        if (affiliate.BusinessType != BusinessType.Restaurant)
+            throw new ArgumentException("Table orders are only available for restaurants.");
+        if (table.Length > MaxTableLength || !table.All(c => char.IsLetterOrDigit(c) || c == '-' || c == ' '))
+            throw new ArgumentException("Invalid table number.");
+
+        if (request.PayAtTable)
+        {
+            var since = DateTime.UtcNow.AddHours(-2);
+            var pending = await _db.Orders.CountAsync(o =>
+                o.AffiliateId == affiliate.Id && o.TableNumber == table &&
+                o.PaymentMethod == PayAtTableMethod && o.Status == OrderStatus.Pending &&
+                o.CreatedAt >= since);
+            if (pending >= MaxPendingPayAtTablePerTable)
+                throw new ArgumentException("Too many pending orders for this table. Please ask your server.");
+        }
+
+        return table;
+    }
+
     private static OrderDto ToDto(Order o) => new(
         o.Id,
         o.CustomerName,
@@ -530,6 +580,7 @@ public class OrderService : IOrderService
         o.CreatedAt,
         o.Channel,
         o.PaymentMethod,
-        o.Tip
+        o.Tip,
+        o.TableNumber
     );
 }

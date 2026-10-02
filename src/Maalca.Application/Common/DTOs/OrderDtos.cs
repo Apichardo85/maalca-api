@@ -9,6 +9,8 @@ public record OrderItemDto(string ItemId, string Name, decimal Price, int Qty, s
 /// <param name="SuccessUrl">A dónde vuelve el cliente si el pago se completó (Checkout mode=payment).</param>
 /// <param name="CancelUrl">A dónde vuelve el cliente si canceló el pago.</param>
 /// <param name="Tip">Propina — Restaurante. 0 si el negocio no la ofrece o el cliente no dejó.</param>
+/// <param name="TableNumber">Mesa (QR por mesa). Solo Restaurante; null = pedido normal.</param>
+/// <param name="PayAtTable">true = el cliente paga al mesero (requiere TableNumber): sin Stripe, queda Pending hasta que el personal lo acepta.</param>
 public record CreateOrderRequest(
     IReadOnlyList<OrderItemDto> Items,
     decimal Subtotal,
@@ -21,7 +23,9 @@ public record CreateOrderRequest(
     string? Currency,
     string? SuccessUrl,
     string? CancelUrl,
-    decimal Tip = 0
+    decimal Tip = 0,
+    string? TableNumber = null,
+    bool PayAtTable = false
 );
 
 /// <param name="CheckoutUrl">
@@ -46,7 +50,8 @@ public record OrderDto(
     DateTime CreatedAt,
     string Channel = "Online",
     string? PaymentMethod = null,
-    decimal Tip = 0
+    decimal Tip = 0,
+    string? TableNumber = null
 );
 
 public record UpdateOrderStatusRequest(string Status);

@@ -45,4 +45,10 @@ public class Order : BaseEntity
     // 1, sin hardware lector todavía).
     public string Channel { get; set; } = "Online";
     public string? PaymentMethod { get; set; }
+
+    // Pedido desde la mesa (QR por mesa, /{slug}?mesa=7). Null = pedido normal (pickup/delivery).
+    // Con valor, Channel = "Table". PaymentMethod = "PayAtTable" cuando el cliente eligió pagar
+    // al mesero: el pedido queda Pending hasta que el personal lo acepta desde el panel (Pending
+    // -> Paid lo manda a cocina, mismo botón que ya existe); si pagó online sigue el flujo Stripe.
+    public string? TableNumber { get; set; }
 }

@@ -107,6 +107,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Total).HasPrecision(18, 2);
             entity.Property(e => e.StripeCheckoutSessionId).HasMaxLength(255);
             entity.Property(e => e.StripePaymentIntentId).HasMaxLength(255);
+            entity.Property(e => e.TableNumber).HasMaxLength(20);
             entity.HasOne(e => e.Affiliate)
                   .WithMany()
                   .HasForeignKey(e => e.AffiliateId)
