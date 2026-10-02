@@ -3272,7 +3272,8 @@ app.MapGet("/api/space/{slug}", async (
                 .ToListAsync())
                 .Select(p => new SpaceItemDto(p.Id, p.Name, p.Category, p.IsDemo, p.Status == "Active", p.ImageUrl,
                     p.Description,
-                    TokenList.Parse(p.Periods), TokenList.Parse(p.Flags), p.Featured, p.Popular))
+                    TokenList.Parse(p.Periods), TokenList.Parse(p.Flags), p.Featured, p.Popular,
+                    p.Price, TokenList.Parse(p.WeekDays), p.NameEn, p.DescriptionEn))
                 .ToList(),
 
         BusinessType.Barber or BusinessType.Service or BusinessType.Professional or BusinessType.Community =>
@@ -3281,7 +3282,7 @@ app.MapGet("/api/space/{slug}", async (
                 .OrderBy(s => s.SortOrder)
                 .Select(s => new SpaceItemDto(s.Id, s.Name, s.Category, s.IsDemo, s.Status == "Active", s.ImageUrl,
                     s.Description,
-                    new List<string>(), null, null, null))
+                    new List<string>(), null, null, null, s.Price))
                 .ToListAsync(),
 
         BusinessType.Retail =>
@@ -3290,7 +3291,7 @@ app.MapGet("/api/space/{slug}", async (
                 .OrderBy(i => i.SortOrder)
                 .Select(i => new SpaceItemDto(i.Id, i.Name, i.Category, i.IsDemo, i.Status == "Active", i.ImageUrl,
                     i.Description,
-                    new List<string>(), null, null, null))
+                    new List<string>(), null, null, null, i.UnitPrice))
                 .ToListAsync(),
 
         _ => new List<SpaceItemDto>()

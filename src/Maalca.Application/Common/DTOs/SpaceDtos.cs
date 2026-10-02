@@ -56,7 +56,11 @@ public record SpaceItemDto(
     IReadOnlyList<string>? Periods = null,      // Product only
     IReadOnlyList<string>? Flags = null,        // Product only
     bool? Featured = null,                      // Product only
-    bool? Popular = null                        // Product only
+    bool? Popular = null,                       // Product only
+    decimal? Price = null,
+    IReadOnlyList<string>? WeekDays = null,     // Product only
+    string? NameEn = null,                      // Product only
+    string? DescriptionEn = null                // Product only
 );
 
 public record ProgressDto(
