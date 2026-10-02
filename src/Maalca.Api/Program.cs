@@ -3282,7 +3282,7 @@ app.MapGet("/api/space/{slug}", async (
                 .OrderBy(s => s.SortOrder)
                 .Select(s => new SpaceItemDto(s.Id, s.Name, s.Category, s.IsDemo, s.Status == "Active", s.ImageUrl,
                     s.Description,
-                    new List<string>(), null, null, null, s.Price))
+                    new List<string>(), null, null, null, s.Price, null, null, null))
                 .ToListAsync(),
 
         BusinessType.Retail =>
@@ -3291,7 +3291,7 @@ app.MapGet("/api/space/{slug}", async (
                 .OrderBy(i => i.SortOrder)
                 .Select(i => new SpaceItemDto(i.Id, i.Name, i.Category, i.IsDemo, i.Status == "Active", i.ImageUrl,
                     i.Description,
-                    new List<string>(), null, null, null, i.UnitPrice))
+                    new List<string>(), null, null, null, i.UnitPrice, null, null, null))
                 .ToListAsync(),
 
         _ => new List<SpaceItemDto>()
