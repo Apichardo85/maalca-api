@@ -924,6 +924,9 @@ app.MapGet("/api/internal/appointments/due-reminders", async (HttpContext ctx, A
             time = x.appt.Time,
             staffName = x.appt.AssignedTo?.Name,
             token = x.appt.Token,
+            // Marca del negocio para que el recordatorio salga con su logo/color (como la confirmación).
+            logoUrl = string.IsNullOrWhiteSpace(x.appt.Affiliate?.LogoUrl) ? x.appt.Affiliate?.Logo : x.appt.Affiliate?.LogoUrl,
+            brandColor = x.appt.Affiliate?.PrimaryColor,
         })
         .ToList();
 
@@ -972,6 +975,8 @@ app.MapGet("/api/internal/proposals/due-reminders", async (HttpContext ctx, AppD
             currency = p.Currency,
             expiresAt = p.ExpiresAt,
             token = p.Token,
+            logoUrl = p.Affiliate != null ? (p.Affiliate.LogoUrl != null && p.Affiliate.LogoUrl != "" ? p.Affiliate.LogoUrl : p.Affiliate.Logo) : null,
+            brandColor = p.Affiliate != null ? p.Affiliate.PrimaryColor : null,
         })
         .ToListAsync();
 
@@ -1019,6 +1024,8 @@ app.MapGet("/api/internal/invoices/due-reminders", async (HttpContext ctx, AppDb
             currency = i.Affiliate != null && i.Affiliate.Currency != null && i.Affiliate.Currency != "" ? i.Affiliate.Currency : "USD",
             dueDate = i.DueDate,
             isOverdue = i.DueDate < now,
+            logoUrl = i.Affiliate != null ? (i.Affiliate.LogoUrl != null && i.Affiliate.LogoUrl != "" ? i.Affiliate.LogoUrl : i.Affiliate.Logo) : null,
+            brandColor = i.Affiliate != null ? i.Affiliate.PrimaryColor : null,
         })
         .ToListAsync();
 
