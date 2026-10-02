@@ -15,12 +15,14 @@ public class ProposalNotificationService : IProposalNotificationService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<ProposalNotificationService> _logger;
     private readonly IAffiliateBrandResolver _brand;
+    private readonly IOwnerNotificationService _owner;
 
-    public ProposalNotificationService(IHttpClientFactory httpClientFactory, ILogger<ProposalNotificationService> logger, IAffiliateBrandResolver brand)
+    public ProposalNotificationService(IHttpClientFactory httpClientFactory, ILogger<ProposalNotificationService> logger, IAffiliateBrandResolver brand, IOwnerNotificationService owner)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _brand = brand;
+        _owner = owner;
     }
 
     public async Task NotifyProposalSentAsync(Proposal proposal, string businessName, string proposalLink)
@@ -79,6 +81,16 @@ public class ProposalNotificationService : IProposalNotificationService
 
     public async Task NotifyProposalAcceptedAsync(Proposal proposal, Affiliate affiliate)
     {
+        // Aviso al dueño (badge + push): propuesta aceptada. Antes del early-return del correo de contacto.
+        var accepter = string.IsNullOrWhiteSpace(proposal.AcceptedByName) ? proposal.CustomerName : proposal.AcceptedByName;
+        await _owner.NotifyAsync(
+            affiliate.Id, "proposal_accepted",
+            "Propuesta aceptada",
+            $"{proposal.Title} · {accepter}",
+            "Proposal accepted",
+            $"{proposal.Title} · {accepter}",
+            "proposals", proposal.Id);
+
         if (string.IsNullOrWhiteSpace(affiliate.ContactEmail))
             return; // sin correo de contacto del negocio no hay a quien avisar
 

@@ -17,11 +17,38 @@ public class OrderNotificationService : IOrderNotificationService
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<OrderNotificationService> _logger;
+    private readonly IOwnerNotificationService _owner;
 
-    public OrderNotificationService(IHttpClientFactory httpClientFactory, ILogger<OrderNotificationService> logger)
+    public OrderNotificationService(IHttpClientFactory httpClientFactory, ILogger<OrderNotificationService> logger, IOwnerNotificationService owner)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
+        _owner = owner;
+    }
+
+    private Task NotifyOwnerAsync(Order order)
+    {
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        var who = string.IsNullOrWhiteSpace(order.CustomerName) ? null : order.CustomerName.Trim();
+        var total = $"{order.Total.ToString("0.00", inv)} {order.Currency}";
+        var partsEs = new List<string>();
+        var partsEn = new List<string>();
+        if (who is not null) { partsEs.Add(who); partsEn.Add(who); }
+        partsEs.Add(total); partsEn.Add(total);
+        if (!string.IsNullOrWhiteSpace(order.TableNumber)) { partsEs.Add($"Mesa {order.TableNumber}"); partsEn.Add($"Table {order.TableNumber}"); }
+        if (order.ScheduledFor is { } day)
+        {
+            var d = day.ToString("yyyy-MM-dd", inv);
+            partsEs.Add($"programado para {d}"); partsEn.Add($"scheduled for {d}");
+        }
+        var scheduled = order.ScheduledFor is not null;
+        return _owner.NotifyAsync(
+            order.AffiliateId, "order",
+            scheduled ? "Nuevo pedido programado" : "Nuevo pedido",
+            string.Join(" · ", partsEs),
+            scheduled ? "New scheduled order" : "New order",
+            string.Join(" · ", partsEn),
+            "orders", order.Id);
     }
 
     public Task NotifyOrderConfirmedAsync(Order order) => SendAsync(order, "confirmed");
@@ -30,6 +57,11 @@ public class OrderNotificationService : IOrderNotificationService
 
     private async Task SendAsync(Order order, string kind)
     {
+        // Aviso al dueño (badge + push): solo cuando entra un pedido (pagado / confirmado), no al cumplirlo.
+        // Va ANTES de los early-returns del correo: el pedido avisa aunque el cliente no haya dado correo.
+        if (kind == "confirmed")
+            await NotifyOwnerAsync(order);
+
         if (string.IsNullOrWhiteSpace(order.CustomerEmail))
             return; // sin correo del cliente no hay a quién notificar
 

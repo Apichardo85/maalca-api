@@ -57,6 +57,7 @@ builder.Services.AddScoped<IServiceService, ServiceService>();
 builder.Services.AddScoped<IActivityService, ActivityService>();
 builder.Services.AddScoped<ICommunityProgramService, CommunityProgramService>();
 builder.Services.AddScoped<ICausaService, CausaService>();
+builder.Services.AddScoped<IOwnerNotificationService, OwnerNotificationService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<IModifierService, ModifierService>();
 builder.Services.AddScoped<ICommunityService, CommunityService>();
@@ -1471,6 +1472,55 @@ app.MapDelete("/api/affiliates/{affiliateId:guid}/programs/{id:guid}", async (IC
 // ============ CAUSAS (Community -- movido de columna JSON a tabla propia, backlog 2026-09-25) ============
 // Mismo gating que /services y /activities. Los errores de validacion (ArgumentException, ver
 // CausaService) se traducen a 400 igual que antes lo hacia AffiliateService.UpdateContentAsync.
+// ============ Avisos para el dueño (badges / campana / Web Push) ============
+// Del negocio, no del usuario: leído por uno = leído para todo el equipo. Cualquier rol del negocio los ve.
+app.MapGet("/api/affiliates/{affiliateId:guid}/notifications", async (IOwnerNotificationService svc, Guid affiliateId, int? take, HttpContext ctx) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    var items = await svc.ListAsync(affiliateId, take ?? 30);
+    var summary = await svc.SummaryAsync(affiliateId);
+    return Results.Ok(new { items, unread = summary.Unread, unreadByType = summary.UnreadByType });
+}).RequireAuthorization();
+
+app.MapGet("/api/affiliates/{affiliateId:guid}/notifications/summary", async (IOwnerNotificationService svc, Guid affiliateId, HttpContext ctx) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    return Results.Ok(await svc.SummaryAsync(affiliateId));
+}).RequireAuthorization();
+
+app.MapPost("/api/affiliates/{affiliateId:guid}/notifications/read", async (IOwnerNotificationService svc, Guid affiliateId, MarkNotificationsReadRequest? request, HttpContext ctx) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    await svc.MarkReadAsync(affiliateId, request ?? new MarkNotificationsReadRequest(null, null));
+    return Results.Ok(await svc.SummaryAsync(affiliateId));
+}).RequireAuthorization();
+
+app.MapPost("/api/affiliates/{affiliateId:guid}/push-subscriptions", async (IOwnerNotificationService svc, Guid affiliateId, PushSubscribeRequest request, HttpContext ctx) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    try
+    {
+        await svc.SubscribeAsync(affiliateId, request);
+        return Results.NoContent();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+}).RequireAuthorization();
+
+app.MapPost("/api/affiliates/{affiliateId:guid}/push-subscriptions/remove", async (IOwnerNotificationService svc, Guid affiliateId, PushUnsubscribeRequest request, HttpContext ctx) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    await svc.UnsubscribeAsync(affiliateId, request.Endpoint ?? "");
+    return Results.NoContent();
+}).RequireAuthorization();
+
 app.MapGet("/api/affiliates/{affiliateId:guid}/causas", async (ICausaService causaService, Guid affiliateId, HttpContext ctx) =>
 {
     if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())

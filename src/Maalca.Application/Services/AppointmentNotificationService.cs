@@ -15,16 +15,28 @@ public class AppointmentNotificationService : IAppointmentNotificationService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<AppointmentNotificationService> _logger;
     private readonly IAffiliateBrandResolver _brand;
+    private readonly IOwnerNotificationService _owner;
 
-    public AppointmentNotificationService(IHttpClientFactory httpClientFactory, ILogger<AppointmentNotificationService> logger, IAffiliateBrandResolver brand)
+    public AppointmentNotificationService(IHttpClientFactory httpClientFactory, ILogger<AppointmentNotificationService> logger, IAffiliateBrandResolver brand, IOwnerNotificationService owner)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _brand = brand;
+        _owner = owner;
     }
 
     public async Task NotifyAppointmentBookedAsync(Appointment appointment, Customer customer, string businessName, string slug, string serviceName, string? staffName, string? zoomLink = null)
     {
+        // Aviso al dueño (badge + push): cita nueva por confirmar. Antes del early-return del correo del cliente.
+        var apptWhen = $"{appointment.Date:yyyy-MM-dd} {appointment.Time}";
+        await _owner.NotifyAsync(
+            appointment.AffiliateId, "appointment",
+            "Nueva cita por confirmar",
+            $"{customer.Name} · {serviceName} · {apptWhen}",
+            "New appointment to confirm",
+            $"{customer.Name} · {serviceName} · {apptWhen}",
+            "agenda", appointment.Id);
+
         if (string.IsNullOrWhiteSpace(customer.Email))
             return; // sin correo del cliente no hay a quién notificar
 

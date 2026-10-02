@@ -16,12 +16,14 @@ public class InvoiceNotificationService : IInvoiceNotificationService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<InvoiceNotificationService> _logger;
     private readonly IAffiliateBrandResolver _brand;
+    private readonly IOwnerNotificationService _owner;
 
-    public InvoiceNotificationService(IHttpClientFactory httpClientFactory, ILogger<InvoiceNotificationService> logger, IAffiliateBrandResolver brand)
+    public InvoiceNotificationService(IHttpClientFactory httpClientFactory, ILogger<InvoiceNotificationService> logger, IAffiliateBrandResolver brand, IOwnerNotificationService owner)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _brand = brand;
+        _owner = owner;
     }
 
     public async Task NotifyInvoicePaymentLinkAsync(Invoice invoice, Customer customer, string businessName, string currency, string paymentLink)
@@ -78,6 +80,16 @@ public class InvoiceNotificationService : IInvoiceNotificationService
 
     public async Task NotifyInvoicePaidAsync(Invoice invoice, Customer customer, string businessName, string currency)
     {
+        // Aviso al dueño (badge + push): factura cobrada. Antes del early-return del correo del cliente.
+        var paidTotal = $"{invoice.Total.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)} {currency}";
+        await _owner.NotifyAsync(
+            invoice.AffiliateId, "invoice_paid",
+            "Factura pagada",
+            $"#{invoice.InvoiceNumber} · {customer.Name} · {paidTotal}",
+            "Invoice paid",
+            $"#{invoice.InvoiceNumber} · {customer.Name} · {paidTotal}",
+            "invoices", invoice.Id);
+
         if (string.IsNullOrWhiteSpace(customer.Email))
             return; // sin correo del cliente no hay a quien mandarle el recibo
 

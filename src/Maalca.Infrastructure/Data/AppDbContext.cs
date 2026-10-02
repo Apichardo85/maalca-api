@@ -49,6 +49,8 @@ public class AppDbContext : DbContext
     public DbSet<Proposal> Proposals => Set<Proposal>();
     public DbSet<Activity> Activities => Set<Activity>();
     public DbSet<Causa> Causas => Set<Causa>();
+    public DbSet<OwnerNotification> OwnerNotifications => Set<OwnerNotification>();
+    public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
     public DbSet<Donation> Donations => Set<Donation>();
     public DbSet<CommunityProgram> CommunityPrograms => Set<CommunityProgram>();
 
@@ -197,6 +199,38 @@ public class AppDbContext : DbContext
                   .HasForeignKey(e => e.AffiliateId)
                   .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.AffiliateId, e.SortOrder });
+        });
+
+        // Avisos para el dueño (badges/campana/push) y suscripciones de Web Push -- ver OwnerNotification.cs.
+        modelBuilder.Entity<OwnerNotification>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Type).IsRequired().HasMaxLength(30);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Body).HasMaxLength(500);
+            entity.Property(e => e.TitleEn).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.BodyEn).HasMaxLength(500);
+            entity.Property(e => e.Url).HasMaxLength(200);
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.AffiliateId, e.ReadAt, e.CreatedAt });
+        });
+
+        modelBuilder.Entity<PushSubscription>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Endpoint).IsRequired().HasMaxLength(1000);
+            entity.Property(e => e.P256dh).IsRequired().HasMaxLength(300);
+            entity.Property(e => e.Auth).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Lang).IsRequired().HasMaxLength(5);
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => e.Endpoint).IsUnique();
+            entity.HasIndex(e => e.AffiliateId);
         });
 
         // Donation -- donaciones reales de Community via Stripe Connect (backlog 2026-09-26),

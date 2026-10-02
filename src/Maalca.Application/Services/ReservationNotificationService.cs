@@ -14,15 +14,27 @@ public class ReservationNotificationService : IReservationNotificationService
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<ReservationNotificationService> _logger;
+    private readonly IOwnerNotificationService _owner;
 
-    public ReservationNotificationService(IHttpClientFactory httpClientFactory, ILogger<ReservationNotificationService> logger)
+    public ReservationNotificationService(IHttpClientFactory httpClientFactory, ILogger<ReservationNotificationService> logger, IOwnerNotificationService owner)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
+        _owner = owner;
     }
 
     public async Task NotifyReservationRequestedAsync(TableReservation reservation, Affiliate affiliate)
     {
+        // Aviso al dueño (badge + push): reserva por aceptar o rechazar. Antes del early-return del correo.
+        var resWhen = $"{reservation.Date:yyyy-MM-dd} {reservation.Time}";
+        await _owner.NotifyAsync(
+            affiliate.Id, "reservation",
+            "Nueva reserva por confirmar",
+            $"{reservation.CustomerName} · {reservation.PartySize} personas · {resWhen}",
+            "New reservation to confirm",
+            $"{reservation.CustomerName} · party of {reservation.PartySize} · {resWhen}",
+            "reservations", reservation.Id);
+
         // Sin ningún destinatario (ni correo del negocio ni del comensal) no hay nada que mandar.
         if (string.IsNullOrWhiteSpace(affiliate.ContactEmail) && string.IsNullOrWhiteSpace(reservation.CustomerEmail))
             return;
