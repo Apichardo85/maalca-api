@@ -3128,10 +3128,11 @@ app.MapGet("/api/affiliates/{id}/metrics/detailed", async (HttpContext ctx, AppD
             QrScans: g.Count(x => x.Tipo == EventoTipo.QrScan),
             CanalClicks: g.Count(x => x.Tipo == EventoTipo.CanalClick)));
 
-    // Pedidos pagados en el mismo rango — mismo patrón que rawEvents arriba: se trae solo lo
+    // Pedidos cobrados en el mismo rango (Paid + Preparing + Fulfilled: cocina avanza el pedido después
+    // de pagarse, y al pasar a Preparing/Fulfilled dejaba de contar como ingreso) — mismo patrón que rawEvents arriba: se trae solo lo
     // necesario y se agrupa en memoria por fecha (evita repetir el problema de GroupBy+Date en SQL).
     var paidOrders = await db.Orders
-        .Where(o => o.AffiliateId == id && o.Status == OrderStatus.Paid && o.CreatedAt >= startDate)
+        .Where(o => o.AffiliateId == id && (o.Status == OrderStatus.Paid || o.Status == OrderStatus.Preparing || o.Status == OrderStatus.Fulfilled) && o.CreatedAt >= startDate)
         .Select(o => new { o.CreatedAt, o.Total, o.Currency })
         .ToListAsync();
 
@@ -3191,7 +3192,7 @@ app.MapGet("/api/affiliates/{id}/metrics/reports", async (HttpContext ctx, AppDb
     var startDate = DateTime.UtcNow.Date.AddDays(-(effectiveDays - 1));
 
     var paidOrders = await db.Orders
-        .Where(o => o.AffiliateId == id && o.Status == OrderStatus.Paid && o.CreatedAt >= startDate)
+        .Where(o => o.AffiliateId == id && (o.Status == OrderStatus.Paid || o.Status == OrderStatus.Preparing || o.Status == OrderStatus.Fulfilled) && o.CreatedAt >= startDate)
         .Select(o => new { o.CreatedAt, o.Total, o.Currency, o.Channel, o.PaymentMethod, o.ItemsJson })
         .ToListAsync();
 
