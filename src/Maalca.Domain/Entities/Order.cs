@@ -61,4 +61,15 @@ public class Order : BaseEntity
     // negocio estaba cerrado al momento de ordenar — apunta a su próxima apertura. Null = pedido
     // para ahora. El menú que se valida es el de ESA fecha, no el de hoy.
     public DateOnly? ScheduledFor { get; set; }
+
+    // Cobro en el local (PaymentMethod = PayAtPickup / PayAtTable): "Paid" significa ACEPTADO, no cobrado.
+    // El personal registra el cobro real aquí: CollectedAt (cuándo) + CollectedMethod ("Cash" | "Card" | "Other").
+    // Null = por cobrar. Los pedidos que ya pagaron online no lo usan.
+    public DateTime? CollectedAt { get; set; }
+    public string? CollectedMethod { get; set; }
+
+    // Seguimiento público: token aleatorio (128 bits, base64url) para /t/{token} — el cliente ve el estado de su
+    // pedido sin login ni correos por cada cambio. EstimatedReadyAt = la hora estimada que el personal fija al aceptar.
+    public string? TrackingToken { get; set; }
+    public DateTime? EstimatedReadyAt { get; set; }
 }

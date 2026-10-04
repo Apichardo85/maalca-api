@@ -29,7 +29,25 @@ public interface IOrderService
 
     Task<IReadOnlyList<OrderDto>> GetOrdersAsync(Guid affiliateId);
 
-    Task<OrderDto?> UpdateStatusAsync(Guid affiliateId, Guid orderId, string status);
+    Task<OrderDto?> UpdateStatusAsync(Guid affiliateId, Guid orderId, string status, int? estimatedMinutes = null);
+
+    /// <summary>Fija/ajusta la hora estimada de entrega (minutos desde ahora).</summary>
+    Task<OrderDto?> SetEstimateAsync(Guid affiliateId, Guid orderId, int minutes);
+
+    /// <summary>Vista pública del pedido por token de seguimiento (null si el token no existe).</summary>
+    Task<OrderTrackingDto?> GetTrackingAsync(string token);
+
+    /// <summary>"Avísame": el cliente activa push en /t/{token}.</summary>
+    Task<bool> SubscribeTrackingPushAsync(string token, PushSubscribeRequest request);
+
+    /// <summary>El cliente decide pagar con tarjeta un pedido ya hecho (p. ej. eligió pagar al recoger): crea la Checkout Session.</summary>
+    Task<TrackingPayResponseDto?> CreateOnlinePaymentAsync(string token, string successUrl, string cancelUrl);
+
+    /// <summary>Al volver de Stripe a /t/{token}: confirma el pago contra la Session (sin esperar al webhook).</summary>
+    Task<OrderTrackingDto?> ConfirmOnlinePaymentAsync(string token, string sessionId);
+
+    /// <summary>Registra el cobro en el local de un pedido "pagar al recoger/mesero" ya aceptado.</summary>
+    Task<OrderDto?> CollectPaymentAsync(Guid affiliateId, Guid orderId, string method);
 
     /// <summary>
     /// Confirmación síncrona al volver del Checkout hospedado de Stripe. Verifica el estado real

@@ -2810,7 +2810,47 @@ app.MapPatch("/api/affiliates/{id}/orders/{orderId}/status", async (
 
     try
     {
-        var result = await orderService.UpdateStatusAsync(id, orderId, request.Status);
+        var result = await orderService.UpdateStatusAsync(id, orderId, request.Status, request.EstimatedMinutes);
+        if (result is null)
+            return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Order not found" } });
+        return Results.Ok(result);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+});
+
+app.MapPatch("/api/affiliates/{id}/orders/{orderId}/eta", async (
+    HttpContext ctx, IOrderService orderService, Guid id, Guid orderId, SetOrderEtaRequest request) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    try
+    {
+        var result = await orderService.SetEstimateAsync(id, orderId, request.Minutes);
+        if (result is null)
+            return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Order not found" } });
+        return Results.Ok(result);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+});
+
+app.MapPatch("/api/affiliates/{id}/orders/{orderId}/collect", async (
+    HttpContext ctx, IOrderService orderService, Guid id, Guid orderId, CollectOrderPaymentRequest request) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    try
+    {
+        var result = await orderService.CollectPaymentAsync(id, orderId, request.Method);
         if (result is null)
             return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Order not found" } });
         return Results.Ok(result);
@@ -3788,6 +3828,62 @@ app.MapPost("/api/public/appointments/{token:guid}/reschedule", async (IPublicBo
     {
         return Results.Conflict(new { error = new { code = "SLOT_TAKEN", message = ex.Message } });
     }
+})
+.AllowAnonymous();
+
+// ============ PUBLIC ORDER TRACKING (/t/{token}) ============
+// Sin login: el token (128 bits aleatorios) es la credencial. Solo expone estado, platos y totales.
+app.MapGet("/api/public/track/{token}", async (IOrderService orderService, string token) =>
+{
+    var result = await orderService.GetTrackingAsync(token);
+    return result is null
+        ? Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Order not found" } })
+        : Results.Ok(result);
+})
+.AllowAnonymous();
+
+// El cliente decide pagar con tarjeta un pedido ya hecho (p. ej. eligió "pagar al recoger"): Checkout Session nueva.
+app.MapPost("/api/public/track/{token}/pay", async (IOrderService orderService, string token, TrackingPayRequest request) =>
+{
+    try
+    {
+        var result = await orderService.CreateOnlinePaymentAsync(token, request.SuccessUrl, request.CancelUrl);
+        return result is null
+            ? Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Order not found" } })
+            : Results.Ok(result);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+    catch (Stripe.StripeException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "STRIPE_ERROR", message = ex.Message } });
+    }
+})
+.AllowAnonymous();
+
+app.MapPost("/api/public/track/{token}/push", async (IOrderService orderService, string token, PushSubscribeRequest request) =>
+{
+    try
+    {
+        return await orderService.SubscribeTrackingPushAsync(token, request)
+            ? Results.NoContent()
+            : Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Order not found" } });
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+})
+.AllowAnonymous();
+
+app.MapPost("/api/public/track/{token}/confirm", async (IOrderService orderService, string token, TrackingConfirmRequest request) =>
+{
+    var result = await orderService.ConfirmOnlinePaymentAsync(token, request.SessionId);
+    return result is null
+        ? Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Order not found" } })
+        : Results.Ok(result);
 })
 .AllowAnonymous();
 

@@ -73,6 +73,7 @@ public class OrderService : IOrderService
             PaymentMethod = tableNumber is not null && request.PayAtTable ? PayAtTableMethod
                 : tableNumber is null && request.PayAtPickup ? PayAtPickupMethod : null,
             ScheduledFor = scheduledFor,
+            TrackingToken = NewTrackingToken(),
         };
         _db.Orders.Add(order);
         await _db.SaveChangesAsync();
@@ -82,17 +83,19 @@ public class OrderService : IOrderService
         if (order.PaymentMethod == PayAtTableMethod || order.PaymentMethod == PayAtPickupMethod)
         {
             await _notifications.NotifyPayAtTableRequestedAsync(order);
+            order.Affiliate = affiliate;
+            await _notifications.NotifyOrderReceivedAsync(order);
             await _realtime.NotifyOrderUpdatedAsync(affiliate.Id, ToDto(order));
-            return new CreateOrderResponseDto(order.Id, CheckoutUrl: null);
+            return new CreateOrderResponseDto(order.Id, CheckoutUrl: null, TrackingToken: order.TrackingToken);
         }
 
         // Sin Connect activo: el pedido queda guardado igual (visible en el panel admin), pero
         // no hay cobro online — el storefront cae al botón de WhatsApp de siempre.
         if (!affiliate.StripeConnectChargesEnabled || string.IsNullOrEmpty(affiliate.StripeConnectAccountId))
-            return new CreateOrderResponseDto(order.Id, CheckoutUrl: null);
+            return new CreateOrderResponseDto(order.Id, CheckoutUrl: null, TrackingToken: order.TrackingToken);
 
         if (string.IsNullOrEmpty(request.SuccessUrl) || string.IsNullOrEmpty(request.CancelUrl))
-            return new CreateOrderResponseDto(order.Id, CheckoutUrl: null);
+            return new CreateOrderResponseDto(order.Id, CheckoutUrl: null, TrackingToken: order.TrackingToken);
 
         StripeConfiguration.ApiKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY") ?? "";
         var requestOptions = new RequestOptions { StripeAccount = affiliate.StripeConnectAccountId };
@@ -407,7 +410,7 @@ public class OrderService : IOrderService
         return orders.Select(ToDto).ToList();
     }
 
-    public async Task<OrderDto?> UpdateStatusAsync(Guid affiliateId, Guid orderId, string status)
+    public async Task<OrderDto?> UpdateStatusAsync(Guid affiliateId, Guid orderId, string status, int? estimatedMinutes = null)
     {
         var order = await _db.Orders.Include(o => o.Affiliate)
             .FirstOrDefaultAsync(o => o.Id == orderId && o.AffiliateId == affiliateId);
@@ -421,7 +424,9 @@ public class OrderService : IOrderService
         if (parsed == OrderStatus.Paid && order.Status == OrderStatus.Pending)
         {
             order.PaymentMethod ??= "Manual";
+            if (estimatedMinutes is > 0 and <= 240) order.EstimatedReadyAt = DateTime.UtcNow.AddMinutes(estimatedMinutes.Value);
             await MarkPaidAsync(order, null);
+            await _notifications.NotifyCustomerPushAsync(order, "accepted");
             return ToDto(order);
         }
 
@@ -430,7 +435,198 @@ public class OrderService : IOrderService
         await _db.SaveChangesAsync();
 
         if (parsed == OrderStatus.Fulfilled)
+        {
             await _notifications.NotifyOrderFulfilledAsync(order);
+            await _notifications.NotifyCustomerPushAsync(order, "ready");
+        }
+        else if (parsed == OrderStatus.Canceled)
+            await _notifications.NotifyCustomerPushAsync(order, "canceled");
+
+        var dto = ToDto(order);
+        await _realtime.NotifyOrderUpdatedAsync(affiliateId, dto);
+        return dto;
+    }
+
+    public async Task<OrderDto?> SetEstimateAsync(Guid affiliateId, Guid orderId, int minutes)
+    {
+        if (minutes is < 1 or > 240) throw new ArgumentException("Minutes must be between 1 and 240.");
+        var order = await _db.Orders.FirstOrDefaultAsync(o => o.Id == orderId && o.AffiliateId == affiliateId);
+        if (order is null) return null;
+        var previousEta = order.EstimatedReadyAt;
+        order.EstimatedReadyAt = DateTime.UtcNow.AddMinutes(minutes);
+        order.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+        if (previousEta is not null && order.EstimatedReadyAt > previousEta)
+            await _notifications.NotifyCustomerPushAsync(order, "delayed");
+        var dto = ToDto(order);
+        await _realtime.NotifyOrderUpdatedAsync(affiliateId, dto);
+        return dto;
+    }
+
+    public async Task<OrderTrackingDto?> GetTrackingAsync(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token) || token.Length > 64) return null;
+        var order = await _db.Orders.Include(o => o.Affiliate).FirstOrDefaultAsync(o => o.TrackingToken == token);
+        if (order?.Affiliate is null) return null;
+        var a = order.Affiliate;
+        // Pedido terminado hace más de 24 h: el enlace deja de mostrar el detalle.
+        var expired = order.Status is OrderStatus.Fulfilled or OrderStatus.Canceled
+            && (order.UpdatedAt ?? order.CreatedAt) < DateTime.UtcNow.AddHours(-24);
+        var payAtVenue = order.PaymentMethod is PayAtPickupMethod or PayAtTableMethod;
+        return new OrderTrackingDto(
+            a.Name, a.Slug, string.IsNullOrWhiteSpace(a.LogoUrl) ? a.Logo : a.LogoUrl, a.PrimaryColor, a.Address, a.WhatsApp,
+            order.Status.ToString(), payAtVenue, order.CollectedAt is not null,
+            order.TableNumber, order.ScheduledFor?.ToString("yyyy-MM-dd"),
+            order.CreatedAt, order.UpdatedAt ?? order.CreatedAt, order.EstimatedReadyAt,
+            expired ? Array.Empty<OrderItemDto>() : JsonArrayField.Parse<OrderItemDto>(order.ItemsJson),
+            order.Subtotal, order.Tax, order.Tip, order.Total, order.Currency, expired,
+            CanPayOnline: CanPayOnline(order, a));
+    }
+
+    private static bool CanPayOnline(Order order, Affiliate a) =>
+        a.StripeConnectChargesEnabled && !string.IsNullOrEmpty(a.StripeConnectAccountId)
+        && order.CollectedAt is null && order.Status != OrderStatus.Canceled
+        && (order.PaymentMethod is PayAtPickupMethod or PayAtTableMethod || order.Status == OrderStatus.Pending)
+        && order.Status != OrderStatus.Fulfilled;
+
+    public async Task<bool> SubscribeTrackingPushAsync(string token, PushSubscribeRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(token) || token.Length > 64) return false;
+        if (string.IsNullOrWhiteSpace(request.Endpoint) || request.Endpoint.Length > 1000
+            || string.IsNullOrWhiteSpace(request.P256dh) || request.P256dh.Length > 300
+            || string.IsNullOrWhiteSpace(request.Auth) || request.Auth.Length > 100)
+            throw new ArgumentException("Suscripción de push inválida.");
+        var orderId = await _db.Orders.Where(o => o.TrackingToken == token).Select(o => (Guid?)o.Id).FirstOrDefaultAsync();
+        if (orderId is null) return false;
+
+        var existing = await _db.Set<OrderPushSubscription>().Where(s => s.OrderId == orderId.Value).ToListAsync();
+        var same = existing.FirstOrDefault(s => s.Endpoint == request.Endpoint);
+        if (same is not null)
+        {
+            same.P256dh = request.P256dh; same.Auth = request.Auth; same.Lang = request.Lang == "en" ? "en" : "es";
+            same.UpdatedAt = DateTime.UtcNow;
+        }
+        else
+        {
+            if (existing.Count >= 3) throw new ArgumentException("Too many devices for this order.");
+            _db.Set<OrderPushSubscription>().Add(new OrderPushSubscription
+            {
+                OrderId = orderId.Value, Endpoint = request.Endpoint, P256dh = request.P256dh, Auth = request.Auth,
+                Lang = request.Lang == "en" ? "en" : "es",
+            });
+        }
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<TrackingPayResponseDto?> CreateOnlinePaymentAsync(string token, string successUrl, string cancelUrl)
+    {
+        if (string.IsNullOrWhiteSpace(token) || token.Length > 64) return null;
+        if (string.IsNullOrWhiteSpace(successUrl) || string.IsNullOrWhiteSpace(cancelUrl))
+            throw new ArgumentException("Return URLs are required.");
+        var order = await _db.Orders.Include(o => o.Affiliate).FirstOrDefaultAsync(o => o.TrackingToken == token);
+        if (order?.Affiliate is null) return null;
+        if (!CanPayOnline(order, order.Affiliate))
+            throw new ArgumentException("Online payment is not available for this order.");
+
+        StripeConfiguration.ApiKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY") ?? "";
+        var requestOptions = new RequestOptions { StripeAccount = order.Affiliate.StripeConnectAccountId };
+        var currency = order.Currency.ToLowerInvariant();
+
+        // Los precios ya fueron recalculados desde el catálogo al crear el pedido (RepriceItemsAsync): se reusan tal cual.
+        var lineItems = JsonArrayField.Parse<OrderItemDto>(order.ItemsJson).Select(i => new SessionLineItemOptions
+        {
+            Quantity = i.Qty,
+            PriceData = new SessionLineItemPriceDataOptions
+            {
+                Currency = currency,
+                UnitAmount = (long)Math.Round(i.Price * 100),
+                ProductData = new SessionLineItemPriceDataProductDataOptions
+                {
+                    Name = string.IsNullOrWhiteSpace(i.Notes) ? i.Name : $"{i.Name} ({i.Notes})",
+                },
+            },
+        }).ToList();
+        foreach (var (name, amount) in new[] { ("Tax", order.Tax), ("Tip", order.Tip) })
+        {
+            if (amount <= 0) continue;
+            lineItems.Add(new SessionLineItemOptions
+            {
+                Quantity = 1,
+                PriceData = new SessionLineItemPriceDataOptions
+                {
+                    Currency = currency,
+                    UnitAmount = (long)Math.Round(amount * 100),
+                    ProductData = new SessionLineItemPriceDataProductDataOptions { Name = name },
+                },
+            });
+        }
+
+        var session = await new SessionService().CreateAsync(new SessionCreateOptions
+        {
+            Mode = "payment",
+            LineItems = lineItems,
+            SuccessUrl = successUrl,
+            CancelUrl = cancelUrl,
+            ClientReferenceId = order.Id.ToString(),
+            CustomerEmail = string.IsNullOrEmpty(order.CustomerEmail) ? null : order.CustomerEmail,
+        }, requestOptions);
+
+        order.StripeCheckoutSessionId = session.Id;
+        await _db.SaveChangesAsync();
+        return new TrackingPayResponseDto(session.Url);
+    }
+
+    public async Task<OrderTrackingDto?> ConfirmOnlinePaymentAsync(string token, string sessionId)
+    {
+        if (string.IsNullOrWhiteSpace(token) || token.Length > 64) return null;
+        var id = await _db.Orders.Where(o => o.TrackingToken == token).Select(o => (Guid?)o.Id).FirstOrDefaultAsync();
+        if (id is null) return null;
+        await ConfirmCheckoutAsync(id.Value, sessionId);
+        return await GetTrackingAsync(token);
+    }
+
+    /// <summary>Un pedido "pagar al recoger/mesero" que se paga online queda cobrado (CollectedMethod = Online).</summary>
+    private async Task SettleOnlinePaymentAsync(Order order, string? paymentIntentId,
+        string? name = null, string? email = null, string? phone = null)
+    {
+        var payAtVenue = order.PaymentMethod is PayAtPickupMethod or PayAtTableMethod;
+        if (order.Status == OrderStatus.Pending)
+            await MarkPaidAsync(order, paymentIntentId, name, email, phone);
+        if (payAtVenue && order.CollectedAt is null)
+        {
+            order.CollectedAt = DateTime.UtcNow;
+            order.CollectedMethod = "Online";
+            order.StripePaymentIntentId ??= paymentIntentId;
+            order.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+            await _realtime.NotifyOrderUpdatedAsync(order.AffiliateId, ToDto(order));
+        }
+    }
+
+    private static string NewTrackingToken() =>
+        Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16))
+            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+    public async Task<OrderDto?> CollectPaymentAsync(Guid affiliateId, Guid orderId, string method)
+    {
+        var order = await _db.Orders.FirstOrDefaultAsync(o => o.Id == orderId && o.AffiliateId == affiliateId);
+        if (order is null) return null;
+        var normalized = method?.Trim().ToLowerInvariant() switch
+        {
+            "cash" => "Cash", "card" => "Card", "other" => "Other",
+            _ => throw new ArgumentException("Method must be Cash, Card or Other."),
+        };
+        if (order.PaymentMethod is not (PayAtPickupMethod or PayAtTableMethod))
+            throw new ArgumentException("This order was already paid online.");
+        if (order.Status is OrderStatus.Pending or OrderStatus.Canceled)
+            throw new ArgumentException("Accept the order before collecting payment.");
+        if (order.CollectedAt is not null) return ToDto(order);
+
+        order.CollectedAt = DateTime.UtcNow;
+        order.CollectedMethod = normalized;
+        order.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
 
         var dto = ToDto(order);
         await _realtime.NotifyOrderUpdatedAsync(affiliateId, dto);
@@ -443,14 +639,15 @@ public class OrderService : IOrderService
         if (order is null || order.Affiliate is null) return null;
         if (order.StripeCheckoutSessionId != checkoutSessionId) return null; // no confiar en el id sin validarlo contra el pedido
 
-        if (order.Status == OrderStatus.Pending)
+        var payAtVenue = order.PaymentMethod is PayAtPickupMethod or PayAtTableMethod;
+        if (order.Status == OrderStatus.Pending || (payAtVenue && order.CollectedAt is null))
         {
             StripeConfiguration.ApiKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY") ?? "";
             var requestOptions = new RequestOptions { StripeAccount = order.Affiliate.StripeConnectAccountId };
             var session = await new SessionService().GetAsync(checkoutSessionId, requestOptions: requestOptions);
 
             if (session.PaymentStatus == "paid")
-                await MarkPaidAsync(order, session.PaymentIntentId,
+                await SettleOnlinePaymentAsync(order, session.PaymentIntentId,
                     session.CustomerDetails?.Name, session.CustomerDetails?.Email, session.CustomerDetails?.Phone);
         }
 
@@ -464,9 +661,11 @@ public class OrderService : IOrderService
         // la Session de Stripe, no el nuestro (nunca lo mandamos en la URL del webhook).
         var order = await _db.Orders.Include(o => o.Affiliate)
             .FirstOrDefaultAsync(o => o.StripeCheckoutSessionId == checkoutSessionId);
-        if (order is null || order.Status != OrderStatus.Pending) return; // ya confirmado por el camino síncrono, o no es nuestro
+        if (order is null) return;
+        var payAtVenue = order.PaymentMethod is PayAtPickupMethod or PayAtTableMethod;
+        if (order.Status != OrderStatus.Pending && !(payAtVenue && order.CollectedAt is null)) return; // ya confirmado por el camino síncrono
 
-        await MarkPaidAsync(order, paymentIntentId, customerName, customerEmail, customerPhone);
+        await SettleOnlinePaymentAsync(order, paymentIntentId, customerName, customerEmail, customerPhone);
     }
 
     private async Task MarkPaidAsync(Order order, string? paymentIntentId,
@@ -726,6 +925,9 @@ public class OrderService : IOrderService
         o.PaymentMethod,
         o.Tip,
         o.TableNumber,
-        o.ScheduledFor?.ToString("yyyy-MM-dd")
+        o.ScheduledFor?.ToString("yyyy-MM-dd"),
+        o.CollectedAt,
+        o.CollectedMethod,
+        o.EstimatedReadyAt
     );
 }

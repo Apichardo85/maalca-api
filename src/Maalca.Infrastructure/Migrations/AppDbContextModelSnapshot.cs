@@ -1484,8 +1484,21 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<string>("PaymentMethod")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("CollectedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CollectedMethod")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("EstimatedReadyAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateOnly?>("ScheduledFor")
                         .HasColumnType("date");
+
+                    b.Property<string>("TrackingToken")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
@@ -1526,6 +1539,9 @@ namespace Maalca.Infrastructure.Migrations
                     b.HasIndex("AffiliateId", "CreatedAt");
 
                     b.HasIndex("CustomerId");
+
+                    b.HasIndex("TrackingToken")
+                        .IsUnique();
 
                     b.ToTable("Orders");
                 });
@@ -1930,6 +1946,57 @@ namespace Maalca.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("PushSubscriptions");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.OrderPushSubscription", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Auth")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Endpoint")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Lang")
+                        .IsRequired()
+                        .HasMaxLength(5)
+                        .HasColumnType("character varying(5)");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("P256dh")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId");
+
+                    b.HasIndex("OrderId", "Endpoint")
+                        .IsUnique();
+
+                    b.ToTable("OrderPushSubscriptions");
                 });
 
             modelBuilder.Entity("Maalca.Domain.Entities.QueueEntry", b =>
@@ -2726,6 +2793,17 @@ namespace Maalca.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Affiliate");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.OrderPushSubscription", b =>
+                {
+                    b.HasOne("Maalca.Domain.Entities.Order", "Order")
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Order");
                 });
 
             modelBuilder.Entity("Maalca.Domain.Entities.PushSubscription", b =>

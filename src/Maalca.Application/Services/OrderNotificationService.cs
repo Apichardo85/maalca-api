@@ -5,6 +5,8 @@ using Maalca.Application.Common;
 using Maalca.Application.Common.DTOs;
 using Maalca.Application.Common.Interfaces;
 using Maalca.Domain.Entities;
+using Maalca.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace Maalca.Application.Services;
@@ -18,12 +20,14 @@ public class OrderNotificationService : IOrderNotificationService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<OrderNotificationService> _logger;
     private readonly IOwnerNotificationService _owner;
+    private readonly AppDbContext _db;
 
-    public OrderNotificationService(IHttpClientFactory httpClientFactory, ILogger<OrderNotificationService> logger, IOwnerNotificationService owner)
+    public OrderNotificationService(IHttpClientFactory httpClientFactory, ILogger<OrderNotificationService> logger, IOwnerNotificationService owner, AppDbContext db)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _owner = owner;
+        _db = db;
     }
 
     private Task NotifyOwnerAsync(Order order)
@@ -70,6 +74,83 @@ public class OrderNotificationService : IOrderNotificationService
             "orders", order.Id);
     }
 
+    public Task NotifyOrderReceivedAsync(Order order) => SendAsync(order, "received");
+
+    public async Task NotifyCustomerPushAsync(Order order, string kind)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(order.TrackingToken)) return;
+            var baseUrl = Environment.GetEnvironmentVariable("MAALCA_WEB_URL");
+            var secret = Environment.GetEnvironmentVariable("INTERNAL_NOTIFICATIONS_SECRET");
+            if (string.IsNullOrWhiteSpace(baseUrl) || string.IsNullOrWhiteSpace(secret)) return;
+
+            var subs = await _db.Set<OrderPushSubscription>().Where(s => s.OrderId == order.Id).ToListAsync();
+            if (subs.Count == 0) return;
+
+            var name = order.Affiliate?.Name ?? (await _db.Affiliates.Where(a => a.Id == order.AffiliateId).Select(a => a.Name).FirstOrDefaultAsync()) ?? "";
+            int? mins = order.EstimatedReadyAt is { } eta ? Math.Max(1, (int)Math.Ceiling((eta - DateTime.UtcNow).TotalMinutes)) : null;
+            var unpaid = order.PaymentMethod is "PayAtPickup" or "PayAtTable" && order.CollectedAt is null;
+            var total = $"{order.Total.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)} {order.Currency}";
+
+            string es, bodyEs, en, bodyEn;
+            switch (kind)
+            {
+                case "accepted":
+                    es = "Pedido aceptado ✅"; bodyEs = mins is null ? name : $"Listo en ~{mins} min · {name}";
+                    en = "Order accepted ✅"; bodyEn = mins is null ? name : $"Ready in ~{mins} min · {name}";
+                    break;
+                case "delayed":
+                    es = "Tu pedido se retrasó un poco"; bodyEs = mins is null ? name : $"Ahora estará listo en ~{mins} min · {name}";
+                    en = "Your order is running a little late"; bodyEn = mins is null ? name : $"Now ready in ~{mins} min · {name}";
+                    break;
+                case "ready":
+                    es = "¡Tu pedido está listo! 🛍️"; bodyEs = unpaid ? $"Pasa a recogerlo · pagas {total} · {name}" : $"Pasa a recogerlo · {name}";
+                    en = "Your order is ready! 🛍️"; bodyEn = unpaid ? $"Come pick it up · you pay {total} · {name}" : $"Come pick it up · {name}";
+                    break;
+                case "canceled":
+                    es = "Pedido cancelado"; bodyEs = $"{name} canceló tu pedido. Contáctalos si tienes dudas.";
+                    en = "Order canceled"; bodyEn = $"{name} canceled your order. Contact them if you have questions.";
+                    break;
+                default:
+                    return;
+            }
+
+            var payload = new
+            {
+                subscriptions = subs.Select(s => new { endpoint = s.Endpoint, p256dh = s.P256dh, auth = s.Auth, lang = s.Lang }),
+                message = new
+                {
+                    type = "order-customer", title = es, body = bodyEs, titleEn = en, bodyEn,
+                    slug = (string?)null, url = (string?)null, path = $"/t/{order.TrackingToken}",
+                },
+            };
+
+            var client = _httpClientFactory.CreateClient();
+            client.Timeout = TimeSpan.FromSeconds(5);
+            using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl.TrimEnd('/')}/api/internal/notifications/push") { Content = content };
+            request.Headers.Add("X-Internal-Secret", secret);
+            var response = await client.SendAsync(request);
+            if (!response.IsSuccessStatusCode) { _logger.LogWarning("[OrderNotification] Customer push failed ({Status})", response.StatusCode); return; }
+
+            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            if (doc.RootElement.TryGetProperty("expired", out var expiredEl) && expiredEl.ValueKind == JsonValueKind.Array)
+            {
+                var expired = expiredEl.EnumerateArray().Select(e => e.GetString()).Where(e => !string.IsNullOrEmpty(e)).ToList();
+                if (expired.Count > 0)
+                {
+                    _db.Set<OrderPushSubscription>().RemoveRange(subs.Where(s => expired.Contains(s.Endpoint)));
+                    await _db.SaveChangesAsync();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[OrderNotification] Customer push threw ({Kind})", kind);
+        }
+    }
+
     public Task NotifyOrderConfirmedAsync(Order order) => SendAsync(order, "confirmed");
 
     public Task NotifyOrderFulfilledAsync(Order order) => SendAsync(order, "fulfilled");
@@ -85,6 +166,13 @@ public class OrderNotificationService : IOrderNotificationService
         if (string.IsNullOrWhiteSpace(order.CustomerEmail))
             return; // sin correo del cliente no hay a quién notificar
 
+        // Un solo correo por pedido, con el enlace de seguimiento: pagar al recoger/mesero avisa al recibirlo ("received");
+        // pagado online avisa al pagar ("confirmed"). Aceptar y entregar ya no mandan correo (el enlace muestra el estado).
+        var payLater = order.PaymentMethod is "PayAtPickup" or "PayAtTable";
+        if (kind == "fulfilled" && order.TrackingToken is not null) return;
+        if (kind == "confirmed" && payLater) return;
+        if (kind == "received" && !payLater) return;
+
         var baseUrl = Environment.GetEnvironmentVariable("MAALCA_WEB_URL");
         var secret = Environment.GetEnvironmentVariable("INTERNAL_NOTIFICATIONS_SECRET");
         if (string.IsNullOrWhiteSpace(baseUrl) || string.IsNullOrWhiteSpace(secret))
@@ -99,6 +187,7 @@ public class OrderNotificationService : IOrderNotificationService
             var payload = new
             {
                 kind,
+                trackUrl = order.TrackingToken is null ? null : $"{baseUrl.TrimEnd('/')}/t/{order.TrackingToken}",
                 orderId = order.Id.ToString(),
                 businessName = order.Affiliate?.Name ?? "",
                 slug = order.Affiliate?.Slug ?? "",

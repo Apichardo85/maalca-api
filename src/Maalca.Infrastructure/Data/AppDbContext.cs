@@ -52,6 +52,7 @@ public class AppDbContext : DbContext
     public DbSet<OwnerNotification> OwnerNotifications => Set<OwnerNotification>();
     public DbSet<CommunitySignup> CommunitySignups => Set<CommunitySignup>();
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
+    public DbSet<OrderPushSubscription> OrderPushSubscriptions => Set<OrderPushSubscription>();
     public DbSet<Donation> Donations => Set<Donation>();
     public DbSet<CommunityProgram> CommunityPrograms => Set<CommunityProgram>();
 
@@ -112,6 +113,8 @@ public class AppDbContext : DbContext
             entity.Property(e => e.StripePaymentIntentId).HasMaxLength(255);
             entity.Property(e => e.TableNumber).HasMaxLength(20);
             entity.HasIndex(e => e.CustomerId);
+            entity.Property(e => e.TrackingToken).HasMaxLength(64);
+            entity.HasIndex(e => e.TrackingToken).IsUnique();
             entity.HasOne(e => e.Affiliate)
                   .WithMany()
                   .HasForeignKey(e => e.AffiliateId)
@@ -252,6 +255,21 @@ public class AppDbContext : DbContext
                   .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => e.Endpoint).IsUnique();
             entity.HasIndex(e => e.AffiliateId);
+        });
+
+        modelBuilder.Entity<OrderPushSubscription>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Endpoint).IsRequired().HasMaxLength(1000);
+            entity.Property(e => e.P256dh).IsRequired().HasMaxLength(300);
+            entity.Property(e => e.Auth).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Lang).IsRequired().HasMaxLength(5);
+            entity.HasOne(e => e.Order)
+                  .WithMany()
+                  .HasForeignKey(e => e.OrderId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => e.OrderId);
+            entity.HasIndex(e => new { e.OrderId, e.Endpoint }).IsUnique();
         });
 
         // Donation -- donaciones reales de Community via Stripe Connect (backlog 2026-09-26),

@@ -37,7 +37,7 @@ public record CreateOrderRequest(
 /// caso el pedido se guarda igual como Pending, y el storefront debe caer al flujo de
 /// WhatsApp existente en vez de intentar cobrar.
 /// </param>
-public record CreateOrderResponseDto(Guid OrderId, string? CheckoutUrl);
+public record CreateOrderResponseDto(Guid OrderId, string? CheckoutUrl, string? TrackingToken = null);
 
 public record OrderDto(
     Guid Id,
@@ -56,10 +56,50 @@ public record OrderDto(
     string? PaymentMethod = null,
     decimal Tip = 0,
     string? TableNumber = null,
-    string? ScheduledFor = null
+    string? ScheduledFor = null,
+    DateTime? CollectedAt = null,
+    string? CollectedMethod = null,
+    DateTime? EstimatedReadyAt = null
 );
 
-public record UpdateOrderStatusRequest(string Status);
+public record UpdateOrderStatusRequest(string Status, int? EstimatedMinutes = null);
+
+/// <param name="Minutes">Minutos desde ahora hasta que el pedido estará listo (1–240).</param>
+public record SetOrderEtaRequest(int Minutes);
+
+/// <summary>Vista pública (sin login) para /t/{token}: solo lo que el cliente necesita ver de su pedido.</summary>
+public record OrderTrackingDto(
+    string BusinessName,
+    string Slug,
+    string? LogoUrl,
+    string? BrandColor,
+    string? Address,
+    string? WhatsApp,
+    string Status,
+    bool PayAtVenue,
+    bool Collected,
+    string? TableNumber,
+    string? ScheduledFor,
+    DateTime CreatedAt,
+    DateTime UpdatedAt,
+    DateTime? EstimatedReadyAt,
+    IReadOnlyList<OrderItemDto> Items,
+    decimal Subtotal,
+    decimal Tax,
+    decimal Tip,
+    decimal Total,
+    string Currency,
+    bool Expired,
+    bool CanPayOnline = false);
+
+public record TrackingPayRequest(string SuccessUrl, string CancelUrl);
+
+public record TrackingPayResponseDto(string CheckoutUrl);
+
+public record TrackingConfirmRequest(string SessionId);
+
+/// <param name="Method">"Cash" | "Card" | "Other" — cómo se cobró en el local.</param>
+public record CollectOrderPaymentRequest(string Method);
 
 public record ConfirmOrderRequest(string CheckoutSessionId);
 

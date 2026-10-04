@@ -18,4 +18,10 @@ public interface IOrderNotificationService
 
     /// <summary>Pedido de mesa "pagar al mesero" recién creado (queda Pending): avisa al personal para que lo acepte.</summary>
     Task NotifyPayAtTableRequestedAsync(Order order);
+
+    /// <summary>Pedido "pagar al recoger" recibido: el ÚNICO correo al cliente, con el enlace de seguimiento.</summary>
+    Task NotifyOrderReceivedAsync(Order order);
+
+    /// <summary>Push al cliente (si activó "Avísame" en /t/{token}): kind = accepted | delayed | ready | canceled.</summary>
+    Task NotifyCustomerPushAsync(Order order, string kind);
 }
