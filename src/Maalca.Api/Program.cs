@@ -617,7 +617,7 @@ app.MapPost("/api/affiliates/{id:guid}/collaborators", async (
 
     var affiliate = await db.Affiliates.FindAsync(id);
     if (affiliate is null) return Results.NotFound();
-    if (affiliate.Plan != Plan.Entrepreneur)
+    if (affiliate.Plan == Plan.Free)
         return Results.BadRequest(new { error = new { code = "PLAN_REQUIRED", message = "Invitar usuarios es parte del plan Emprendedor." } });
 
     if (string.IsNullOrWhiteSpace(request.Email) || !Enum.TryParse<AffiliateRole>(request.Role, ignoreCase: true, out var role))

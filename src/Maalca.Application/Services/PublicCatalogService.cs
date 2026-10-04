@@ -252,7 +252,8 @@ public class PublicCatalogService : IPublicCatalogService
     // everywhere it's checked (dashboard teasers, the public /board route gate, etc.),
     // instead of hardcoding a plan check at each call site.
     private static PlanCapabilitiesDto BuildCapabilities(Plan plan) =>
-        plan == Plan.Entrepreneur
+        // Enterprise es un tier por ENCIMA de Emprendedor: desbloquea todo lo que desbloquea Emprendedor.
+        plan is Plan.Entrepreneur or Plan.Enterprise
             ? new PlanCapabilitiesDto(true, true, true, true, true, true, true, MenuBoard: true)
             : new PlanCapabilitiesDto(false, false, false, false, false, false, false, MenuBoard: false);
 }

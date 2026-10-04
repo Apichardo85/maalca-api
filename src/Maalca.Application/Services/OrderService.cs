@@ -50,6 +50,7 @@ public class OrderService : IOrderService
         var priced = await RepriceItemsAsync(affiliate.Id, request.Items, request.Tax, request.Tip, scheduledFor);
 
         var tableNumber = await ValidateTableAsync(affiliate, request);
+        if (request.PayAtPickup) await ValidatePickupAsync(affiliate, request, tableNumber);
         var customer = await LinkCustomerAsync(affiliate.Id, request.CustomerName, request.CustomerPhone, request.CustomerEmail);
 
         var order = new Order
@@ -69,7 +70,8 @@ public class OrderService : IOrderService
             TableNumber = tableNumber,
             CustomerId = customer?.Id,
             Channel = tableNumber is null ? "Online" : "Table",
-            PaymentMethod = tableNumber is not null && request.PayAtTable ? PayAtTableMethod : null,
+            PaymentMethod = tableNumber is not null && request.PayAtTable ? PayAtTableMethod
+                : tableNumber is null && request.PayAtPickup ? PayAtPickupMethod : null,
             ScheduledFor = scheduledFor,
         };
         _db.Orders.Add(order);
@@ -77,7 +79,7 @@ public class OrderService : IOrderService
 
         // Pagar al mesero: sin Stripe. Queda Pending y le aparece al personal en el panel
         // (realtime) para que lo acepte; no entra a cocina hasta entonces.
-        if (order.PaymentMethod == PayAtTableMethod)
+        if (order.PaymentMethod == PayAtTableMethod || order.PaymentMethod == PayAtPickupMethod)
         {
             await _notifications.NotifyPayAtTableRequestedAsync(order);
             await _realtime.NotifyOrderUpdatedAsync(affiliate.Id, ToDto(order));
@@ -591,10 +593,11 @@ public class OrderService : IOrderService
 
         var customer = await _db.Customers.FirstOrDefaultAsync(c =>
             c.AffiliateId == affiliateId &&
-            ((phone != null && c.Phone == phone) || (phone == null && email != null && c.Email == email)));
+            ((phone != null && c.Phone == phone) || (email != null && c.Email == email)));
         if (customer is not null)
         {
             if (customer.Email is null && email is not null) customer.Email = email;
+            if (customer.Phone is null && phone is not null) customer.Phone = phone;
             return customer;
         }
 
@@ -611,6 +614,27 @@ public class OrderService : IOrderService
     }
 
     private const string PayAtTableMethod = "PayAtTable";
+    private const string PayAtPickupMethod = "PayAtPickup";
+    private const int MaxPendingPickupPerContact = 2;
+
+    /// <summary>Pedido para recoger pagando en el local: sin cobro online no hay otra barrera, así que
+    /// exige contacto real y limita los pendientes por contacto (anti-spam).</summary>
+    private async Task ValidatePickupAsync(Affiliate affiliate, CreateOrderRequest request, string? tableNumber)
+    {
+        if (tableNumber is not null) throw new ArgumentException("Pay-at-pickup cannot be combined with a table number.");
+        var name = request.CustomerName?.Trim();
+        var phone = request.CustomerPhone?.Trim();
+        var email = request.CustomerEmail?.Trim();
+        if (string.IsNullOrEmpty(name) || (string.IsNullOrEmpty(phone) && string.IsNullOrEmpty(email)))
+            throw new ArgumentException("Pickup orders need a name and a phone or email.");
+        var since = DateTime.UtcNow.AddHours(-3);
+        var pending = await _db.Orders.CountAsync(o =>
+            o.AffiliateId == affiliate.Id && o.PaymentMethod == PayAtPickupMethod && o.Status == OrderStatus.Pending &&
+            o.CreatedAt >= since &&
+            ((phone != null && phone != "" && o.CustomerPhone == phone) || (email != null && email != "" && o.CustomerEmail == email)));
+        if (pending >= MaxPendingPickupPerContact)
+            throw new ArgumentException("You already have pending orders. Please wait for the restaurant to confirm.");
+    }
     private const int MaxTableLength = 20;
     private const int MaxPendingPayAtTablePerTable = 3;
 

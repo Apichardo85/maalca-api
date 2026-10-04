@@ -252,6 +252,8 @@ public class PlatformAdminService : IPlatformAdminService
         var proposals = await _context.Proposals.Where(p => p.CustomerId == customerId && p.AffiliateId == affiliateId).ToListAsync();
         var reservations = await _context.TableReservations.Where(r => r.CustomerId == customerId && r.AffiliateId == affiliateId).ToListAsync();
         var invoices = await _context.Invoices.Include(i => i.Items).Where(i => i.CustomerId == customerId && i.AffiliateId == affiliateId).ToListAsync();
+        // Los pedidos son registro de ventas: NO se borran con el cliente, solo se desenlazan (CustomerId sin FK).
+        var orders = await _context.Orders.Where(o => o.CustomerId == customerId && o.AffiliateId == affiliateId).ToListAsync();
 
         var result = new CustomerCascadeDeleteResultDto(
             appointments.Count, queueEntries.Count, proposals.Count, reservations.Count, invoices.Count);
@@ -261,7 +263,8 @@ public class PlatformAdminService : IPlatformAdminService
         await _audit.LogAsync(affiliateId, "ops.customer.hard_deleted", "Customer", customerId,
             $"Cliente '{customer.Name}' ({customer.Phone ?? "sin teléfono"}) borrado permanentemente desde /ops, " +
             $"junto con {appointments.Count} cita(s), {queueEntries.Count} fila(s) de espera, " +
-            $"{proposals.Count} propuesta(s), {reservations.Count} reserva(s) y {invoices.Count} factura(s).",
+            $"{proposals.Count} propuesta(s), {reservations.Count} reserva(s) y {invoices.Count} factura(s). " +
+            $"{orders.Count} pedido(s) se conservaron sin cliente enlazado.",
             actorId, actorName);
 
         _context.Appointments.RemoveRange(appointments);
@@ -271,6 +274,7 @@ public class PlatformAdminService : IPlatformAdminService
         foreach (var inv in invoices)
             _context.InvoiceItems.RemoveRange(inv.Items);
         _context.Invoices.RemoveRange(invoices);
+        foreach (var o in orders) o.CustomerId = null;
         _context.Customers.Remove(customer);
 
         await _context.SaveChangesAsync();

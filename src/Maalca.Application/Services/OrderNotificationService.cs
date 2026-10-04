@@ -59,12 +59,14 @@ public class OrderNotificationService : IOrderNotificationService
         var who = string.IsNullOrWhiteSpace(order.CustomerName) ? null : order.CustomerName.Trim();
         var total = $"{order.Total.ToString("0.00", inv)} {order.Currency}";
         var table = order.TableNumber;
-        var es = string.Join(" · ", new[] { who, total, string.IsNullOrWhiteSpace(table) ? null : $"Mesa {table}" }.Where(x => x is not null));
-        var en = string.Join(" · ", new[] { who, total, string.IsNullOrWhiteSpace(table) ? null : $"Table {table}" }.Where(x => x is not null));
+        var pickup = order.PaymentMethod == "PayAtPickup";
+        var phone = string.IsNullOrWhiteSpace(order.CustomerPhone) ? null : order.CustomerPhone.Trim();
+        var es = string.Join(" · ", new[] { who, total, string.IsNullOrWhiteSpace(table) ? null : $"Mesa {table}", pickup ? phone : null }.Where(x => x is not null));
+        var en = string.Join(" · ", new[] { who, total, string.IsNullOrWhiteSpace(table) ? null : $"Table {table}", pickup ? phone : null }.Where(x => x is not null));
         return _owner.NotifyAsync(
             order.AffiliateId, "order",
-            "Pedido de mesa por aceptar", es,
-            "Table order to accept", en,
+            pickup ? "Pedido para recoger por aceptar" : "Pedido de mesa por aceptar", es,
+            pickup ? "Pickup order to accept" : "Table order to accept", en,
             "orders", order.Id);
     }
 
@@ -77,7 +79,7 @@ public class OrderNotificationService : IOrderNotificationService
         // Aviso al dueño (badge + push): solo cuando entra un pedido (pagado / confirmado), no al cumplirlo.
         // Va ANTES de los early-returns del correo: el pedido avisa aunque el cliente no haya dado correo.
         // Un pedido de mesa "pagar al mesero" ya avisó al llegar (NotifyPayAtTableRequestedAsync): al aceptarlo no se repite.
-        if (kind == "confirmed" && order.PaymentMethod != "PayAtTable")
+        if (kind == "confirmed" && order.PaymentMethod is not ("PayAtTable" or "PayAtPickup"))
             await NotifyOwnerAsync(order);
 
         if (string.IsNullOrWhiteSpace(order.CustomerEmail))
