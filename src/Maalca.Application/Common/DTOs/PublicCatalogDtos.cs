@@ -34,7 +34,11 @@ public record AffiliatePublicDto(
     string? SecondaryColor = null,
     string? AccentColor = null,
     IReadOnlyDictionary<string, MealPeriodRangeDto>? MealPeriodHours = null,
-    IReadOnlyDictionary<string, CategoryTranslationDto>? CategoryTranslations = null
+    IReadOnlyDictionary<string, CategoryTranslationDto>? CategoryTranslations = null,
+    // Tema por defecto de la vitrina ("dark" | "light"; null = sigue la preferencia del visitante/sistema).
+    // Sale de Affiliate.Settings -> "defaultTheme"; no requiere columna nueva.
+    string? DefaultTheme = null,
+    string? SpanishFlag = null
     // Causas ya no viene acá -- tiene su propio endpoint público
     // /api/public/affiliates/{slug}/causas (backlog 2026-09-25, ver Causa.cs).
 );

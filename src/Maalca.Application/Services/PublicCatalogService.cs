@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Maalca.Application.Common;
 using Maalca.Application.Common.DTOs;
 using Maalca.Application.Common.Interfaces;
@@ -202,7 +203,49 @@ public class PublicCatalogService : IPublicCatalogService
             a.SecondaryColor,
             a.AccentColor,
             JsonObjectField.Parse<Dictionary<string, MealPeriodRangeDto>>(a.MealPeriodHours),
-            JsonObjectField.Parse<Dictionary<string, CategoryTranslationDto>>(a.CategoryTranslations));
+            JsonObjectField.Parse<Dictionary<string, CategoryTranslationDto>>(a.CategoryTranslations),
+            ParseDefaultTheme(a.Settings),
+            ParseSpanishFlag(a.Settings));
+    }
+
+    // Affiliate.Settings es un JSON libre ("{}" por defecto). Solo se lee "defaultTheme": "dark" | "light".
+    // Cualquier otra cosa (JSON roto, otro tipo, otro valor) = null, o sea, sin tema forzado.
+    private static string? ParseDefaultTheme(string? settingsJson)
+    {
+        if (string.IsNullOrWhiteSpace(settingsJson)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(settingsJson);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("defaultTheme", out var v)
+                && v.ValueKind == JsonValueKind.String)
+            {
+                var t = v.GetString()?.ToLowerInvariant();
+                return t is "dark" or "light" ? t : null;
+            }
+        }
+        catch (JsonException) { }
+        return null;
+    }
+
+    // "spanishFlag": codigo ISO-3166 alpha-2 (ej. "MX") de la bandera que el toggle de idioma muestra
+    // junto a "ES" en la pagina publica. Null = default de la plataforma (RD). Solo 2 letras A-Z.
+    private static string? ParseSpanishFlag(string? settingsJson)
+    {
+        if (string.IsNullOrWhiteSpace(settingsJson)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(settingsJson);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("spanishFlag", out var v)
+                && v.ValueKind == JsonValueKind.String)
+            {
+                var c = v.GetString()?.Trim().ToUpperInvariant();
+                return c is { Length: 2 } && c.All(ch => ch is >= 'A' and <= 'Z') ? c : null;
+            }
+        }
+        catch (JsonException) { }
+        return null;
     }
 
     // Single source of truth for what each plan unlocks — flip a value here to change it
