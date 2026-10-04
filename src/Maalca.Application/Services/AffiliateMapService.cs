@@ -24,7 +24,15 @@ public class AffiliateMapService : IAffiliateMapService
         if (expired.Count > 0)
         {
             _context.UserAffiliateMaps.RemoveRange(expired);
-            await _context.SaveChangesAsync();
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // Otra request concurrente ya borró esos grants: es inofensivo.
+                foreach (var e in expired) _context.Entry(e).State = EntityState.Detached;
+            }
         }
 
         return await _context.UserAffiliateMaps
