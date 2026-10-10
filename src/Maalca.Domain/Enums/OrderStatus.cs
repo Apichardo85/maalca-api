@@ -10,4 +10,7 @@ public enum OrderStatus
     // int. Flujo real para Kitchen Display: Pending -> Paid -> Preparing -> Fulfilled -> Canceled,
     // pero el orden numérico del enum no importa, solo que no se reasignen los primeros 4.
     Preparing = 4, // el afiliado marcó el pedido como "en preparación" (Kitchen Display)
+    // Listo para recoger/servir, aún sin entregar. Flujo: Pending -> Paid -> Preparing -> Ready -> Fulfilled.
+    // Persistido como int (5): sin migración de esquema.
+    Ready     = 5,
 }

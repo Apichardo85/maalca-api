@@ -450,7 +450,15 @@ public class OrderService : IOrderService
                 }
             }
             await _notifications.NotifyOrderFulfilledAsync(order);
-            await _notifications.NotifyCustomerPushAsync(order, "ready");
+            // Si pasó por "Listo" el cliente ya recibió el aviso: no se repite al entregar.
+            if (previousStatus != OrderStatus.Ready)
+                await _notifications.NotifyCustomerPushAsync(order, "ready");
+        }
+        else if (parsed == OrderStatus.Ready)
+        {
+            // Listo para recoger/servir: aviso push al cliente (si activó "Avísame") y el enlace de seguimiento lo muestra.
+            if (previousStatus != OrderStatus.Ready)
+                await _notifications.NotifyCustomerPushAsync(order, "ready");
         }
         else if (parsed == OrderStatus.Canceled)
             await _notifications.NotifyCustomerPushAsync(order, "canceled");
