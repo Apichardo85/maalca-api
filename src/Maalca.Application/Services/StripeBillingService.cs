@@ -26,7 +26,7 @@ public class StripeBillingService : IStripeBillingService
             wantsEnterprise ? "STRIPE_PRICE_ENTERPRISE" : "STRIPE_PRICE_ENTREPRENEUR") ?? "";
         if (string.IsNullOrWhiteSpace(priceId))
             throw new KeyNotFoundException("El cobro de este plan todavía no está configurado en la plataforma.");
-        var planName = wantsEnterprise ? nameof(Plan.Enterprise) : nameof(Plan.Entrepreneur);
+        var planName = wantsEnterprise ? nameof(Maalca.Domain.Enums.Plan.Enterprise) : nameof(Maalca.Domain.Enums.Plan.Entrepreneur);
 
         var options = new SessionCreateOptions
         {
@@ -122,7 +122,7 @@ public class StripeBillingService : IStripeBillingService
 
         affiliate.Plan = session.Metadata is not null
             && session.Metadata.TryGetValue("plan", out var planMeta)
-            && string.Equals(planMeta, nameof(Plan.Enterprise), StringComparison.OrdinalIgnoreCase)
+            && string.Equals(planMeta, nameof(Maalca.Domain.Enums.Plan.Enterprise), StringComparison.OrdinalIgnoreCase)
             ? Maalca.Domain.Enums.Plan.Enterprise
             : Maalca.Domain.Enums.Plan.Entrepreneur;
         affiliate.PlanStatus = PlanStatus.Active;
