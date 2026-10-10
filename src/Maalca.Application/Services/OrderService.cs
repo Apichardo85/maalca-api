@@ -501,7 +501,8 @@ public class OrderService : IOrderService
             order.CreatedAt, order.UpdatedAt ?? order.CreatedAt, order.EstimatedReadyAt,
             expired ? Array.Empty<OrderItemDto>() : JsonArrayField.Parse<OrderItemDto>(order.ItemsJson),
             order.Subtotal, order.Tax, order.Tip, order.Total, order.Currency, expired,
-            CanPayOnline: CanPayOnline(order, a));
+            CanPayOnline: CanPayOnline(order, a),
+            Language: a.Language == "en" ? "en" : "es");
     }
 
     private static bool CanPayOnline(Order order, Affiliate a) =>

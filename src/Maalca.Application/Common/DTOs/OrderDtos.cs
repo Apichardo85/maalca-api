@@ -90,7 +90,8 @@ public record OrderTrackingDto(
     decimal Total,
     string Currency,
     bool Expired,
-    bool CanPayOnline = false);
+    bool CanPayOnline = false,
+    string Language = "es");
 
 public record TrackingPayRequest(string SuccessUrl, string CancelUrl);
 
