@@ -1,6 +1,7 @@
 namespace Maalca.Application.Common.DTOs;
 
-public record CreateCheckoutSessionRequest(string SuccessUrl, string CancelUrl);
+/// <param name="Plan">"Entrepreneur" (default) o "Enterprise". Cada uno usa su propio price de Stripe.</param>
+public record CreateCheckoutSessionRequest(string SuccessUrl, string CancelUrl, string? Plan = null);
 
 public record CheckoutSessionResponseDto(string Url);
 

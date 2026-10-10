@@ -21,7 +21,12 @@ public class StripeBillingService : IStripeBillingService
             ?? throw new KeyNotFoundException("Affiliate not found");
 
         StripeConfiguration.ApiKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY") ?? "";
-        var priceId = Environment.GetEnvironmentVariable("STRIPE_PRICE_ENTREPRENEUR") ?? "";
+        var wantsEnterprise = string.Equals(request.Plan, "Enterprise", StringComparison.OrdinalIgnoreCase);
+        var priceId = Environment.GetEnvironmentVariable(
+            wantsEnterprise ? "STRIPE_PRICE_ENTERPRISE" : "STRIPE_PRICE_ENTREPRENEUR") ?? "";
+        if (string.IsNullOrWhiteSpace(priceId))
+            throw new KeyNotFoundException("El cobro de este plan todavía no está configurado en la plataforma.");
+        var planName = wantsEnterprise ? nameof(Plan.Enterprise) : nameof(Plan.Entrepreneur);
 
         var options = new SessionCreateOptions
         {
@@ -32,7 +37,12 @@ public class StripeBillingService : IStripeBillingService
             },
             SuccessUrl = request.SuccessUrl,
             CancelUrl = request.CancelUrl,
-            ClientReferenceId = affiliateId.ToString()
+            ClientReferenceId = affiliateId.ToString(),
+            Metadata = new Dictionary<string, string> { ["plan"] = planName },
+            SubscriptionData = new SessionSubscriptionDataOptions
+            {
+                Metadata = new Dictionary<string, string> { ["plan"] = planName }
+            }
         };
 
         if (!string.IsNullOrEmpty(affiliate.StripeCustomerId))
@@ -110,7 +120,11 @@ public class StripeBillingService : IStripeBillingService
         var affiliate = await _db.Affiliates.FindAsync(affiliateId);
         if (affiliate is null) return;
 
-        affiliate.Plan = Maalca.Domain.Enums.Plan.Entrepreneur;
+        affiliate.Plan = session.Metadata is not null
+            && session.Metadata.TryGetValue("plan", out var planMeta)
+            && string.Equals(planMeta, nameof(Plan.Enterprise), StringComparison.OrdinalIgnoreCase)
+            ? Maalca.Domain.Enums.Plan.Enterprise
+            : Maalca.Domain.Enums.Plan.Entrepreneur;
         affiliate.PlanStatus = PlanStatus.Active;
         affiliate.PlanStartedAt ??= DateTime.UtcNow;
         if (!string.IsNullOrEmpty(session.SubscriptionId))
