@@ -103,7 +103,9 @@ public record PlanCapabilitiesDto(
     bool BrandingFull,
     bool HidePoweredBy,
     bool CustomDomain,
-    bool MenuBoard
+    bool MenuBoard,
+    // true = el afiliado completó Stripe Connect (ChargesEnabled): solo entonces la web ofrece pago con tarjeta.
+    bool StripeReady = false
 );
 
 public record PublicCatalogResponse(

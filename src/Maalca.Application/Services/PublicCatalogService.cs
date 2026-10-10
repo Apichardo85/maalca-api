@@ -160,7 +160,7 @@ public class PublicCatalogService : IPublicCatalogService
         return new PublicCatalogResponse(
             await MapToAffiliatePublicDtoAsync(affiliate),
             items,
-            BuildCapabilities(affiliate.Plan),
+            BuildCapabilities(affiliate.Plan) with { StripeReady = affiliate.StripeConnectChargesEnabled && !string.IsNullOrEmpty(affiliate.StripeConnectAccountId) },
             screenAds,
             screen?.AdFrequency ?? affiliate.AdFrequency,
             screen?.Language ?? affiliate.Language,
