@@ -38,7 +38,10 @@ public record AffiliatePublicDto(
     // Tema por defecto de la vitrina ("dark" | "light"; null = sigue la preferencia del visitante/sistema).
     // Sale de Affiliate.Settings -> "defaultTheme"; no requiere columna nueva.
     string? DefaultTheme = null,
-    string? SpanishFlag = null
+    string? SpanishFlag = null,
+    // Idioma principal del negocio (Affiliate.Language: "es" | "en"). Idioma inicial de la vitrina
+    // cuando el visitante aun no eligio uno, y base de los correos al cliente.
+    string? Language = null
     // Causas ya no viene acá -- tiene su propio endpoint público
     // /api/public/affiliates/{slug}/causas (backlog 2026-09-25, ver Causa.cs).
 );

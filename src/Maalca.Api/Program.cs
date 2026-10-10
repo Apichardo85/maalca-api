@@ -3540,7 +3540,9 @@ app.MapGet("/api/space/{slug}", async (
             trialDaysRemaining, trialEndsAt, affiliate.Currency, affiliate.ZoomLink,
             affiliate.SecondaryColor, affiliate.AccentColor,
             JsonObjectField.Parse<Dictionary<string, MealPeriodRangeDto>>(affiliate.MealPeriodHours),
-            JsonObjectField.Parse<Dictionary<string, CategoryTranslationDto>>(affiliate.CategoryTranslations)),
+            JsonObjectField.Parse<Dictionary<string, CategoryTranslationDto>>(affiliate.CategoryTranslations),
+            affiliate.Language,
+            PublicCatalogService.ParseSpanishFlag(affiliate.Settings)),
         items, realCount,
         new ProgressDto(
             FirstProductAdded: completedKeys.Contains(MilestoneKeys.FirstProductAdded),

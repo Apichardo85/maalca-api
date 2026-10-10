@@ -205,7 +205,8 @@ public class PublicCatalogService : IPublicCatalogService
             JsonObjectField.Parse<Dictionary<string, MealPeriodRangeDto>>(a.MealPeriodHours),
             JsonObjectField.Parse<Dictionary<string, CategoryTranslationDto>>(a.CategoryTranslations),
             ParseDefaultTheme(a.Settings),
-            ParseSpanishFlag(a.Settings));
+            ParseSpanishFlag(a.Settings),
+            a.Language);
     }
 
     // Affiliate.Settings es un JSON libre ("{}" por defecto). Solo se lee "defaultTheme": "dark" | "light".
@@ -230,7 +231,7 @@ public class PublicCatalogService : IPublicCatalogService
 
     // "spanishFlag": codigo ISO-3166 alpha-2 (ej. "MX") de la bandera que el toggle de idioma muestra
     // junto a "ES" en la pagina publica. Null = default de la plataforma (RD). Solo 2 letras A-Z.
-    private static string? ParseSpanishFlag(string? settingsJson)
+    public static string? ParseSpanishFlag(string? settingsJson)
     {
         if (string.IsNullOrWhiteSpace(settingsJson)) return null;
         try

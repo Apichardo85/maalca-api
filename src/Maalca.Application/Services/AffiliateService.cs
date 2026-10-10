@@ -91,7 +91,11 @@ public class AffiliateService : IAffiliateService
             affiliate.Currency = currency;
         }
         if (request.AdFrequency.HasValue) affiliate.AdFrequency = request.AdFrequency.Value > 0 ? request.AdFrequency.Value : null;
-        if (request.Language != null) affiliate.Language = request.Language.Trim().ToLowerInvariant();
+        if (request.Language != null)
+        {
+            var lang = request.Language.Trim().ToLowerInvariant();
+            if (lang is "es" or "en") affiliate.Language = lang;
+        }
         if (request.BoardTheme != null)
         {
             if (!Enum.TryParse<BoardTheme>(request.BoardTheme, ignoreCase: true, out var theme))
