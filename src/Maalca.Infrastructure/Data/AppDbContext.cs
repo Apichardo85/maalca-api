@@ -50,6 +50,7 @@ public class AppDbContext : DbContext
     public DbSet<Activity> Activities => Set<Activity>();
     public DbSet<Causa> Causas => Set<Causa>();
     public DbSet<OwnerNotification> OwnerNotifications => Set<OwnerNotification>();
+    public DbSet<EmailEvent> EmailEvents => Set<EmailEvent>();
     public DbSet<CommunitySignup> CommunitySignups => Set<CommunitySignup>();
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
     public DbSet<OrderPushSubscription> OrderPushSubscriptions => Set<OrderPushSubscription>();
@@ -97,6 +98,20 @@ public class AppDbContext : DbContext
         {
             entity.HasKey(e => e.EventId);
             entity.Property(e => e.EventId).HasMaxLength(255);
+        });
+
+        modelBuilder.Entity<EmailEvent>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.SvixId).HasMaxLength(255).IsRequired();
+            entity.Property(e => e.EventType).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.ResendEmailId).HasMaxLength(255);
+            entity.Property(e => e.ToEmail).HasMaxLength(320);
+            entity.Property(e => e.Subject).HasMaxLength(500);
+            entity.Property(e => e.ClickedUrl).HasMaxLength(2000);
+            entity.HasIndex(e => e.SvixId).IsUnique();
+            entity.HasIndex(e => e.ResendEmailId);
+            entity.HasIndex(e => e.OccurredAt);
         });
 
         // Order

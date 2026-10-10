@@ -880,6 +880,42 @@ bool ValidInternalSecret(HttpContext ctx)
     return provided == configured;
 }
 
+// ============ INTERNAL: EVENTOS DE CORREO (Resend webhook) ============
+// maalca-web recibe el webhook de Resend, verifica la firma Svix y reenvía el evento acá.
+app.MapPost("/api/internal/email-events", async (HttpContext ctx, AppDbContext db, EmailEventIn body) =>
+{
+    if (!ValidInternalSecret(ctx)) return Results.Unauthorized();
+    if (string.IsNullOrWhiteSpace(body.SvixId) || string.IsNullOrWhiteSpace(body.EventType))
+        return Results.BadRequest(new { error = new { code = "VALIDATION", message = "SvixId y EventType son requeridos" } });
+
+    if (await db.EmailEvents.AnyAsync(e => e.SvixId == body.SvixId)) return Results.Ok(new { duplicate = true });
+
+    db.EmailEvents.Add(new EmailEvent
+    {
+        SvixId = body.SvixId,
+        EventType = body.EventType,
+        ResendEmailId = body.ResendEmailId,
+        ToEmail = body.ToEmail,
+        Subject = body.Subject,
+        ClickedUrl = body.ClickedUrl,
+        OccurredAt = (body.OccurredAt ?? DateTime.UtcNow).ToUniversalTime()
+    });
+    await db.SaveChangesAsync();
+    return Results.Ok(new { duplicate = false });
+});
+
+app.MapGet("/api/internal/email-events", async (HttpContext ctx, AppDbContext db, string? to, string? type, int take = 100) =>
+{
+    if (!ValidInternalSecret(ctx)) return Results.Unauthorized();
+    var q = db.EmailEvents.AsNoTracking().AsQueryable();
+    if (!string.IsNullOrWhiteSpace(to)) q = q.Where(e => e.ToEmail == to);
+    if (!string.IsNullOrWhiteSpace(type)) q = q.Where(e => e.EventType == type);
+    var rows = await q.OrderByDescending(e => e.OccurredAt).Take(Math.Clamp(take, 1, 500))
+        .Select(e => new { e.EventType, e.ToEmail, e.Subject, e.ClickedUrl, e.OccurredAt, e.ResendEmailId })
+        .ToListAsync();
+    return Results.Ok(rows);
+});
+
 app.MapGet("/api/internal/appointments/due-reminders", async (HttpContext ctx, AppDbContext db, int withinMinutes = 180) =>
 {
     if (!ValidInternalSecret(ctx)) return Results.Unauthorized();
@@ -4268,3 +4304,7 @@ app.MapGet("/health", () =>
    .AllowAnonymous();
 
 app.Run();
+
+// Cuerpo del webhook interno de eventos de correo (los tipos van después de las top-level statements).
+record EmailEventIn(string SvixId, string EventType, string? ResendEmailId, string? ToEmail,
+    string? Subject, string? ClickedUrl, DateTime? OccurredAt);
