@@ -430,12 +430,25 @@ public class OrderService : IOrderService
             return ToDto(order);
         }
 
+        var previousStatus = order.Status;
         order.Status = parsed;
         order.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
         if (parsed == OrderStatus.Fulfilled)
         {
+            // Un pedido entregado cuenta como visita del cliente (antes TotalVisits solo subía con citas/filas/reservas).
+            if (previousStatus != OrderStatus.Fulfilled && order.CustomerId is { } customerId)
+            {
+                var customer = await _db.Customers.FirstOrDefaultAsync(c => c.Id == customerId);
+                if (customer is not null)
+                {
+                    customer.TotalVisits += 1;
+                    customer.LastVisit = DateTime.UtcNow;
+                    customer.UpdatedAt = DateTime.UtcNow;
+                    await _db.SaveChangesAsync();
+                }
+            }
             await _notifications.NotifyOrderFulfilledAsync(order);
             await _notifications.NotifyCustomerPushAsync(order, "ready");
         }
