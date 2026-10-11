@@ -1497,6 +1497,9 @@ namespace Maalca.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("AcknowledgedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid>("AffiliateId")
                         .HasColumnType("uuid");
 

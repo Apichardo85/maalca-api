@@ -425,6 +425,9 @@ public class OrderService : IOrderService
         {
             order.PaymentMethod ??= "Manual";
             if (estimatedMinutes is > 0 and <= 240) order.EstimatedReadyAt = DateTime.UtcNow.AddMinutes(estimatedMinutes.Value);
+            // Aceptar ES reconocer: silencia la alarma de la Estación de pedidos en todos los
+            // dispositivos sin que haga falta una segunda llamada a AcknowledgeAsync.
+            order.AcknowledgedAt ??= DateTime.UtcNow;
             await MarkPaidAsync(order, null);
             await _notifications.NotifyCustomerPushAsync(order, "accepted");
             return ToDto(order);
@@ -479,6 +482,22 @@ public class OrderService : IOrderService
         await _db.SaveChangesAsync();
         if (previousEta is not null && order.EstimatedReadyAt > previousEta)
             await _notifications.NotifyCustomerPushAsync(order, "delayed");
+        var dto = ToDto(order);
+        await _realtime.NotifyOrderUpdatedAsync(affiliateId, dto);
+        return dto;
+    }
+
+    public async Task<OrderDto?> AcknowledgeAsync(Guid affiliateId, Guid orderId)
+    {
+        var order = await _db.Orders.FirstOrDefaultAsync(o => o.Id == orderId && o.AffiliateId == affiliateId);
+        if (order is null) return null;
+        // No-op si ya estaba reconocido (p. ej. otra tablet de la estación llegó primero) — no
+        // pisa el timestamp original ni dispara un UpdatedAt/notificación de más.
+        if (order.AcknowledgedAt is null)
+        {
+            order.AcknowledgedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+        }
         var dto = ToDto(order);
         await _realtime.NotifyOrderUpdatedAsync(affiliateId, dto);
         return dto;
@@ -950,6 +969,7 @@ public class OrderService : IOrderService
         o.ScheduledFor?.ToString("yyyy-MM-dd"),
         o.CollectedAt,
         o.CollectedMethod,
-        o.EstimatedReadyAt
+        o.EstimatedReadyAt,
+        o.AcknowledgedAt
     );
 }

@@ -72,4 +72,11 @@ public class Order : BaseEntity
     // pedido sin login ni correos por cada cambio. EstimatedReadyAt = la hora estimada que el personal fija al aceptar.
     public string? TrackingToken { get; set; }
     public DateTime? EstimatedReadyAt { get; set; }
+
+    // Estación de pedidos (tablet dedicada, alarma hasta que alguien atiende): cuándo el
+    // personal reconoció este pedido. Para PayAtPickup/PayAtTable, aceptar (Pending -> Paid)
+    // ya lo marca junto con EstimatedReadyAt. Para un pedido que llega directo en Paid (pagado
+    // online con Stripe), queda null hasta que alguien lo toca en la estación — así la alarma
+    // sabe qué pedidos siguen sin que nadie los vea, sin depender de qué pantalla esté abierta.
+    public DateTime? AcknowledgedAt { get; set; }
 }

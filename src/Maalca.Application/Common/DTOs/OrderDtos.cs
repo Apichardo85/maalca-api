@@ -59,7 +59,8 @@ public record OrderDto(
     string? ScheduledFor = null,
     DateTime? CollectedAt = null,
     string? CollectedMethod = null,
-    DateTime? EstimatedReadyAt = null
+    DateTime? EstimatedReadyAt = null,
+    DateTime? AcknowledgedAt = null
 );
 
 public record UpdateOrderStatusRequest(string Status, int? EstimatedMinutes = null);

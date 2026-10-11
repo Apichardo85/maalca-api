@@ -2877,6 +2877,19 @@ app.MapPatch("/api/affiliates/{id}/orders/{orderId}/eta", async (
     }
 });
 
+app.MapPatch("/api/affiliates/{id}/orders/{orderId}/acknowledge", async (
+    HttpContext ctx, IOrderService orderService, Guid id, Guid orderId) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    var result = await orderService.AcknowledgeAsync(id, orderId);
+    if (result is null)
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Order not found" } });
+    return Results.Ok(result);
+});
+
 app.MapPatch("/api/affiliates/{id}/orders/{orderId}/collect", async (
     HttpContext ctx, IOrderService orderService, Guid id, Guid orderId, CollectOrderPaymentRequest request) =>
 {

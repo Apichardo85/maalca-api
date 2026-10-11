@@ -34,6 +34,11 @@ public interface IOrderService
     /// <summary>Fija/ajusta la hora estimada de entrega (minutos desde ahora).</summary>
     Task<OrderDto?> SetEstimateAsync(Guid affiliateId, Guid orderId, int minutes);
 
+    /// <summary>Estación de pedidos: marca un pedido como visto/atendido sin cambiar su estado
+    /// (para pedidos que llegan ya Paid, p. ej. pagados online con Stripe) — silencia la alarma
+    /// de la estación en todos los dispositivos. No-op si ya estaba reconocido.</summary>
+    Task<OrderDto?> AcknowledgeAsync(Guid affiliateId, Guid orderId);
+
     /// <summary>Vista pública del pedido por token de seguimiento (null si el token no existe).</summary>
     Task<OrderTrackingDto?> GetTrackingAsync(string token);
 
