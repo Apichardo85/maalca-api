@@ -52,7 +52,7 @@ public interface IOrderService
     Task<OrderTrackingDto?> ConfirmOnlinePaymentAsync(string token, string sessionId);
 
     /// <summary>Registra el cobro en el local de un pedido "pagar al recoger/mesero" ya aceptado.</summary>
-    Task<OrderDto?> CollectPaymentAsync(Guid affiliateId, Guid orderId, string method);
+    Task<OrderDto?> CollectPaymentAsync(Guid affiliateId, Guid orderId, string method, string? reference = null);
 
     /// <summary>
     /// Confirmación síncrona al volver del Checkout hospedado de Stripe. Verifica el estado real

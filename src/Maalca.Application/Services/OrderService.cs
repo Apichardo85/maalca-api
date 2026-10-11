@@ -649,7 +649,7 @@ public class OrderService : IOrderService
         Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16))
             .TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
-    public async Task<OrderDto?> CollectPaymentAsync(Guid affiliateId, Guid orderId, string method)
+    public async Task<OrderDto?> CollectPaymentAsync(Guid affiliateId, Guid orderId, string method, string? reference = null)
     {
         var order = await _db.Orders.FirstOrDefaultAsync(o => o.Id == orderId && o.AffiliateId == affiliateId);
         if (order is null) return null;
@@ -666,6 +666,7 @@ public class OrderService : IOrderService
 
         order.CollectedAt = DateTime.UtcNow;
         order.CollectedMethod = normalized;
+        order.CollectedReference = string.IsNullOrWhiteSpace(reference) ? null : reference.Trim();
         order.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
@@ -970,6 +971,7 @@ public class OrderService : IOrderService
         o.CollectedAt,
         o.CollectedMethod,
         o.EstimatedReadyAt,
-        o.AcknowledgedAt
+        o.AcknowledgedAt,
+        o.CollectedReference
     );
 }

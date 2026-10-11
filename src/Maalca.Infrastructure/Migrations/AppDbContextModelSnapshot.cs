@@ -1513,6 +1513,9 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<string>("CollectedMethod")
                         .HasColumnType("text");
 
+                    b.Property<string>("CollectedReference")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 

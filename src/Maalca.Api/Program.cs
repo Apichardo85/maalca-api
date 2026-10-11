@@ -2899,7 +2899,7 @@ app.MapPatch("/api/affiliates/{id}/orders/{orderId}/collect", async (
 
     try
     {
-        var result = await orderService.CollectPaymentAsync(id, orderId, request.Method);
+        var result = await orderService.CollectPaymentAsync(id, orderId, request.Method, request.Reference);
         if (result is null)
             return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Order not found" } });
         return Results.Ok(result);
