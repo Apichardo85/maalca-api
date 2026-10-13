@@ -41,7 +41,11 @@ public record AffiliatePublicDto(
     string? SpanishFlag = null,
     // Idioma principal del negocio (Affiliate.Language: "es" | "en"). Idioma inicial de la vitrina
     // cuando el visitante aun no eligio uno, y base de los correos al cliente.
-    string? Language = null
+    string? Language = null,
+    // false = el módulo "orders" está apagado para este negocio (nadie está atendiendo pedidos en línea):
+    // la vitrina oculta el carrito/pickup y ofrece el canal directo (WhatsApp/teléfono). Default true
+    // para no cambiar nada en clientes que no usan el toggle.
+    bool OrdersEnabled = true
     // Causas ya no viene acá -- tiene su propio endpoint público
     // /api/public/affiliates/{slug}/causas (backlog 2026-09-25, ver Causa.cs).
 );

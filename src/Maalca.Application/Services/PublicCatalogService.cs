@@ -207,7 +207,10 @@ public class PublicCatalogService : IPublicCatalogService
             JsonObjectField.Parse<Dictionary<string, CategoryTranslationDto>>(a.CategoryTranslations),
             ParseDefaultTheme(a.Settings),
             ParseSpanishFlag(a.Settings),
-            a.Language);
+            a.Language,
+            Maalca.Application.Common.ModuleCatalog
+                .FilterActive(a.ModulosActivos, a.BusinessType.ToString())
+                .Contains("orders", StringComparer.OrdinalIgnoreCase));
     }
 
     // Affiliate.Settings es un JSON libre ("{}" por defecto). Solo se lee "defaultTheme": "dark" | "light".

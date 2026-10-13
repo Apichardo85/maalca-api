@@ -39,6 +39,15 @@ public class OrderService : IOrderService
     {
         var affiliate = await _db.Affiliates.FirstOrDefaultAsync(a => a.Slug == affiliateSlug && a.Published);
         if (affiliate is null) return null;
+
+        // Módulo "orders" apagado = nadie está atendiendo pedidos: no se crea ninguno (ni pickup, ni mesa, ni
+        // con tarjeta), aunque alguien tenga la página abierta de antes o llame al endpoint directo.
+        // Mismo criterio que las reservas (PublicBookingService): ModulosActivos explícito manda y null
+        // cae al default por tipo de negocio.
+        var activeModules = ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString());
+        if (!activeModules.Contains("orders", StringComparer.OrdinalIgnoreCase))
+            throw new ArgumentException("Este negocio no está recibiendo pedidos en línea por ahora. Contáctalo directamente.");
+
         if (request.Items.Count == 0) throw new ArgumentException("Order must have at least one item.");
 
         // El navegador NO es fuente de verdad de precios: nombre y precio salen del catálogo del
