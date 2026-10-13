@@ -43,7 +43,8 @@ public record UpdateAffiliateProfileRequest(
     string? ZoomLink = null,   // Link fijo de la sala de Zoom del negocio (ver Affiliate.ZoomLink)
     // Paleta (ver Affiliate.SecondaryColor/AccentColor): "#RRGGBB"; "" = borrar y volver al cálculo automático.
     string? SecondaryColor = null,
-    string? AccentColor = null
+    string? AccentColor = null,
+    string? BoardLayout = null  // "Classic" | "Hero" | "Grid" | ... (ver BoardLayout enum)
 );
 
 public record AffiliatePublicProfileDto(

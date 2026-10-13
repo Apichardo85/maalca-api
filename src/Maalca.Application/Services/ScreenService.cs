@@ -38,6 +38,7 @@ public class ScreenService : IScreenService
             Language = NormalizeLanguage(request.Language),
             BoardTheme = theme,
             TransitionEffect = ParseEffect(request.TransitionEffect),
+            Layout = ParseLayout(request.Layout),
             AdFrequency = request.AdFrequency,
             CategoryFilter = string.IsNullOrWhiteSpace(request.CategoryFilter) ? null : request.CategoryFilter.Trim(),
             ContentMode = ParseContentMode(request.ContentMode),
@@ -61,6 +62,7 @@ public class ScreenService : IScreenService
         screen.Language = NormalizeLanguage(request.Language);
         screen.BoardTheme = ParseTheme(request.BoardTheme);
         screen.TransitionEffect = ParseEffect(request.TransitionEffect);
+        screen.Layout = ParseLayout(request.Layout);
         screen.AdFrequency = request.AdFrequency;
         screen.CategoryFilter = string.IsNullOrWhiteSpace(request.CategoryFilter) ? null : request.CategoryFilter.Trim();
         screen.ContentMode = ParseContentMode(request.ContentMode);
@@ -97,6 +99,14 @@ public class ScreenService : IScreenService
         return parsed;
     }
 
+    private static BoardLayout? ParseLayout(string? layout)
+    {
+        if (string.IsNullOrWhiteSpace(layout)) return null;
+        if (!Enum.TryParse<BoardLayout>(layout, ignoreCase: true, out var parsed))
+            throw new ArgumentException($"Invalid layout '{layout}'.");
+        return parsed;
+    }
+
     private static ScreenContentMode ParseContentMode(string? mode)
     {
         if (string.IsNullOrWhiteSpace(mode)) return ScreenContentMode.Menu;
@@ -108,5 +118,6 @@ public class ScreenService : IScreenService
     private static ScreenDto ToDto(Screen s) => new(
         s.Id, s.Name, s.SortOrder, s.Language, s.BoardTheme?.ToString(), s.AdFrequency, s.CategoryFilter,
         s.TransitionEffect?.ToString(), s.ContentMode.ToString(),
-        s.AdIds is null ? null : JsonArrayField.Parse<Guid>(s.AdIds));
+        s.AdIds is null ? null : JsonArrayField.Parse<Guid>(s.AdIds),
+        s.Layout?.ToString());
 }

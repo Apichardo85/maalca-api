@@ -286,6 +286,9 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<string>("Timezone")
                         .HasColumnType("text");
 
+                    b.Property<int>("BoardLayout")
+                        .HasColumnType("integer");
+
                     b.Property<int>("TransitionEffect")
                         .HasColumnType("integer");
 
@@ -2223,6 +2226,9 @@ namespace Maalca.Infrastructure.Migrations
                         .HasColumnType("character varying(120)");
 
                     b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Layout")
                         .HasColumnType("integer");
 
                     b.Property<int?>("TransitionEffect")

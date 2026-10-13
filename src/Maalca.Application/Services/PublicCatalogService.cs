@@ -165,7 +165,8 @@ public class PublicCatalogService : IPublicCatalogService
             screen?.AdFrequency ?? affiliate.AdFrequency,
             screen?.Language ?? affiliate.Language,
             (screen?.BoardTheme ?? affiliate.BoardTheme).ToString(),
-            (screen?.TransitionEffect ?? affiliate.TransitionEffect).ToString());
+            (screen?.TransitionEffect ?? affiliate.TransitionEffect).ToString(),
+            (screen?.Layout ?? affiliate.BoardLayout).ToString());
     }
 
     public async Task<List<FeaturedAffiliateDto>> GetFeaturedAffiliatesAsync()

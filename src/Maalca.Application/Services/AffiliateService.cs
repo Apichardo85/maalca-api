@@ -108,6 +108,12 @@ public class AffiliateService : IAffiliateService
                 throw new ArgumentException($"Invalid transitionEffect '{request.TransitionEffect}'.");
             affiliate.TransitionEffect = effect;
         }
+        if (request.BoardLayout != null)
+        {
+            if (!Enum.TryParse<BoardLayout>(request.BoardLayout, ignoreCase: true, out var layout))
+                throw new ArgumentException($"Invalid boardLayout '{request.BoardLayout}'.");
+            affiliate.BoardLayout = layout;
+        }
 
         await _context.SaveChangesAsync();
 
