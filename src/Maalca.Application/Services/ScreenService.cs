@@ -40,7 +40,7 @@ public class ScreenService : IScreenService
             TransitionEffect = ParseEffect(request.TransitionEffect),
             Layout = ParseLayout(request.Layout),
             AdFrequency = request.AdFrequency,
-            CategoryFilter = string.IsNullOrWhiteSpace(request.CategoryFilter) ? null : request.CategoryFilter.Trim(),
+            CategoryFilter = NormalizeCategoryFilter(request.CategoryFilter),
             ContentMode = ParseContentMode(request.ContentMode),
             AdIds = request.AdIds is null ? null : JsonArrayField.Serialize(request.AdIds),
         };
@@ -64,7 +64,7 @@ public class ScreenService : IScreenService
         screen.TransitionEffect = ParseEffect(request.TransitionEffect);
         screen.Layout = ParseLayout(request.Layout);
         screen.AdFrequency = request.AdFrequency;
-        screen.CategoryFilter = string.IsNullOrWhiteSpace(request.CategoryFilter) ? null : request.CategoryFilter.Trim();
+        screen.CategoryFilter = NormalizeCategoryFilter(request.CategoryFilter);
         screen.ContentMode = ParseContentMode(request.ContentMode);
         screen.AdIds = request.AdIds is null ? null : JsonArrayField.Serialize(request.AdIds);
 
@@ -78,6 +78,24 @@ public class ScreenService : IScreenService
             ?? throw new KeyNotFoundException("Screen not found");
         _db.Screens.Remove(screen);
         await _db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Limpia el filtro de categorías escrito a mano: recorta espacios, descarta vacíos y repetidos
+    /// (sin distinguir mayúsculas) y lo guarda como "A, B, C". Vacío = null (mostrar todo).
+    /// El límite de 500 coincide con la columna; antes un texto largo fallaba recién al guardar en BD.
+    /// </summary>
+    private static string? NormalizeCategoryFilter(string? filter)
+    {
+        if (string.IsNullOrWhiteSpace(filter)) return null;
+        var parts = filter.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .DistinctBy(c => c.ToLowerInvariant())
+            .ToList();
+        if (parts.Count == 0) return null;
+        var normalized = string.Join(", ", parts);
+        if (normalized.Length > 500)
+            throw new ArgumentException("El filtro de categorías es demasiado largo (máximo 500 caracteres).");
+        return normalized;
     }
 
     private static string? NormalizeLanguage(string? language)
