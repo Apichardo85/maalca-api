@@ -876,14 +876,14 @@ public class OrderService : IOrderService
         var phone = request.CustomerPhone?.Trim();
         var email = request.CustomerEmail?.Trim();
         if (string.IsNullOrEmpty(name) || (string.IsNullOrEmpty(phone) && string.IsNullOrEmpty(email)))
-            throw new ArgumentException("Pickup orders need a name and a phone or email.");
+            throw new ArgumentException("Para pedir y pagar al recoger necesitamos tu nombre y un teléfono o correo.");
         var since = DateTime.UtcNow.AddHours(-3);
         var pending = await _db.Orders.CountAsync(o =>
             o.AffiliateId == affiliate.Id && o.PaymentMethod == PayAtPickupMethod && o.Status == OrderStatus.Pending &&
             o.CreatedAt >= since &&
             ((phone != null && phone != "" && o.CustomerPhone == phone) || (email != null && email != "" && o.CustomerEmail == email)));
         if (pending >= MaxPendingPickupPerContact)
-            throw new ArgumentException("You already have pending orders. Please wait for the restaurant to confirm.");
+            throw new ArgumentException("Ya tienes pedidos pendientes. Espera a que el negocio los confirme.");
     }
     private const int MaxTableLength = 20;
     private const int MaxPendingPayAtTablePerTable = 3;
