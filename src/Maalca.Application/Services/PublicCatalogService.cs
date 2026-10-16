@@ -105,12 +105,7 @@ public class PublicCatalogService : IPublicCatalogService
                         .ToListAsync())
                         .Select(CatalogItemMapper.FromService).ToList(),
 
-                BusinessType.Retail =>
-                    (await _db.InventoryItems
-                        .Where(i => i.AffiliateId == affiliate.Id && i.IsPubliclyVisible && i.Status == "Active")
-                        .OrderBy(i => i.SortOrder).ThenBy(i => i.Name)
-                        .ToListAsync())
-                        .Select(CatalogItemMapper.FromInventoryItem).ToList(),
+                BusinessType.Retail => await RetailItemsAsync(affiliate.Id),
 
                 _ => new List<CatalogItemDto>()
             };
@@ -261,4 +256,38 @@ public class PublicCatalogService : IPublicCatalogService
         plan is Plan.Entrepreneur or Plan.Enterprise
             ? new PlanCapabilitiesDto(true, true, true, true, true, true, true, MenuBoard: true)
             : new PlanCapabilitiesDto(false, false, false, false, false, false, false, MenuBoard: false);
+
+    /// <summary>
+    /// Catálogo Retail (InventoryItem). En items con control de stock, Stock ya descuenta las unidades
+    /// reservadas por pedidos "pagar al recoger" abiertos (mismo criterio que OrderService), para que
+    /// "Quedan N" / "Agotado" en la tienda coincidan con lo que el API aceptará al pedir.
+    /// </summary>
+    private async Task<List<CatalogItemDto>> RetailItemsAsync(Guid affiliateId)
+    {
+        var inventory = await _db.InventoryItems
+            .Where(i => i.AffiliateId == affiliateId && i.IsPubliclyVisible && i.Status == "Active")
+            .OrderBy(i => i.SortOrder).ThenBy(i => i.Name)
+            .ToListAsync();
+        var dtos = inventory.Select(CatalogItemMapper.FromInventoryItem).ToList();
+        if (!inventory.Any(i => i.TrackStock)) return dtos;
+
+        var since = DateTime.UtcNow.AddHours(-24);
+        var openJson = await _db.Orders
+            .Where(o => o.AffiliateId == affiliateId && o.PaymentMethod == OrderService.PayAtPickupMethod
+                        && o.CollectedAt == null && o.CreatedAt >= since
+                        && o.Status != OrderStatus.Canceled && o.Status != OrderStatus.Fulfilled)
+            .Select(o => o.ItemsJson)
+            .ToListAsync();
+        var reserved = new Dictionary<Guid, int>();
+        foreach (var json in openJson)
+            foreach (var line in JsonArrayField.Parse<OrderItemDto>(json))
+                if (Guid.TryParse(line.ItemId, out var id))
+                    reserved[id] = reserved.GetValueOrDefault(id) + line.Qty;
+
+        return dtos
+            .Select(d => d.TrackStock == true && d.Stock.HasValue
+                ? d with { Stock = Math.Max(0, d.Stock.Value - reserved.GetValueOrDefault(d.Id)) }
+                : d)
+            .ToList();
+    }
 }

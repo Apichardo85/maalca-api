@@ -897,7 +897,7 @@ public class OrderService : IOrderService
     }
 
     private const string PayAtTableMethod = "PayAtTable";
-    private const string PayAtPickupMethod = "PayAtPickup";
+    internal const string PayAtPickupMethod = "PayAtPickup";
     private const int MaxPendingPickupPerContact = 2;
 
     /// <summary>Pedido para recoger pagando en el local: sin cobro online no hay otra barrera, así que
