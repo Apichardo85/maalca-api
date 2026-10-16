@@ -259,9 +259,20 @@ public class OrderService : IOrderService
         var inventory = await _db.InventoryItems
             .Where(i => i.AffiliateId == affiliateId && distinctIds.Contains(i.Id)
                         && i.IsPubliclyVisible && i.Status == "Active")
-            .Select(i => new { i.Id, i.Name, Price = i.UnitPrice })
+            .Select(i => new { i.Id, i.Name, Price = i.UnitPrice, i.TrackStock, i.Quantity })
             .ToListAsync();
         foreach (var i in inventory) catalog.TryAdd(i.Id, (i.Name, i.Price));
+
+        // Control de stock opt-in (InventoryItem.TrackStock): el pedido no puede superar lo que queda.
+        // Solo es una validación al crear — el descuento real sigue ocurriendo al pasar a Paid.
+        foreach (var inv in inventory.Where(i => i.TrackStock))
+        {
+            var wanted = requested.Where(r => Guid.TryParse(r.ItemId, out var rid) && rid == inv.Id).Sum(r => r.Qty);
+            if (wanted > inv.Quantity)
+                throw new ArgumentException(inv.Quantity <= 0
+                    ? $"\"{inv.Name}\" está agotado."
+                    : $"\"{inv.Name}\": solo quedan {Math.Floor(inv.Quantity)}.");
+        }
 
         var lines = new List<OrderItemDto>(requested.Count);
         decimal subtotal = 0;

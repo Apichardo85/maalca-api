@@ -1185,6 +1185,9 @@ namespace Maalca.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<bool>("TrackStock")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Unit")
                         .IsRequired()
                         .HasMaxLength(20)

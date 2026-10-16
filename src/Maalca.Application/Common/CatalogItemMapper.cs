@@ -28,5 +28,5 @@ public static class CatalogItemMapper
         // decimal desde Comunidad Fase 1 — se trunca solo para esta vista.
         null, (int)Math.Floor(i.Quantity), i.Status,
         i.DescriptionEn, Images: JsonArrayField.Parse<string>(i.Images), NameEn: i.NameEn,
-        CompareAtPrice: i.CompareAtPrice);
+        CompareAtPrice: i.CompareAtPrice, TrackStock: i.TrackStock);
 }

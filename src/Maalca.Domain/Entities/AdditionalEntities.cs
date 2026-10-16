@@ -87,6 +87,10 @@ public class InventoryItem : AuditableEntity
     /// <summary>Precio "antes" (tachado) para mostrar una oferta en la tienda pública. Null = sin oferta;
     /// solo tiene efecto visual si es mayor que UnitPrice (el cobro siempre usa UnitPrice).</summary>
     public decimal? CompareAtPrice { get; set; }
+    /// <summary>Si es true, la tienda pública muestra "Agotado"/"Quedan N" y el API rechaza pedidos que
+    /// superen Quantity. Default false: Quantity vale 0 por defecto y sin este interruptor todos los
+    /// productos que nunca llevaron inventario aparecerían agotados.</summary>
+    public bool TrackStock { get; set; } = false;
     /// <summary>Unidad de medida ("unidad", "kg", "lb", "litro", "caja", ...) — solo informativa,
     /// no convierte cantidades entre unidades.</summary>
     public string Unit { get; set; } = "unidad";

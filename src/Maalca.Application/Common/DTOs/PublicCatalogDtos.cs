@@ -81,7 +81,8 @@ public record CatalogItemDto(
     IReadOnlyList<PublicIngredientDto>? Ingredients = null, // Product (Restaurante) — solo si tiene receta; null/vacío = sin receta definida
     string? Modality = null,                    // Service only — "InPerson" | "Virtual" | "Both". Null en Product/InventoryItem.
     IReadOnlyList<PublicModifierGroupDto>? ModifierGroups = null, // Product (Restaurante) — grupos reutilizables enlazados (ej. "Guarnición"); null/vacío = sin modificadores
-    decimal? CompareAtPrice = null              // InventoryItem only — precio "antes" tachado (oferta); null = sin oferta
+    decimal? CompareAtPrice = null,             // InventoryItem only — precio "antes" tachado (oferta); null = sin oferta
+    bool? TrackStock = null                     // InventoryItem only — true = Stock es real (mostrar Agotado/Quedan N); null/false = sin control
 );
 
 // Solo nombre — a propósito no expone Quantity (cantidad por porción, dato interno de receta)
