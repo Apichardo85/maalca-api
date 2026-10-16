@@ -38,7 +38,14 @@ public record AffiliatePublicDto(
     // Tema por defecto de la vitrina ("dark" | "light"; null = sigue la preferencia del visitante/sistema).
     // Sale de Affiliate.Settings -> "defaultTheme"; no requiere columna nueva.
     string? DefaultTheme = null,
-    string? SpanishFlag = null
+    string? SpanishFlag = null,
+    // Idioma principal del negocio (Affiliate.Language: "es" | "en"). Idioma inicial de la vitrina
+    // cuando el visitante aun no eligio uno, y base de los correos al cliente.
+    string? Language = null,
+    // false = el módulo "orders" está apagado para este negocio (nadie está atendiendo pedidos en línea):
+    // la vitrina oculta el carrito/pickup y ofrece el canal directo (WhatsApp/teléfono). Default true
+    // para no cambiar nada en clientes que no usan el toggle.
+    bool OrdersEnabled = true
     // Causas ya no viene acá -- tiene su propio endpoint público
     // /api/public/affiliates/{slug}/causas (backlog 2026-09-25, ver Causa.cs).
 );
@@ -103,7 +110,9 @@ public record PlanCapabilitiesDto(
     bool BrandingFull,
     bool HidePoweredBy,
     bool CustomDomain,
-    bool MenuBoard
+    bool MenuBoard,
+    // true = el afiliado completó Stripe Connect (ChargesEnabled): solo entonces la web ofrece pago con tarjeta.
+    bool StripeReady = false
 );
 
 public record PublicCatalogResponse(
@@ -114,5 +123,6 @@ public record PublicCatalogResponse(
     int? AdFrequency = null,               // cada cuántos slides de categoría se inserta un comercial (null/0 = ninguno)
     string? Language = null,               // Fase 9 — "es" | "en", preferencia del board
     string? BoardTheme = null,             // Fase 9 — "Dark" | "Light"
-    string? TransitionEffect = null        // Fase 9 — "Fade" | "Slide" | "Zoom" | "None"
+    string? TransitionEffect = null,        // Fase 9 — "Fade" | "Slide" | "Zoom" | "None"
+    string? Layout = null                  // "Classic" | "Hero" | "Grid" | ... plantilla visual
 );

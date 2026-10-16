@@ -780,7 +780,7 @@ app.MapGet("/api/affiliates/{affiliateId:guid}/customers/{id:guid}/history", asy
     var orders = await db.Orders.AsNoTracking()
         .Where(o => o.AffiliateId == affiliateId && o.CustomerId == id)
         .OrderByDescending(o => o.CreatedAt)
-        .Select(o => new { o.Id, o.Total, Status = o.Status.ToString(), o.CreatedAt, o.TableNumber, o.Channel })
+        .Select(o => new { o.Id, o.Total, Status = o.Status.ToString(), o.CreatedAt, o.TableNumber, o.Channel, o.PaymentMethod, o.CollectedAt })
         .ToListAsync();
 
     return Results.Ok(new { customer, appointments, invoices, reservations, queueVisits, proposals, orders });
@@ -879,6 +879,42 @@ bool ValidInternalSecret(HttpContext ctx)
     var provided = ctx.Request.Headers["X-Internal-Secret"].ToString();
     return provided == configured;
 }
+
+// ============ INTERNAL: EVENTOS DE CORREO (Resend webhook) ============
+// maalca-web recibe el webhook de Resend, verifica la firma Svix y reenvía el evento acá.
+app.MapPost("/api/internal/email-events", async (HttpContext ctx, AppDbContext db, EmailEventIn body) =>
+{
+    if (!ValidInternalSecret(ctx)) return Results.Unauthorized();
+    if (string.IsNullOrWhiteSpace(body.SvixId) || string.IsNullOrWhiteSpace(body.EventType))
+        return Results.BadRequest(new { error = new { code = "VALIDATION", message = "SvixId y EventType son requeridos" } });
+
+    if (await db.EmailEvents.AnyAsync(e => e.SvixId == body.SvixId)) return Results.Ok(new { duplicate = true });
+
+    db.EmailEvents.Add(new EmailEvent
+    {
+        SvixId = body.SvixId,
+        EventType = body.EventType,
+        ResendEmailId = body.ResendEmailId,
+        ToEmail = body.ToEmail,
+        Subject = body.Subject,
+        ClickedUrl = body.ClickedUrl,
+        OccurredAt = (body.OccurredAt ?? DateTime.UtcNow).ToUniversalTime()
+    });
+    await db.SaveChangesAsync();
+    return Results.Ok(new { duplicate = false });
+});
+
+app.MapGet("/api/internal/email-events", async (HttpContext ctx, AppDbContext db, string? to, string? type, int take = 100) =>
+{
+    if (!ValidInternalSecret(ctx)) return Results.Unauthorized();
+    var q = db.EmailEvents.AsNoTracking().AsQueryable();
+    if (!string.IsNullOrWhiteSpace(to)) q = q.Where(e => e.ToEmail == to);
+    if (!string.IsNullOrWhiteSpace(type)) q = q.Where(e => e.EventType == type);
+    var rows = await q.OrderByDescending(e => e.OccurredAt).Take(Math.Clamp(take, 1, 500))
+        .Select(e => new { e.EventType, e.ToEmail, e.Subject, e.ClickedUrl, e.OccurredAt, e.ResendEmailId })
+        .ToListAsync();
+    return Results.Ok(rows);
+});
 
 app.MapGet("/api/internal/appointments/due-reminders", async (HttpContext ctx, AppDbContext db, int withinMinutes = 180) =>
 {
@@ -2841,6 +2877,19 @@ app.MapPatch("/api/affiliates/{id}/orders/{orderId}/eta", async (
     }
 });
 
+app.MapPatch("/api/affiliates/{id}/orders/{orderId}/acknowledge", async (
+    HttpContext ctx, IOrderService orderService, Guid id, Guid orderId) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    var result = await orderService.AcknowledgeAsync(id, orderId);
+    if (result is null)
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Order not found" } });
+    return Results.Ok(result);
+});
+
 app.MapPatch("/api/affiliates/{id}/orders/{orderId}/collect", async (
     HttpContext ctx, IOrderService orderService, Guid id, Guid orderId, CollectOrderPaymentRequest request) =>
 {
@@ -2850,7 +2899,7 @@ app.MapPatch("/api/affiliates/{id}/orders/{orderId}/collect", async (
 
     try
     {
-        var result = await orderService.CollectPaymentAsync(id, orderId, request.Method);
+        var result = await orderService.CollectPaymentAsync(id, orderId, request.Method, request.Reference);
         if (result is null)
             return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Order not found" } });
         return Results.Ok(result);
@@ -3228,7 +3277,9 @@ app.MapGet("/api/affiliates/{id}/metrics/detailed", async (HttpContext ctx, AppD
     // de pagarse, y al pasar a Preparing/Fulfilled dejaba de contar como ingreso) — mismo patrón que rawEvents arriba: se trae solo lo
     // necesario y se agrupa en memoria por fecha (evita repetir el problema de GroupBy+Date en SQL).
     var paidOrders = await db.Orders
-        .Where(o => o.AffiliateId == id && (o.Status == OrderStatus.Paid || o.Status == OrderStatus.Preparing || o.Status == OrderStatus.Fulfilled) && o.CreatedAt >= startDate)
+        .Where(o => o.AffiliateId == id && (o.Status == OrderStatus.Paid || o.Status == OrderStatus.Preparing || o.Status == OrderStatus.Ready || o.Status == OrderStatus.Fulfilled) && o.CreatedAt >= startDate
+            // Pedidos que se pagan en el local (PayAtPickup/PayAtTable): "Paid" = aceptado, no cobrado. Solo cuentan como ingreso al registrar el cobro.
+            && (o.PaymentMethod == null || (o.PaymentMethod != "PayAtPickup" && o.PaymentMethod != "PayAtTable") || o.CollectedAt != null))
         .Select(o => new { o.CreatedAt, o.Total, o.Currency })
         .ToListAsync();
 
@@ -3288,7 +3339,7 @@ app.MapGet("/api/affiliates/{id}/metrics/reports", async (HttpContext ctx, AppDb
     var startDate = DateTime.UtcNow.Date.AddDays(-(effectiveDays - 1));
 
     var paidOrders = await db.Orders
-        .Where(o => o.AffiliateId == id && (o.Status == OrderStatus.Paid || o.Status == OrderStatus.Preparing || o.Status == OrderStatus.Fulfilled) && o.CreatedAt >= startDate)
+        .Where(o => o.AffiliateId == id && (o.Status == OrderStatus.Paid || o.Status == OrderStatus.Preparing || o.Status == OrderStatus.Ready || o.Status == OrderStatus.Fulfilled) && o.CreatedAt >= startDate)
         .Select(o => new { o.CreatedAt, o.Total, o.Currency, o.Channel, o.PaymentMethod, o.ItemsJson })
         .ToListAsync();
 
@@ -3502,7 +3553,9 @@ app.MapGet("/api/space/{slug}", async (
             trialDaysRemaining, trialEndsAt, affiliate.Currency, affiliate.ZoomLink,
             affiliate.SecondaryColor, affiliate.AccentColor,
             JsonObjectField.Parse<Dictionary<string, MealPeriodRangeDto>>(affiliate.MealPeriodHours),
-            JsonObjectField.Parse<Dictionary<string, CategoryTranslationDto>>(affiliate.CategoryTranslations)),
+            JsonObjectField.Parse<Dictionary<string, CategoryTranslationDto>>(affiliate.CategoryTranslations),
+            affiliate.Language,
+            PublicCatalogService.ParseSpanishFlag(affiliate.Settings)),
         items, realCount,
         new ProgressDto(
             FirstProductAdded: completedKeys.Contains(MilestoneKeys.FirstProductAdded),
@@ -4266,3 +4319,7 @@ app.MapGet("/health", () =>
    .AllowAnonymous();
 
 app.Run();
+
+// Cuerpo del webhook interno de eventos de correo (los tipos van después de las top-level statements).
+record EmailEventIn(string SvixId, string EventType, string? ResendEmailId, string? ToEmail,
+    string? Subject, string? ClickedUrl, DateTime? OccurredAt);

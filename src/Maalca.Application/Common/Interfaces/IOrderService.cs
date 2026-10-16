@@ -34,6 +34,11 @@ public interface IOrderService
     /// <summary>Fija/ajusta la hora estimada de entrega (minutos desde ahora).</summary>
     Task<OrderDto?> SetEstimateAsync(Guid affiliateId, Guid orderId, int minutes);
 
+    /// <summary>Estación de pedidos: marca un pedido como visto/atendido sin cambiar su estado
+    /// (para pedidos que llegan ya Paid, p. ej. pagados online con Stripe) — silencia la alarma
+    /// de la estación en todos los dispositivos. No-op si ya estaba reconocido.</summary>
+    Task<OrderDto?> AcknowledgeAsync(Guid affiliateId, Guid orderId);
+
     /// <summary>Vista pública del pedido por token de seguimiento (null si el token no existe).</summary>
     Task<OrderTrackingDto?> GetTrackingAsync(string token);
 
@@ -47,7 +52,7 @@ public interface IOrderService
     Task<OrderTrackingDto?> ConfirmOnlinePaymentAsync(string token, string sessionId);
 
     /// <summary>Registra el cobro en el local de un pedido "pagar al recoger/mesero" ya aceptado.</summary>
-    Task<OrderDto?> CollectPaymentAsync(Guid affiliateId, Guid orderId, string method);
+    Task<OrderDto?> CollectPaymentAsync(Guid affiliateId, Guid orderId, string method, string? reference = null);
 
     /// <summary>
     /// Confirmación síncrona al volver del Checkout hospedado de Stripe. Verifica el estado real

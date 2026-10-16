@@ -63,6 +63,7 @@ public class ReservationNotificationService : IReservationNotificationService
                 time = reservation.Time,
                 partySize = reservation.PartySize,
                 notes = reservation.Notes,
+                language = affiliate.Language ?? "es",
             };
 
             var client = _httpClientFactory.CreateClient();
@@ -119,6 +120,7 @@ public class ReservationNotificationService : IReservationNotificationService
                 time = reservation.Time,
                 partySize = reservation.PartySize,
                 notes = reservation.Notes,
+                language = affiliate.Language ?? "es",
             };
 
             var client = _httpClientFactory.CreateClient();

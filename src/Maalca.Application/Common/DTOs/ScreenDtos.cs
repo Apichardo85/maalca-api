@@ -10,7 +10,8 @@ public record ScreenDto(
     string? CategoryFilter,
     string? TransitionEffect = null,
     string ContentMode = "Menu",
-    IReadOnlyList<Guid>? AdIds = null
+    IReadOnlyList<Guid>? AdIds = null,
+    string? Layout = null
 );
 
 public record CreateScreenRequest(
@@ -21,7 +22,8 @@ public record CreateScreenRequest(
     string? CategoryFilter = null,
     string? TransitionEffect = null,
     string? ContentMode = null,
-    IReadOnlyList<Guid>? AdIds = null
+    IReadOnlyList<Guid>? AdIds = null,
+    string? Layout = null
 );
 
 /// <summary>
@@ -40,5 +42,6 @@ public record UpdateScreenRequest(
     string? CategoryFilter,
     string? TransitionEffect = null,
     string? ContentMode = null,
-    IReadOnlyList<Guid>? AdIds = null
+    IReadOnlyList<Guid>? AdIds = null,
+    string? Layout = null
 );

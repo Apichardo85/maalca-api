@@ -18,6 +18,8 @@ public class PlatformAdminService : IPlatformAdminService
     // una única fuente de verdad compartida entre los dos repos, así que si el precio cambia
     // hay que tocar ambos lados a mano.
     private const decimal EntrepreneurPriceUsd = 38m;
+    // Enterprise = PRICE_PROFESSIONAL en maalca-web/src/config/pricing.ts.
+    private const decimal EnterprisePriceUsd = 95m;
 
     // Cuánto dura un grant de impersonation antes de expirar solo — ver UserAffiliateMap.IsImpersonation.
     private static readonly TimeSpan ImpersonationDuration = TimeSpan.FromHours(2);
@@ -58,13 +60,14 @@ public class PlatformAdminService : IPlatformAdminService
             .ToListAsync();
 
         var entrepreneur = affiliates.Count(a => a.Plan == Plan.Entrepreneur);
+        var enterprise = affiliates.Count(a => a.Plan == Plan.Enterprise);
         var monthStart = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 0, 0, 0, DateTimeKind.Utc);
 
         return new PlatformOpsOverviewDto(
             TotalAffiliates: affiliates.Count,
             EntrepreneurCount: entrepreneur,
-            FreeCount: affiliates.Count - entrepreneur,
-            MrrUsd: entrepreneur * EntrepreneurPriceUsd,
+            FreeCount: affiliates.Count - entrepreneur - enterprise,
+            MrrUsd: entrepreneur * EntrepreneurPriceUsd + enterprise * EnterprisePriceUsd,
             NewThisMonth: affiliates.Count(a => a.CreatedAt >= monthStart),
             PublishedCount: affiliates.Count(a => a.Published));
     }

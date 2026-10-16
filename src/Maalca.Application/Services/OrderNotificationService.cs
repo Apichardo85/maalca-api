@@ -198,6 +198,7 @@ public class OrderNotificationService : IOrderNotificationService
                 items = items.Select(i => new { name = i.Name, price = i.Price, qty = i.Qty }),
                 total = order.Total,
                 currency = order.Currency,
+                language = order.Affiliate?.Language ?? "es",
             };
 
             var client = _httpClientFactory.CreateClient();

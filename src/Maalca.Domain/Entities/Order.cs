@@ -67,9 +67,20 @@ public class Order : BaseEntity
     // Null = por cobrar. Los pedidos que ya pagaron online no lo usan.
     public DateTime? CollectedAt { get; set; }
     public string? CollectedMethod { get; set; }
+    // Referencia manual al cobro real cuando el negocio usa su propio POS para cobrar (ej. Toast)
+    // en vez de que MaalCa procese el pago — el dinero nunca pasa por aquí, esto es solo una nota
+    // para poder conciliar el pedido de MaalCa con el ticket/orden real de ese POS. Opcional, libre.
+    public string? CollectedReference { get; set; }
 
     // Seguimiento público: token aleatorio (128 bits, base64url) para /t/{token} — el cliente ve el estado de su
     // pedido sin login ni correos por cada cambio. EstimatedReadyAt = la hora estimada que el personal fija al aceptar.
     public string? TrackingToken { get; set; }
     public DateTime? EstimatedReadyAt { get; set; }
+
+    // Estación de pedidos (tablet dedicada, alarma hasta que alguien atiende): cuándo el
+    // personal reconoció este pedido. Para PayAtPickup/PayAtTable, aceptar (Pending -> Paid)
+    // ya lo marca junto con EstimatedReadyAt. Para un pedido que llega directo en Paid (pagado
+    // online con Stripe), queda null hasta que alguien lo toca en la estación — así la alarma
+    // sabe qué pedidos siguen sin que nadie los vea, sin depender de qué pantalla esté abierta.
+    public DateTime? AcknowledgedAt { get; set; }
 }

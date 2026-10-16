@@ -38,7 +38,10 @@ public record BusinessDto(
     string? SecondaryColor = null,
     string? AccentColor = null,
     IReadOnlyDictionary<string, MealPeriodRangeDto>? MealPeriodHours = null,
-    IReadOnlyDictionary<string, CategoryTranslationDto>? CategoryTranslations = null
+    IReadOnlyDictionary<string, CategoryTranslationDto>? CategoryTranslations = null,
+    // Idioma principal del negocio (Affiliate.Language) y bandera junto a "ES" (Settings.spanishFlag).
+    string Language = "es",
+    string? SpanishFlag = null
 );
 
 public record ProcessStepDto(string Title, string Description);

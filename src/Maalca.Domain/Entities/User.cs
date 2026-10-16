@@ -162,6 +162,7 @@ public class Affiliate : BaseEntity
     // default porque es el idioma con el que se creó todo el catálogo existente hasta ahora.
     public string Language { get; set; } = "es";
     public BoardTheme BoardTheme { get; set; } = BoardTheme.Dark;
+    public BoardLayout BoardLayout { get; set; } = BoardLayout.Classic;
     public BoardTransitionEffect TransitionEffect { get; set; } = BoardTransitionEffect.Fade;
 
     public ICollection<User> Users { get; set; } = new List<User>();

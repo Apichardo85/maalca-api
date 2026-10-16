@@ -59,7 +59,9 @@ public record OrderDto(
     string? ScheduledFor = null,
     DateTime? CollectedAt = null,
     string? CollectedMethod = null,
-    DateTime? EstimatedReadyAt = null
+    DateTime? EstimatedReadyAt = null,
+    DateTime? AcknowledgedAt = null,
+    string? CollectedReference = null
 );
 
 public record UpdateOrderStatusRequest(string Status, int? EstimatedMinutes = null);
@@ -90,7 +92,8 @@ public record OrderTrackingDto(
     decimal Total,
     string Currency,
     bool Expired,
-    bool CanPayOnline = false);
+    bool CanPayOnline = false,
+    string Language = "es");
 
 public record TrackingPayRequest(string SuccessUrl, string CancelUrl);
 
@@ -99,7 +102,8 @@ public record TrackingPayResponseDto(string CheckoutUrl);
 public record TrackingConfirmRequest(string SessionId);
 
 /// <param name="Method">"Cash" | "Card" | "Other" — cómo se cobró en el local.</param>
-public record CollectOrderPaymentRequest(string Method);
+/// <param name="Reference">Opcional — número de ticket/orden del POS real (ej. Toast) para conciliar luego. MaalCa no procesa el cobro, solo lo anota.</param>
+public record CollectOrderPaymentRequest(string Method, string? Reference = null);
 
 public record ConfirmOrderRequest(string CheckoutSessionId);
 

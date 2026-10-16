@@ -38,8 +38,9 @@ public class ScreenService : IScreenService
             Language = NormalizeLanguage(request.Language),
             BoardTheme = theme,
             TransitionEffect = ParseEffect(request.TransitionEffect),
+            Layout = ParseLayout(request.Layout),
             AdFrequency = request.AdFrequency,
-            CategoryFilter = string.IsNullOrWhiteSpace(request.CategoryFilter) ? null : request.CategoryFilter.Trim(),
+            CategoryFilter = NormalizeCategoryFilter(request.CategoryFilter),
             ContentMode = ParseContentMode(request.ContentMode),
             AdIds = request.AdIds is null ? null : JsonArrayField.Serialize(request.AdIds),
         };
@@ -61,8 +62,9 @@ public class ScreenService : IScreenService
         screen.Language = NormalizeLanguage(request.Language);
         screen.BoardTheme = ParseTheme(request.BoardTheme);
         screen.TransitionEffect = ParseEffect(request.TransitionEffect);
+        screen.Layout = ParseLayout(request.Layout);
         screen.AdFrequency = request.AdFrequency;
-        screen.CategoryFilter = string.IsNullOrWhiteSpace(request.CategoryFilter) ? null : request.CategoryFilter.Trim();
+        screen.CategoryFilter = NormalizeCategoryFilter(request.CategoryFilter);
         screen.ContentMode = ParseContentMode(request.ContentMode);
         screen.AdIds = request.AdIds is null ? null : JsonArrayField.Serialize(request.AdIds);
 
@@ -76,6 +78,24 @@ public class ScreenService : IScreenService
             ?? throw new KeyNotFoundException("Screen not found");
         _db.Screens.Remove(screen);
         await _db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Limpia el filtro de categorías escrito a mano: recorta espacios, descarta vacíos y repetidos
+    /// (sin distinguir mayúsculas) y lo guarda como "A, B, C". Vacío = null (mostrar todo).
+    /// El límite de 500 coincide con la columna; antes un texto largo fallaba recién al guardar en BD.
+    /// </summary>
+    private static string? NormalizeCategoryFilter(string? filter)
+    {
+        if (string.IsNullOrWhiteSpace(filter)) return null;
+        var parts = filter.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .DistinctBy(c => c.ToLowerInvariant())
+            .ToList();
+        if (parts.Count == 0) return null;
+        var normalized = string.Join(", ", parts);
+        if (normalized.Length > 500)
+            throw new ArgumentException("El filtro de categorías es demasiado largo (máximo 500 caracteres).");
+        return normalized;
     }
 
     private static string? NormalizeLanguage(string? language)
@@ -97,6 +117,14 @@ public class ScreenService : IScreenService
         return parsed;
     }
 
+    private static BoardLayout? ParseLayout(string? layout)
+    {
+        if (string.IsNullOrWhiteSpace(layout)) return null;
+        if (!Enum.TryParse<BoardLayout>(layout, ignoreCase: true, out var parsed))
+            throw new ArgumentException($"Invalid layout '{layout}'.");
+        return parsed;
+    }
+
     private static ScreenContentMode ParseContentMode(string? mode)
     {
         if (string.IsNullOrWhiteSpace(mode)) return ScreenContentMode.Menu;
@@ -108,5 +136,6 @@ public class ScreenService : IScreenService
     private static ScreenDto ToDto(Screen s) => new(
         s.Id, s.Name, s.SortOrder, s.Language, s.BoardTheme?.ToString(), s.AdFrequency, s.CategoryFilter,
         s.TransitionEffect?.ToString(), s.ContentMode.ToString(),
-        s.AdIds is null ? null : JsonArrayField.Parse<Guid>(s.AdIds));
+        s.AdIds is null ? null : JsonArrayField.Parse<Guid>(s.AdIds),
+        s.Layout?.ToString());
 }

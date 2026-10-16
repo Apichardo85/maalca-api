@@ -39,6 +39,15 @@ public class OrderService : IOrderService
     {
         var affiliate = await _db.Affiliates.FirstOrDefaultAsync(a => a.Slug == affiliateSlug && a.Published);
         if (affiliate is null) return null;
+
+        // Módulo "orders" apagado = nadie está atendiendo pedidos: no se crea ninguno (ni pickup, ni mesa, ni
+        // con tarjeta), aunque alguien tenga la página abierta de antes o llame al endpoint directo.
+        // Mismo criterio que las reservas (PublicBookingService): ModulosActivos explícito manda y null
+        // cae al default por tipo de negocio.
+        var activeModules = ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString());
+        if (!activeModules.Contains("orders", StringComparer.OrdinalIgnoreCase))
+            throw new ArgumentException("Este negocio no está recibiendo pedidos en línea por ahora. Contáctalo directamente.");
+
         if (request.Items.Count == 0) throw new ArgumentException("Order must have at least one item.");
 
         // El navegador NO es fuente de verdad de precios: nombre y precio salen del catálogo del
@@ -425,19 +434,43 @@ public class OrderService : IOrderService
         {
             order.PaymentMethod ??= "Manual";
             if (estimatedMinutes is > 0 and <= 240) order.EstimatedReadyAt = DateTime.UtcNow.AddMinutes(estimatedMinutes.Value);
+            // Aceptar ES reconocer: silencia la alarma de la Estación de pedidos en todos los
+            // dispositivos sin que haga falta una segunda llamada a AcknowledgeAsync.
+            order.AcknowledgedAt ??= DateTime.UtcNow;
             await MarkPaidAsync(order, null);
             await _notifications.NotifyCustomerPushAsync(order, "accepted");
             return ToDto(order);
         }
 
+        var previousStatus = order.Status;
         order.Status = parsed;
         order.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
         if (parsed == OrderStatus.Fulfilled)
         {
+            // Un pedido entregado cuenta como visita del cliente (antes TotalVisits solo subía con citas/filas/reservas).
+            if (previousStatus != OrderStatus.Fulfilled && order.CustomerId is { } customerId)
+            {
+                var customer = await _db.Customers.FirstOrDefaultAsync(c => c.Id == customerId);
+                if (customer is not null)
+                {
+                    customer.TotalVisits += 1;
+                    customer.LastVisit = DateTime.UtcNow;
+                    customer.UpdatedAt = DateTime.UtcNow;
+                    await _db.SaveChangesAsync();
+                }
+            }
             await _notifications.NotifyOrderFulfilledAsync(order);
-            await _notifications.NotifyCustomerPushAsync(order, "ready");
+            // Si pasó por "Listo" el cliente ya recibió el aviso: no se repite al entregar.
+            if (previousStatus != OrderStatus.Ready)
+                await _notifications.NotifyCustomerPushAsync(order, "ready");
+        }
+        else if (parsed == OrderStatus.Ready)
+        {
+            // Listo para recoger/servir: aviso push al cliente (si activó "Avísame") y el enlace de seguimiento lo muestra.
+            if (previousStatus != OrderStatus.Ready)
+                await _notifications.NotifyCustomerPushAsync(order, "ready");
         }
         else if (parsed == OrderStatus.Canceled)
             await _notifications.NotifyCustomerPushAsync(order, "canceled");
@@ -463,6 +496,22 @@ public class OrderService : IOrderService
         return dto;
     }
 
+    public async Task<OrderDto?> AcknowledgeAsync(Guid affiliateId, Guid orderId)
+    {
+        var order = await _db.Orders.FirstOrDefaultAsync(o => o.Id == orderId && o.AffiliateId == affiliateId);
+        if (order is null) return null;
+        // No-op si ya estaba reconocido (p. ej. otra tablet de la estación llegó primero) — no
+        // pisa el timestamp original ni dispara un UpdatedAt/notificación de más.
+        if (order.AcknowledgedAt is null)
+        {
+            order.AcknowledgedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+        }
+        var dto = ToDto(order);
+        await _realtime.NotifyOrderUpdatedAsync(affiliateId, dto);
+        return dto;
+    }
+
     public async Task<OrderTrackingDto?> GetTrackingAsync(string token)
     {
         if (string.IsNullOrWhiteSpace(token) || token.Length > 64) return null;
@@ -480,7 +529,8 @@ public class OrderService : IOrderService
             order.CreatedAt, order.UpdatedAt ?? order.CreatedAt, order.EstimatedReadyAt,
             expired ? Array.Empty<OrderItemDto>() : JsonArrayField.Parse<OrderItemDto>(order.ItemsJson),
             order.Subtotal, order.Tax, order.Tip, order.Total, order.Currency, expired,
-            CanPayOnline: CanPayOnline(order, a));
+            CanPayOnline: CanPayOnline(order, a),
+            Language: a.Language == "en" ? "en" : "es");
     }
 
     private static bool CanPayOnline(Order order, Affiliate a) =>
@@ -608,7 +658,7 @@ public class OrderService : IOrderService
         Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16))
             .TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
-    public async Task<OrderDto?> CollectPaymentAsync(Guid affiliateId, Guid orderId, string method)
+    public async Task<OrderDto?> CollectPaymentAsync(Guid affiliateId, Guid orderId, string method, string? reference = null)
     {
         var order = await _db.Orders.FirstOrDefaultAsync(o => o.Id == orderId && o.AffiliateId == affiliateId);
         if (order is null) return null;
@@ -625,6 +675,7 @@ public class OrderService : IOrderService
 
         order.CollectedAt = DateTime.UtcNow;
         order.CollectedMethod = normalized;
+        order.CollectedReference = string.IsNullOrWhiteSpace(reference) ? null : reference.Trim();
         order.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
@@ -928,6 +979,8 @@ public class OrderService : IOrderService
         o.ScheduledFor?.ToString("yyyy-MM-dd"),
         o.CollectedAt,
         o.CollectedMethod,
-        o.EstimatedReadyAt
+        o.EstimatedReadyAt,
+        o.AcknowledgedAt,
+        o.CollectedReference
     );
 }

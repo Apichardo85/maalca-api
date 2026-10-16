@@ -25,6 +25,8 @@ public class Screen : BaseEntity
 
     public string? Language { get; set; }
     public BoardTheme? BoardTheme { get; set; }
+    /// Plantilla visual (null = hereda Affiliate.BoardLayout).
+    public BoardLayout? Layout { get; set; }
     public BoardTransitionEffect? TransitionEffect { get; set; }
     public int? AdFrequency { get; set; }
 
