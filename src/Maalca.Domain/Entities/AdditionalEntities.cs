@@ -91,6 +91,10 @@ public class InventoryItem : AuditableEntity
     /// superen Quantity. Default false: Quantity vale 0 por defecto y sin este interruptor todos los
     /// productos que nunca llevaron inventario aparecerían agotados.</summary>
     public bool TrackStock { get; set; } = false;
+    /// <summary>Retail: el dueño lo marca para que salga primero y con insignia en la tienda pública.</summary>
+    public bool Featured { get; set; } = false;
+    /// <summary>Retail: insignia "Popular" (más vendido) en la tienda pública.</summary>
+    public bool Popular { get; set; } = false;
     /// <summary>Unidad de medida ("unidad", "kg", "lb", "litro", "caja", ...) — solo informativa,
     /// no convierte cantidades entre unidades.</summary>
     public string Unit { get; set; } = "unidad";

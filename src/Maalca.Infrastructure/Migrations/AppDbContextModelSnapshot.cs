@@ -1145,6 +1145,9 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<DateOnly?>("ExpirationDate")
                         .HasColumnType("date");
 
+                    b.Property<bool>("Featured")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("ImageUrl")
                         .HasColumnType("text");
 
@@ -1170,6 +1173,9 @@ namespace Maalca.Infrastructure.Migrations
 
                     b.Property<string>("NameEn")
                         .HasColumnType("text");
+
+                    b.Property<bool>("Popular")
+                        .HasColumnType("boolean");
 
                     b.Property<decimal>("Quantity")
                         .HasPrecision(18, 3)
