@@ -107,7 +107,7 @@ public interface IInventoryService
     Task<InventorySummaryDto> GetSummaryAsync(Guid affiliateId);
 
     Task<string> ExportCsvAsync(Guid affiliateId);
-    Task<InventoryCsvImportResultDto> ImportCsvAsync(Guid affiliateId, string csvContent);
+    Task<InventoryCsvImportResultDto> ImportCsvAsync(Guid affiliateId, string csvContent, string mode = "skip");
 
     // Receta (Restaurante) — Product (plato) -> [InventoryItem, cantidad]. Reemplazo total de la
     // lista por PUT (no PATCH incremental) — más simple para el editor de plato, que siempre manda

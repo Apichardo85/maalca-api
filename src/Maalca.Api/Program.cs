@@ -1768,7 +1768,10 @@ app.MapPost("/api/affiliates/{affiliateId:guid}/inventory/import", async (HttpCo
         return Results.Forbid();
     if (string.IsNullOrWhiteSpace(request.CsvContent))
         return Results.BadRequest(new { error = new { code = "EMPTY_CSV", message = "El archivo CSV está vacío." } });
-    var result = await inventoryService.ImportCsvAsync(affiliateId, request.CsvContent);
+    var mode = request.Mode?.Trim().ToLowerInvariant();
+    if (mode is not (null or "" or "preview" or "skip" or "update"))
+        return Results.BadRequest(new { error = new { code = "INVALID_MODE", message = "Modo de importación inválido." } });
+    var result = await inventoryService.ImportCsvAsync(affiliateId, request.CsvContent, string.IsNullOrEmpty(mode) ? "skip" : mode);
     return Results.Ok(result);
 });
 

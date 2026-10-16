@@ -853,19 +853,31 @@ public class InventoryService : IInventoryService
     // Importar CSV. Acepta la cabecera que produce ExportCsvAsync (Nombre,Categoria,Cantidad,Unidad,
     // StockMinimo,PrecioUnitario,Estado) y además columnas por NOMBRE en cualquier orden (es/en):
     // Descripcion, PrecioAnterior (oferta), Foto (URL http/https) y ControlarStock. Sin cabecera se
-    // usa el orden posicional del export. Filas sin Nombre se saltan. No valida duplicados por nombre
-    // a propósito (permite reabastecer agregando de nuevo). En Retail el catálogo público ES
-    // InventoryItem: los items importados quedan visibles y se respeta el tope de items del plan.
-    public async Task<InventoryCsvImportResultDto> ImportCsvAsync(Guid affiliateId, string csvContent)
+    // usa el orden posicional del export. Filas sin Nombre se saltan.
+    // Duplicados: una fila cuyo nombre (sin importar mayúsculas, tildes ni espacios de más) ya existe
+    // en el inventario NO se crea otra vez. Según `mode`:
+    //   "preview" -> no escribe nada; informa qué se crearía y qué filas son duplicadas (Duplicates).
+    //   "skip"    -> crea los nuevos y deja los duplicados como están.
+    //   "update"  -> crea los nuevos y actualiza los duplicados con las columnas que trae el CSV
+    //                (una celda vacía no borra el valor actual).
+    // Un nombre repetido dentro del mismo archivo cuenta solo la primera vez. En Retail el catálogo
+    // público ES InventoryItem: los items importados quedan visibles y se respeta el tope del plan
+    // (solo cuentan los items NUEVOS).
+    public async Task<InventoryCsvImportResultDto> ImportCsvAsync(Guid affiliateId, string csvContent, string mode = "skip")
     {
+        var dryRun = mode == "preview";
+        var update = mode == "update";
         var lines = csvContent.Replace("\r\n", "\n").Split('\n')
             .Where(l => !string.IsNullOrWhiteSpace(l))
             .ToList();
         if (lines.Count == 0)
-            return new InventoryCsvImportResultDto(0, 0, new List<string>());
+            return new InventoryCsvImportResultDto(0, 0, new List<string>(), DryRun: dryRun);
 
         var errors = new List<string>();
+        var duplicates = new List<InventoryCsvDuplicateDto>();
         var created = 0;
+        var updated = 0;
+        var skipped = 0;
         var now = DateTime.UtcNow;
 
         var affiliate = await _context.Affiliates.FindAsync(affiliateId);
@@ -877,6 +889,18 @@ public class InventoryService : IInventoryService
             if (max != int.MaxValue)
                 remaining = Math.Max(0, max - await _planLimit.GetCurrentItemCountAsync(affiliateId));
         }
+
+        // Items existentes por nombre normalizado (si hay varios con el mismo nombre, el más antiguo).
+        var existingByName = new Dictionary<string, InventoryItem>();
+        foreach (var existing in await _context.InventoryItems
+                     .Where(i => i.AffiliateId == affiliateId)
+                     .OrderBy(i => i.CreatedAt)
+                     .ToListAsync())
+        {
+            var key = NormalizeName(existing.Name);
+            if (key.Length > 0) existingByName.TryAdd(key, existing);
+        }
+        var seenInFile = new HashSet<string>();
 
         // Salta la primera línea si parece cabecera (contiene "Nombre" o "Name").
         var hasHeader = lines[0].Contains("Nombre", StringComparison.OrdinalIgnoreCase) || lines[0].Contains("Name", StringComparison.OrdinalIgnoreCase);
@@ -927,46 +951,104 @@ public class InventoryService : IInventoryService
                 errors.Add($"Fila {rowNum}: falta el nombre, se saltó.");
                 continue;
             }
-            if (created >= remaining)
+
+            var nameKey = NormalizeName(name);
+            if (!seenInFile.Add(nameKey))
             {
-                errors.Add($"Fila {rowNum}: se alcanzó el límite de items de tu plan; no se importó.");
+                errors.Add($"Fila {rowNum}: \"{name}\" está repetido en el archivo; se saltó.");
                 continue;
             }
 
             var compare = ParseMoney(Cell(cols, "compare"));
             var imageUrl = Cell(cols, "image");
-            if (imageUrl is not null && !imageUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !imageUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            var imageValid = imageUrl is null
+                || imageUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                || imageUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+            var trackCell = Cell(cols, "track")?.ToLowerInvariant();
+            var track = trackCell is "si" or "sí" or "yes" or "true" or "1";
+
+            // Duplicado: ya existe un item con ese nombre.
+            if (existingByName.TryGetValue(nameKey, out var found))
+            {
+                duplicates.Add(new InventoryCsvDuplicateDto(rowNum, name, found.UnitPrice, ParseMoney(Cell(cols, "price"))));
+                if (!update) { skipped++; continue; }
+                if (dryRun) continue;
+
+                if (!imageValid)
+                {
+                    errors.Add($"Fila {rowNum}: la foto debe ser un enlace http(s); se dejó la foto actual.");
+                    imageUrl = null;
+                }
+                var desc = Cell(cols, "description"); if (desc is not null) found.Description = desc;
+                var cat = Cell(cols, "category"); if (cat is not null) found.Category = cat;
+                var qty = ParseMoney(Cell(cols, "quantity")); if (qty is not null) found.Quantity = qty.Value;
+                var unit = Cell(cols, "unit"); if (unit is not null) found.Unit = unit;
+                var min = ParseMoney(Cell(cols, "minstock")); if (min is not null) found.MinStock = min.Value;
+                var price = ParseMoney(Cell(cols, "price")); if (price is not null) found.UnitPrice = price.Value;
+                if (Cell(cols, "compare") is not null) found.CompareAtPrice = compare > 0 ? compare : null;
+                if (imageUrl is not null) found.ImageUrl = imageUrl;
+                if (trackCell is not null) found.TrackStock = track;
+                var status = Cell(cols, "status"); if (status is not null) found.Status = status;
+                found.UpdatedAt = now;
+                updated++;
+                continue;
+            }
+
+            if (created >= remaining)
+            {
+                errors.Add($"Fila {rowNum}: se alcanzó el límite de items de tu plan; no se importó.");
+                continue;
+            }
+            if (!imageValid)
             {
                 errors.Add($"Fila {rowNum}: la foto debe ser un enlace http(s); se importó sin foto.");
                 imageUrl = null;
             }
-            var track = Cell(cols, "track")?.ToLowerInvariant() is "si" or "sí" or "yes" or "true" or "1";
 
-            _context.InventoryItems.Add(new InventoryItem
+            if (!dryRun)
             {
-                Id = Guid.NewGuid(),
-                AffiliateId = affiliateId,
-                Name = name,
-                Description = Cell(cols, "description"),
-                Category = Cell(cols, "category"),
-                Quantity = ParseMoney(Cell(cols, "quantity")) ?? 0m,
-                Unit = Cell(cols, "unit") ?? "unidad",
-                MinStock = ParseMoney(Cell(cols, "minstock")) ?? 0m,
-                UnitPrice = ParseMoney(Cell(cols, "price")) ?? 0m,
-                CompareAtPrice = compare > 0 ? compare : null,
-                TrackStock = track,
-                ImageUrl = imageUrl,
-                Status = Cell(cols, "status") ?? "Active",
-                IsPubliclyVisible = isRetail,
-                CreatedAt = now,
-            });
+                _context.InventoryItems.Add(new InventoryItem
+                {
+                    Id = Guid.NewGuid(),
+                    AffiliateId = affiliateId,
+                    Name = name,
+                    Description = Cell(cols, "description"),
+                    Category = Cell(cols, "category"),
+                    Quantity = ParseMoney(Cell(cols, "quantity")) ?? 0m,
+                    Unit = Cell(cols, "unit") ?? "unidad",
+                    MinStock = ParseMoney(Cell(cols, "minstock")) ?? 0m,
+                    UnitPrice = ParseMoney(Cell(cols, "price")) ?? 0m,
+                    CompareAtPrice = compare > 0 ? compare : null,
+                    TrackStock = track,
+                    ImageUrl = imageUrl,
+                    Status = Cell(cols, "status") ?? "Active",
+                    IsPubliclyVisible = isRetail,
+                    CreatedAt = now,
+                });
+            }
             created++;
         }
 
-        if (created > 0)
+        if (!dryRun && (created > 0 || updated > 0))
             await _context.SaveChangesAsync();
 
-        return new InventoryCsvImportResultDto(created, errors.Count, errors);
+        return new InventoryCsvImportResultDto(created, errors.Count, errors, updated, skipped, duplicates, dryRun);
+    }
+
+    // Nombre comparable: sin tildes, minúsculas y espacios colapsados ("Jabón  de Rosas" == "jabon de rosas").
+    private static string NormalizeName(string value)
+    {
+        var decomposed = value.Trim().ToLowerInvariant().Normalize(System.Text.NormalizationForm.FormD);
+        var sb = new System.Text.StringBuilder();
+        var pendingSpace = false;
+        foreach (var c in decomposed)
+        {
+            if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) == System.Globalization.UnicodeCategory.NonSpacingMark) continue;
+            if (char.IsWhiteSpace(c)) { pendingSpace = sb.Length > 0; continue; }
+            if (pendingSpace) { sb.Append(' '); pendingSpace = false; }
+            sb.Append(c);
+        }
+        return sb.ToString();
     }
 
     // "Categoría" -> "categoria", "Stock mínimo" -> "stockminimo".

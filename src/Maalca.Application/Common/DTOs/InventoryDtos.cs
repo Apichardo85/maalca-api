@@ -17,10 +17,25 @@ public record LowStockItemDto(
     string Unit
 );
 
+// Created/Updated/Skipped: en DryRun (vista previa) son lo que PASARÍA al confirmar; no se escribe nada.
+// Duplicates: filas del CSV cuyo nombre ya existe en el inventario (se avisa y el dueño decide si actualiza).
 public record InventoryCsvImportResultDto(
     int Created,
     int ErrorCount,
-    IReadOnlyList<string> Errors
+    IReadOnlyList<string> Errors,
+    int Updated = 0,
+    int Skipped = 0,
+    IReadOnlyList<InventoryCsvDuplicateDto>? Duplicates = null,
+    bool DryRun = false
 );
 
-public record ImportInventoryCsvRequest(string CsvContent);
+public record InventoryCsvDuplicateDto(
+    int Row,
+    string Name,
+    decimal CurrentPrice,
+    decimal? NewPrice
+);
+
+// Mode: "preview" (no escribe, solo informa duplicados), "skip" (crea los nuevos, deja los duplicados
+// como están; es el valor por defecto) o "update" (crea los nuevos y actualiza los duplicados).
+public record ImportInventoryCsvRequest(string CsvContent, string? Mode = null);
