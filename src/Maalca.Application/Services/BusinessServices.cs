@@ -687,8 +687,13 @@ public class CausaService : ICausaService
 public class InventoryService : IInventoryService
 {
     private readonly AppDbContext _context;
+    private readonly IPlanLimitService _planLimit;
 
-    public InventoryService(AppDbContext context) => _context = context;
+    public InventoryService(AppDbContext context, IPlanLimitService planLimit)
+    {
+        _context = context;
+        _planLimit = planLimit;
+    }
 
     public async Task<PaginatedResponse<InventoryItem>> GetInventoryAsync(Guid affiliateId, string? category = null, string? status = null, int page = 1, string? search = null, bool? lowStock = null)
     {
@@ -845,9 +850,12 @@ public class InventoryService : IInventoryService
         return sb.ToString();
     }
 
-    // Tarea: importar CSV — misma cabecera que ExportCsvAsync produce; columnas de más se ignoran,
-    // filas sin Nombre se saltan. No valida duplicados por nombre a propósito (permite reabastecer
-    // agregando de nuevo con Quantity sumándose vía movimientos, no vía import).
+    // Importar CSV. Acepta la cabecera que produce ExportCsvAsync (Nombre,Categoria,Cantidad,Unidad,
+    // StockMinimo,PrecioUnitario,Estado) y además columnas por NOMBRE en cualquier orden (es/en):
+    // Descripcion, PrecioAnterior (oferta), Foto (URL http/https) y ControlarStock. Sin cabecera se
+    // usa el orden posicional del export. Filas sin Nombre se saltan. No valida duplicados por nombre
+    // a propósito (permite reabastecer agregando de nuevo). En Retail el catálogo público ES
+    // InventoryItem: los items importados quedan visibles y se respeta el tope de items del plan.
     public async Task<InventoryCsvImportResultDto> ImportCsvAsync(Guid affiliateId, string csvContent)
     {
         var lines = csvContent.Replace("\r\n", "\n").Split('\n')
@@ -860,38 +868,96 @@ public class InventoryService : IInventoryService
         var created = 0;
         var now = DateTime.UtcNow;
 
+        var affiliate = await _context.Affiliates.FindAsync(affiliateId);
+        var isRetail = affiliate?.BusinessType == Maalca.Domain.Enums.BusinessType.Retail;
+        var remaining = int.MaxValue;
+        if (isRetail && affiliate is not null)
+        {
+            var max = _planLimit.GetMaxItems(affiliate);
+            if (max != int.MaxValue)
+                remaining = Math.Max(0, max - await _planLimit.GetCurrentItemCountAsync(affiliateId));
+        }
+
         // Salta la primera línea si parece cabecera (contiene "Nombre" o "Name").
-        var startIndex = (lines[0].Contains("Nombre", StringComparison.OrdinalIgnoreCase) || lines[0].Contains("Name", StringComparison.OrdinalIgnoreCase)) ? 1 : 0;
+        var hasHeader = lines[0].Contains("Nombre", StringComparison.OrdinalIgnoreCase) || lines[0].Contains("Name", StringComparison.OrdinalIgnoreCase);
+        var startIndex = hasHeader ? 1 : 0;
+
+        // Mapa campo -> índice de columna. Con cabecera, por nombre normalizado; sin ella, posicional.
+        var map = new Dictionary<string, int>
+        {
+            ["name"] = 0, ["category"] = 1, ["quantity"] = 2, ["unit"] = 3, ["minstock"] = 4, ["price"] = 5, ["status"] = 6,
+        };
+        if (hasHeader)
+        {
+            map.Clear();
+            var headers = ParseCsvLine(lines[0]);
+            var aliases = new Dictionary<string, string[]>
+            {
+                ["name"] = new[] { "nombre", "name" },
+                ["category"] = new[] { "categoria", "category" },
+                ["quantity"] = new[] { "cantidad", "quantity", "stock", "qty" },
+                ["unit"] = new[] { "unidad", "unit" },
+                ["minstock"] = new[] { "stockminimo", "minstock", "minimo", "minimum" },
+                ["price"] = new[] { "preciounitario", "precio", "price", "unitprice" },
+                ["status"] = new[] { "estado", "status" },
+                ["description"] = new[] { "descripcion", "description" },
+                ["compare"] = new[] { "precioanterior", "precioantes", "compareatprice", "compareprice", "was" },
+                ["image"] = new[] { "foto", "imagen", "image", "imageurl", "fotourl" },
+                ["track"] = new[] { "controlarstock", "controlarinventario", "trackstock" },
+            };
+            for (var h = 0; h < headers.Count; h++)
+            {
+                var key = NormalizeHeader(headers[h]);
+                foreach (var kv in aliases)
+                    if (!map.ContainsKey(kv.Key) && kv.Value.Contains(key)) { map[kv.Key] = h; break; }
+            }
+            if (!map.ContainsKey("name")) map["name"] = 0;
+        }
+
+        string? Cell(List<string> cols, string field) =>
+            map.TryGetValue(field, out var idx) && idx < cols.Count && !string.IsNullOrWhiteSpace(cols[idx]) ? cols[idx].Trim() : null;
 
         for (var lineIndex = startIndex; lineIndex < lines.Count; lineIndex++)
         {
             var cols = ParseCsvLine(lines[lineIndex]);
             var rowNum = lineIndex + 1;
-            if (cols.Count == 0 || string.IsNullOrWhiteSpace(cols[0]))
+            var name = Cell(cols, "name");
+            if (name is null)
             {
                 errors.Add($"Fila {rowNum}: falta el nombre, se saltó.");
                 continue;
             }
+            if (created >= remaining)
+            {
+                errors.Add($"Fila {rowNum}: se alcanzó el límite de items de tu plan; no se importó.");
+                continue;
+            }
 
-            var name = cols[0].Trim();
-            var category = cols.Count > 1 ? cols[1].Trim() : null;
-            var quantity = cols.Count > 2 && decimal.TryParse(cols[2], System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var q) ? q : 0m;
-            var unit = cols.Count > 3 && !string.IsNullOrWhiteSpace(cols[3]) ? cols[3].Trim() : "unidad";
-            var minStock = cols.Count > 4 && decimal.TryParse(cols[4], System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var m) ? m : 0m;
-            var unitPrice = cols.Count > 5 && decimal.TryParse(cols[5], System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var p) ? p : 0m;
-            var status = cols.Count > 6 && !string.IsNullOrWhiteSpace(cols[6]) ? cols[6].Trim() : "Active";
+            var compare = ParseMoney(Cell(cols, "compare"));
+            var imageUrl = Cell(cols, "image");
+            if (imageUrl is not null && !imageUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !imageUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                errors.Add($"Fila {rowNum}: la foto debe ser un enlace http(s); se importó sin foto.");
+                imageUrl = null;
+            }
+            var track = Cell(cols, "track")?.ToLowerInvariant() is "si" or "sí" or "yes" or "true" or "1";
 
             _context.InventoryItems.Add(new InventoryItem
             {
                 Id = Guid.NewGuid(),
                 AffiliateId = affiliateId,
                 Name = name,
-                Category = string.IsNullOrWhiteSpace(category) ? null : category,
-                Quantity = quantity,
-                Unit = unit,
-                MinStock = minStock,
-                UnitPrice = unitPrice,
-                Status = status,
+                Description = Cell(cols, "description"),
+                Category = Cell(cols, "category"),
+                Quantity = ParseMoney(Cell(cols, "quantity")) ?? 0m,
+                Unit = Cell(cols, "unit") ?? "unidad",
+                MinStock = ParseMoney(Cell(cols, "minstock")) ?? 0m,
+                UnitPrice = ParseMoney(Cell(cols, "price")) ?? 0m,
+                CompareAtPrice = compare > 0 ? compare : null,
+                TrackStock = track,
+                ImageUrl = imageUrl,
+                Status = Cell(cols, "status") ?? "Active",
+                IsPubliclyVisible = isRetail,
                 CreatedAt = now,
             });
             created++;
@@ -901,6 +967,28 @@ public class InventoryService : IInventoryService
             await _context.SaveChangesAsync();
 
         return new InventoryCsvImportResultDto(created, errors.Count, errors);
+    }
+
+    // "Categoría" -> "categoria", "Stock mínimo" -> "stockminimo".
+    private static string NormalizeHeader(string value)
+    {
+        var decomposed = value.Trim().ToLowerInvariant().Normalize(System.Text.NormalizationForm.FormD);
+        var sb = new System.Text.StringBuilder();
+        foreach (var c in decomposed)
+            if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark && char.IsLetterOrDigit(c))
+                sb.Append(c);
+        return sb.ToString();
+    }
+
+    // Número del CSV: "12.50" o "12,50" (coma decimal con 1-2 decimales); "1,250" se lee como miles.
+    private static decimal? ParseMoney(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var v = value.Trim().TrimStart('$');
+        var comma = v.LastIndexOf(',');
+        if (comma >= 0 && !v.Contains('.') && v.Length - comma - 1 is 1 or 2)
+            v = v.Remove(comma, 1).Insert(comma, ".");
+        return decimal.TryParse(v, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var d) ? d : null;
     }
 
     private static string CsvEscape(string value)
