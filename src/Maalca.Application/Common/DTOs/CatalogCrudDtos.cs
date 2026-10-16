@@ -18,7 +18,8 @@ public record CreateCatalogItemRequest(
     string? VideoUrl = null,                    // Product only — Menu Board Fase 9 Etapa A
     IReadOnlyList<string>? Images = null,       // Galería completa (orden = orden de visualización); Images[0] pasa a ser ImageUrl
     string? NameEn = null,                      // Product/Service/InventoryItem — nombre en inglés, fallback a Name si null
-    string? Modality = null                     // Service only — "InPerson" | "Virtual" | "Both". Null = InPerson (default del enum).
+    string? Modality = null,                    // Service only — "InPerson" | "Virtual" | "Both". Null = InPerson (default del enum).
+    decimal? CompareAtPrice = null              // InventoryItem only — precio "antes" (oferta). Null/<=0 = sin oferta.
 );
 
 public record UpdateCatalogItemRequest(
@@ -41,7 +42,8 @@ public record UpdateCatalogItemRequest(
     string? VideoUrl = null,                    // Product only — Menu Board Fase 9 Etapa A
     IReadOnlyList<string>? Images = null,       // null = no tocar la galería; [] = vaciarla; lista = reemplazarla entera
     string? NameEn = null,                      // Product/Service/InventoryItem — nombre en inglés, fallback a Name si null
-    string? Modality = null                     // Service only — "InPerson" | "Virtual" | "Both". Null = no tocar.
+    string? Modality = null,                    // Service only — "InPerson" | "Virtual" | "Both". Null = no tocar.
+    decimal? CompareAtPrice = null              // InventoryItem only — null = no tocar; 0 = quitar la oferta.
 );
 
 // Receta (ProductIngredient) — Product (plato) -> InventoryItem (ingrediente) + cantidad consumida

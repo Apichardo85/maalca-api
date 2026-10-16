@@ -27,5 +27,6 @@ public static class CatalogItemMapper
         // Stock del catálogo sigue siendo entero (Retail vende unidades enteras); Quantity es
         // decimal desde Comunidad Fase 1 — se trunca solo para esta vista.
         null, (int)Math.Floor(i.Quantity), i.Status,
-        i.DescriptionEn, Images: JsonArrayField.Parse<string>(i.Images), NameEn: i.NameEn);
+        i.DescriptionEn, Images: JsonArrayField.Parse<string>(i.Images), NameEn: i.NameEn,
+        CompareAtPrice: i.CompareAtPrice);
 }

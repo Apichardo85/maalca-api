@@ -80,7 +80,8 @@ public record CatalogItemDto(
     string? NameEn = null,                      // Product/Service/InventoryItem — nombre en inglés, fallback a Name si null
     IReadOnlyList<PublicIngredientDto>? Ingredients = null, // Product (Restaurante) — solo si tiene receta; null/vacío = sin receta definida
     string? Modality = null,                    // Service only — "InPerson" | "Virtual" | "Both". Null en Product/InventoryItem.
-    IReadOnlyList<PublicModifierGroupDto>? ModifierGroups = null // Product (Restaurante) — grupos reutilizables enlazados (ej. "Guarnición"); null/vacío = sin modificadores
+    IReadOnlyList<PublicModifierGroupDto>? ModifierGroups = null, // Product (Restaurante) — grupos reutilizables enlazados (ej. "Guarnición"); null/vacío = sin modificadores
+    decimal? CompareAtPrice = null              // InventoryItem only — precio "antes" tachado (oferta); null = sin oferta
 );
 
 // Solo nombre — a propósito no expone Quantity (cantidad por porción, dato interno de receta)

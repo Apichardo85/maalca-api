@@ -84,6 +84,9 @@ public class InventoryItem : AuditableEntity
     public decimal Quantity { get; set; } = 0;
     public decimal MinStock { get; set; } = 0;
     public decimal UnitPrice { get; set; }
+    /// <summary>Precio "antes" (tachado) para mostrar una oferta en la tienda pública. Null = sin oferta;
+    /// solo tiene efecto visual si es mayor que UnitPrice (el cobro siempre usa UnitPrice).</summary>
+    public decimal? CompareAtPrice { get; set; }
     /// <summary>Unidad de medida ("unidad", "kg", "lb", "litro", "caja", ...) — solo informativa,
     /// no convierte cantidades entre unidades.</summary>
     public string Unit { get; set; } = "unidad";

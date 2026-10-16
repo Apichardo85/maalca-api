@@ -297,6 +297,7 @@ public class CatalogCrudService : ICatalogCrudService
         if (request.Description is not null) item.Description = request.Description;
         if (request.Category is not null) item.Category = request.Category;
         if (request.Price.HasValue) item.UnitPrice = request.Price.Value;
+        if (request.CompareAtPrice.HasValue) item.CompareAtPrice = request.CompareAtPrice.Value > 0 ? request.CompareAtPrice.Value : null;
         ApplyImagesPatch(request.Images, request.ImageUrl, v => item.ImageUrl = v, v => item.Images = v);
         if (request.SortOrder.HasValue) item.SortOrder = request.SortOrder.Value;
         if (request.IsPubliclyVisible.HasValue) item.IsPubliclyVisible = request.IsPubliclyVisible.Value;
@@ -384,6 +385,7 @@ public class CatalogCrudService : ICatalogCrudService
             Description = request.Description,
             DescriptionEn = request.DescriptionEn,
             UnitPrice = request.Price,
+            CompareAtPrice = request.CompareAtPrice > 0 ? request.CompareAtPrice : null,
             Category = request.Category,
             ImageUrl = itemImageUrl,
             Images = itemImagesJson,
@@ -469,6 +471,7 @@ public class CatalogCrudService : ICatalogCrudService
         if (request.Name != null) item.Name = request.Name;
         if (request.Description != null) item.Description = request.Description;
         if (request.Price.HasValue) item.UnitPrice = request.Price.Value;
+        if (request.CompareAtPrice.HasValue) item.CompareAtPrice = request.CompareAtPrice.Value > 0 ? request.CompareAtPrice.Value : null;
         if (request.Category != null) item.Category = request.Category;
         ApplyImagesPatch(request.Images, request.ImageUrl, v => item.ImageUrl = v, v => item.Images = v);
         if (request.SortOrder.HasValue) item.SortOrder = request.SortOrder.Value;

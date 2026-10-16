@@ -513,6 +513,7 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired();
             entity.Property(e => e.UnitPrice).HasPrecision(18, 2);
+            entity.Property(e => e.CompareAtPrice).HasPrecision(18, 2);
             entity.Property(e => e.Quantity).HasPrecision(18, 3);
             entity.Property(e => e.MinStock).HasPrecision(18, 3);
             entity.Property(e => e.UnitCost).HasPrecision(18, 4);
