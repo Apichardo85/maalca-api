@@ -264,14 +264,34 @@ public class OrderService : IOrderService
         foreach (var i in inventory) catalog.TryAdd(i.Id, (i.Name, i.Price));
 
         // Control de stock opt-in (InventoryItem.TrackStock): el pedido no puede superar lo que queda.
-        // Solo es una validación al crear — el descuento real sigue ocurriendo al pasar a Paid.
-        foreach (var inv in inventory.Where(i => i.TrackStock))
+        // El stock real se descuenta al pagar (Stripe / POS) o al cobrar un "pagar al recoger"; mientras
+        // un pedido de recoger sigue abierto sin cobrar, sus unidades cuentan como reservadas para que
+        // dos clientes no pidan la misma última unidad.
+        var trackedInventory = inventory.Where(i => i.TrackStock).ToList();
+        if (trackedInventory.Count > 0)
         {
-            var wanted = requested.Where(r => Guid.TryParse(r.ItemId, out var rid) && rid == inv.Id).Sum(r => r.Qty);
-            if (wanted > inv.Quantity)
-                throw new ArgumentException(inv.Quantity <= 0
-                    ? $"\"{inv.Name}\" está agotado."
-                    : $"\"{inv.Name}\": solo quedan {Math.Floor(inv.Quantity)}.");
+            var reservedSince = DateTime.UtcNow.AddHours(-24);
+            var openPickupJson = await _db.Orders
+                .Where(o => o.AffiliateId == affiliateId && o.PaymentMethod == PayAtPickupMethod
+                            && o.CollectedAt == null && o.CreatedAt >= reservedSince
+                            && o.Status != OrderStatus.Canceled && o.Status != OrderStatus.Fulfilled)
+                .Select(o => o.ItemsJson)
+                .ToListAsync();
+            var reserved = new Dictionary<Guid, decimal>();
+            foreach (var json in openPickupJson)
+                foreach (var openLine in JsonArrayField.Parse<OrderItemDto>(json))
+                    if (Guid.TryParse(openLine.ItemId, out var openId))
+                        reserved[openId] = reserved.GetValueOrDefault(openId) + openLine.Qty;
+
+            foreach (var inv in trackedInventory)
+            {
+                var wanted = requested.Where(r => Guid.TryParse(r.ItemId, out var rid) && rid == inv.Id).Sum(r => r.Qty);
+                var available = Math.Max(0, inv.Quantity - reserved.GetValueOrDefault(inv.Id));
+                if (wanted > available)
+                    throw new ArgumentException(available <= 0
+                        ? $"\"{inv.Name}\" está agotado."
+                        : $"\"{inv.Name}\": solo quedan {Math.Floor(available)}.");
+            }
         }
 
         var lines = new List<OrderItemDto>(requested.Count);
@@ -688,6 +708,8 @@ public class OrderService : IOrderService
         order.CollectedMethod = normalized;
         order.CollectedReference = string.IsNullOrWhiteSpace(reference) ? null : reference.Trim();
         order.UpdatedAt = DateTime.UtcNow;
+        // Cobrado en el local = venta real: aquí se descuenta el stock (antes un "pagar al recoger" nunca lo tocaba).
+        await DecrementStockAsync(order);
         await _db.SaveChangesAsync();
 
         var dto = ToDto(order);
