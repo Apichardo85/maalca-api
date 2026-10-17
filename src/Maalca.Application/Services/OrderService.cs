@@ -56,7 +56,8 @@ public class OrderService : IOrderService
         // Cerrado ahora => el pedido solo se acepta programado para la próxima apertura, y el menú
         // que se valida es el de esa fecha (no el de hoy).
         var scheduledFor = ResolveSchedule(affiliate, request);
-        var priced = await RepriceItemsAsync(affiliate.Id, request.Items, request.Tax, request.Tip, scheduledFor);
+        var priced = await RepriceItemsAsync(affiliate.Id, request.Items, request.Tax, request.Tip, scheduledFor,
+            request.CustomerEmail, request.CustomerPhone);
 
         var tableNumber = await ValidateTableAsync(affiliate, request);
         if (request.PayAtPickup) await ValidatePickupAsync(affiliate, request, tableNumber);
@@ -158,6 +159,9 @@ public class OrderService : IOrderService
             SuccessUrl = request.SuccessUrl,
             CancelUrl = request.CancelUrl,
             ClientReferenceId = order.Id.ToString(),
+            // La sesión caduca poco antes de que venza la reserva de stock (StripeReservationMinutes): nadie
+            // puede pagar unidades que ya se liberaron para otro cliente.
+            ExpiresAt = DateTime.UtcNow.AddMinutes(StripeSessionMinutes),
             CustomerEmail = string.IsNullOrEmpty(request.CustomerEmail) ? null : request.CustomerEmail,
             // Pide el teléfono en el Checkout: junto con el nombre/correo que Stripe ya captura,
             // completa el cliente cuando no lo dio antes de pagar (ver MarkPaidAsync).
@@ -169,6 +173,53 @@ public class OrderService : IOrderService
 
         return new CreateOrderResponseDto(order.Id, session.Url);
     }
+
+    // Stripe exige que la sesión dure al menos 30 min; 31 deja margen por la latencia de la llamada. La
+    // reserva de stock dura 1 min más que la sesión, así que mientras se puede pagar, la unidad sigue apartada.
+    private const int StripeSessionMinutes = 31;
+    internal const int StripeReservationMinutes = StripeSessionMinutes + 1;
+
+    /// <summary>
+    /// Unidades apartadas por pedidos que todavía no descontaron stock: "pagar al recoger" abiertos (24 h) y
+    /// checkouts de Stripe vigentes (<see cref="StripeReservationMinutes"/>). Lo usan la validación del pedido
+    /// y el catálogo público, para que "Quedan N" coincida con lo que el API aceptará.
+    /// <paramref name="excludeEmail"/>/<paramref name="excludePhone"/>: los pedidos pendientes del MISMO cliente
+    /// no cuentan, para que quien abandonó un checkout pueda reintentar sin bloquearse a sí mismo.
+    /// </summary>
+    internal static async Task<Dictionary<Guid, decimal>> ReservedUnitsAsync(
+        AppDbContext db, Guid affiliateId, string? excludeEmail = null, string? excludePhone = null)
+    {
+        var now = DateTime.UtcNow;
+        var pickupSince = now.AddHours(-24);
+        var stripeSince = now.AddMinutes(-StripeReservationMinutes);
+
+        var open = await db.Orders
+            .Where(o => o.AffiliateId == affiliateId && o.CollectedAt == null
+                        && o.Status != OrderStatus.Canceled && o.Status != OrderStatus.Fulfilled
+                        && ((o.PaymentMethod == PayAtPickupMethod && o.CreatedAt >= pickupSince)
+                            || (o.PaymentMethod == null && o.Status == OrderStatus.Pending
+                                && o.StripeCheckoutSessionId != null && o.CreatedAt >= stripeSince)))
+            .Select(o => new { o.ItemsJson, o.CustomerEmail, o.CustomerPhone })
+            .ToListAsync();
+
+        var email = excludeEmail?.Trim();
+        var phone = DigitsOnly(excludePhone);
+        var reserved = new Dictionary<Guid, decimal>();
+        foreach (var o in open)
+        {
+            var sameCustomer =
+                (!string.IsNullOrEmpty(email) && string.Equals(o.CustomerEmail?.Trim(), email, StringComparison.OrdinalIgnoreCase))
+                || (phone.Length >= 7 && DigitsOnly(o.CustomerPhone) == phone);
+            if (sameCustomer) continue;
+            foreach (var line in JsonArrayField.Parse<OrderItemDto>(o.ItemsJson))
+                if (Guid.TryParse(line.ItemId, out var id))
+                    reserved[id] = reserved.GetValueOrDefault(id) + line.Qty;
+        }
+        return reserved;
+    }
+
+    private static string DigitsOnly(string? s) =>
+        string.IsNullOrEmpty(s) ? string.Empty : new string(s.Where(char.IsDigit).ToArray());
 
     private const int MaxQtyPerLine = 99;
 
@@ -188,7 +239,7 @@ public class OrderService : IOrderService
     /// </summary>
     private async Task<PricedOrder> RepriceItemsAsync(
         Guid affiliateId, IReadOnlyList<OrderItemDto> requested, decimal clientTax, decimal clientTip,
-        DateOnly? scheduledFor = null)
+        DateOnly? scheduledFor = null, string? contactEmail = null, string? contactPhone = null)
     {
         if (requested.Any(i => i.Qty < 1 || i.Qty > MaxQtyPerLine))
             throw new ArgumentException($"Cantidad inválida (debe ser entre 1 y {MaxQtyPerLine}).");
@@ -265,23 +316,12 @@ public class OrderService : IOrderService
 
         // Control de stock opt-in (InventoryItem.TrackStock): el pedido no puede superar lo que queda.
         // El stock real se descuenta al pagar (Stripe / POS) o al cobrar un "pagar al recoger"; mientras
-        // un pedido de recoger sigue abierto sin cobrar, sus unidades cuentan como reservadas para que
-        // dos clientes no pidan la misma última unidad.
+        // un pedido sigue abierto sin cobrar (recoger, o checkout de Stripe vigente), sus unidades
+        // cuentan como reservadas para que dos clientes no se lleven la misma última unidad.
         var trackedInventory = inventory.Where(i => i.TrackStock).ToList();
         if (trackedInventory.Count > 0)
         {
-            var reservedSince = DateTime.UtcNow.AddHours(-24);
-            var openPickupJson = await _db.Orders
-                .Where(o => o.AffiliateId == affiliateId && o.PaymentMethod == PayAtPickupMethod
-                            && o.CollectedAt == null && o.CreatedAt >= reservedSince
-                            && o.Status != OrderStatus.Canceled && o.Status != OrderStatus.Fulfilled)
-                .Select(o => o.ItemsJson)
-                .ToListAsync();
-            var reserved = new Dictionary<Guid, decimal>();
-            foreach (var json in openPickupJson)
-                foreach (var openLine in JsonArrayField.Parse<OrderItemDto>(json))
-                    if (Guid.TryParse(openLine.ItemId, out var openId))
-                        reserved[openId] = reserved.GetValueOrDefault(openId) + openLine.Qty;
+            var reserved = await ReservedUnitsAsync(_db, affiliateId, contactEmail, contactPhone);
 
             foreach (var inv in trackedInventory)
             {
