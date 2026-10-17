@@ -1,0 +1,10 @@
+#!/bin/sh
+# pre-push: compila el API antes de subir. Se empuja directo a develop/main y eso despliega,
+# así que un build roto se detiene aquí y no en Railway. Saltarlo (solo si hace falta): git push --no-verify
+cd "$(git rev-parse --show-toplevel)" || exit 1
+echo "pre-push: dotnet build Maalca.sln -c Release ..."
+if ! dotnet build Maalca.sln -c Release --nologo -v q; then
+  echo "pre-push: el build fallo; push cancelado."
+  exit 1
+fi
+echo "pre-push: build OK"
