@@ -1777,6 +1777,10 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<string>("Category")
                         .HasColumnType("text");
 
+                    b.Property<decimal?>("CompareAtPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 

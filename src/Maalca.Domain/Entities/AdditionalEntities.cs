@@ -184,6 +184,8 @@ public class Product : AuditableEntity
     public string? Description { get; set; }
     public string? Category { get; set; }
     public decimal Price { get; set; }
+    // Precio "antes" (tachado) opcional para ofertas en el menú público. Null = sin oferta.
+    public decimal? CompareAtPrice { get; set; }
     public int Stock { get; set; } = 0;
     public string? ImageUrl { get; set; }
     // Galería — JSON array de URLs, orden = orden de visualización. ImageUrl se mantiene

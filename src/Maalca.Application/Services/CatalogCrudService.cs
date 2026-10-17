@@ -249,6 +249,7 @@ public class CatalogCrudService : ICatalogCrudService
         if (request.Featured.HasValue) product.Featured = request.Featured.Value;
         if (request.Popular.HasValue) product.Popular = request.Popular.Value;
         if (request.VideoUrl is not null) product.VideoUrl = request.VideoUrl;
+        if (request.CompareAtPrice.HasValue) product.CompareAtPrice = request.CompareAtPrice.Value > 0 ? request.CompareAtPrice.Value : null;
         if (wasDemo) product.IsDemo = false;
 
         await _db.SaveChangesAsync();
@@ -340,7 +341,8 @@ public class CatalogCrudService : ICatalogCrudService
             Flags = TokenList.Join(request.Flags),
             Featured = request.Featured ?? false,
             Popular = request.Popular ?? false,
-            VideoUrl = request.VideoUrl
+            VideoUrl = request.VideoUrl,
+            CompareAtPrice = request.CompareAtPrice > 0 ? request.CompareAtPrice : null
         };
         _db.Products.Add(product);
         await _db.SaveChangesAsync();

@@ -14,7 +14,8 @@ public static class CatalogItemMapper
         p.Id, p.Name, p.Description, p.Price, p.Category, p.ImageUrl, p.SortOrder, p.IsDemo,
         null, null, p.Status,
         p.DescriptionEn, TokenList.Parse(p.Periods), TokenList.Parse(p.WeekDays), TokenList.Parse(p.Flags),
-        p.Featured, p.Popular, p.VideoUrl, JsonArrayField.Parse<string>(p.Images), p.NameEn);
+        p.Featured, p.Popular, p.VideoUrl, JsonArrayField.Parse<string>(p.Images), p.NameEn,
+        CompareAtPrice: p.CompareAtPrice);
 
     public static CatalogItemDto FromService(Service s) => new(
         s.Id, s.Name, s.Description, s.Price, s.Category, s.ImageUrl, s.SortOrder, s.IsDemo,
