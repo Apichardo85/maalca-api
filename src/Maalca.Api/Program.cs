@@ -95,6 +95,7 @@ builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IDonationService, DonationService>();
 builder.Services.AddScoped<IScreenAdService, ScreenAdService>();
 builder.Services.AddScoped<IScreenService, ScreenService>();
+builder.Services.AddScoped<IScreenWallService, ScreenWallService>();
 builder.Services.AddScoped<IPublicBookingService, PublicBookingService>();
 
 builder.Services.AddHttpClient();
@@ -3041,6 +3042,95 @@ app.MapDelete("/api/affiliates/{id}/screens/{screenId}", async (
     catch (KeyNotFoundException)
     {
         return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Screen not found" } });
+    }
+});
+
+// ============ SCREEN WALLS (muros de pantallas sincronizadas) ============
+app.MapGet("/api/affiliates/{id}/screen-walls", async (
+    HttpContext ctx, IScreenWallService wallService, Guid id) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    return Results.Ok(await wallService.GetAllAsync(id));
+});
+
+app.MapPost("/api/affiliates/{id}/screen-walls", async (
+    HttpContext ctx, IScreenWallService wallService, Guid id, CreateScreenWallRequest request) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    try
+    {
+        var wall = await wallService.CreateAsync(id, request);
+        return Results.Created($"/api/affiliates/{id}/screen-walls/{wall.Id}", wall);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+});
+
+app.MapPatch("/api/affiliates/{id}/screen-walls/{wallId}", async (
+    HttpContext ctx, IScreenWallService wallService, Guid id, Guid wallId, UpdateScreenWallRequest request) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    try
+    {
+        return Results.Ok(await wallService.UpdateAsync(id, wallId, request));
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Wall not found" } });
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+});
+
+app.MapPut("/api/affiliates/{id}/screen-walls/{wallId}/slots", async (
+    HttpContext ctx, IScreenWallService wallService, Guid id, Guid wallId, UpdateScreenWallSlotsRequest request) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    try
+    {
+        return Results.Ok(await wallService.UpdateSlotsAsync(id, wallId, request));
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Wall not found" } });
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+});
+
+app.MapDelete("/api/affiliates/{id}/screen-walls/{wallId}", async (
+    HttpContext ctx, IScreenWallService wallService, Guid id, Guid wallId) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    try
+    {
+        await wallService.DeleteAsync(id, wallId);
+        return Results.NoContent();
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Wall not found" } });
     }
 });
 

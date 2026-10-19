@@ -137,5 +137,6 @@ public class ScreenService : IScreenService
         s.Id, s.Name, s.SortOrder, s.Language, s.BoardTheme?.ToString(), s.AdFrequency, s.CategoryFilter,
         s.TransitionEffect?.ToString(), s.ContentMode.ToString(),
         s.AdIds is null ? null : JsonArrayField.Parse<Guid>(s.AdIds),
-        s.Layout?.ToString());
+        s.Layout?.ToString(),
+        s.WallId, s.WallCol, s.WallRow);
 }

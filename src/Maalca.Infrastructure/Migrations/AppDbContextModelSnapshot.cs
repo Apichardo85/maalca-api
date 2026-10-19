@@ -2254,11 +2254,64 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("WallCol")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("WallId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("WallRow")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("WallId");
 
                     b.HasIndex("AffiliateId", "SortOrder");
 
                     b.ToTable("Screens");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.ScreenWall", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AffiliateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("BezelPx")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("Calibrate")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Cols")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Mode")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<int>("Rows")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AffiliateId");
+
+                    b.ToTable("ScreenWalls");
                 });
 
             modelBuilder.Entity("Maalca.Domain.Entities.ScreenAd", b =>
@@ -3221,6 +3274,24 @@ namespace Maalca.Infrastructure.Migrations
                 });
 
             modelBuilder.Entity("Maalca.Domain.Entities.Screen", b =>
+                {
+                    b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
+                        .WithMany()
+                        .HasForeignKey("AffiliateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Maalca.Domain.Entities.ScreenWall", "Wall")
+                        .WithMany()
+                        .HasForeignKey("WallId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Affiliate");
+
+                    b.Navigation("Wall");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.ScreenWall", b =>
                 {
                     b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
                         .WithMany()

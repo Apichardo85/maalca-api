@@ -126,5 +126,6 @@ public record PublicCatalogResponse(
     string? Language = null,               // Fase 9 — "es" | "en", preferencia del board
     string? BoardTheme = null,             // Fase 9 — "Dark" | "Light"
     string? TransitionEffect = null,        // Fase 9 — "Fade" | "Slide" | "Zoom" | "None"
-    string? Layout = null                  // "Classic" | "Hero" | "Grid" | ... plantilla visual
+    string? Layout = null,                 // "Classic" | "Hero" | "Grid" | ... plantilla visual
+    PublicWallDto? Wall = null             // muro sincronizado: modo + posición de ESTA TV (null = pantalla suelta)
 );

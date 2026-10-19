@@ -50,6 +50,25 @@ public class PublicCatalogService : IPublicCatalogService
             if (screen == null) return null;
         }
 
+        // Muro sincronizado: esta TV recibe el modo del muro y SU posición, pero el CONTENIDO sale
+        // de la pantalla líder (posición 0,0) — todas las TVs del muro necesitan exactamente la
+        // misma lista de slides para que el timeline determinista del board coincida.
+        PublicWallDto? wallDto = null;
+        if (screen != null && screen.WallId is Guid wallId && screen.WallCol.HasValue && screen.WallRow.HasValue)
+        {
+            var wall = await _db.ScreenWalls.FirstOrDefaultAsync(w => w.Id == wallId);
+            if (wall != null)
+            {
+                wallDto = new PublicWallDto(wall.Mode.ToString(), wall.Cols, wall.Rows,
+                    screen.WallCol.Value, screen.WallRow.Value, wall.BezelPx, wall.Calibrate);
+                var lead = await _db.Screens
+                    .Where(s => s.WallId == wallId && s.WallCol != null && s.WallRow != null)
+                    .OrderBy(s => s.WallRow).ThenBy(s => s.WallCol)
+                    .FirstOrDefaultAsync();
+                if (lead != null) screen = lead;
+            }
+        }
+
         List<CatalogItemDto> items;
         // Status == "Active" además de IsPubliclyVisible — un item "Inactivo" (ej. un plato que
         // hoy no se puede servir) desaparece tanto de la página pública como del Menu Board a la
@@ -161,7 +180,8 @@ public class PublicCatalogService : IPublicCatalogService
             screen?.Language ?? affiliate.Language,
             (screen?.BoardTheme ?? affiliate.BoardTheme).ToString(),
             (screen?.TransitionEffect ?? affiliate.TransitionEffect).ToString(),
-            (screen?.Layout ?? affiliate.BoardLayout).ToString());
+            (screen?.Layout ?? affiliate.BoardLayout).ToString(),
+            wallDto);
     }
 
     public async Task<List<FeaturedAffiliateDto>> GetFeaturedAffiliatesAsync()

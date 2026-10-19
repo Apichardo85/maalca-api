@@ -45,6 +45,7 @@ public class AppDbContext : DbContext
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<ScreenAd> ScreenAds => Set<ScreenAd>();
     public DbSet<Screen> Screens => Set<Screen>();
+    public DbSet<ScreenWall> ScreenWalls => Set<ScreenWall>();
     public DbSet<TimeBlock> TimeBlocks => Set<TimeBlock>();
     public DbSet<Proposal> Proposals => Set<Proposal>();
     public DbSet<Activity> Activities => Set<Activity>();
@@ -161,6 +162,24 @@ public class AppDbContext : DbContext
                   .HasForeignKey(e => e.AffiliateId)
                   .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.AffiliateId, e.SortOrder });
+            // Borrar un muro NO borra sus TVs: quedan como pantallas sueltas (su URL sigue viva).
+            entity.HasOne(e => e.Wall)
+                  .WithMany()
+                  .HasForeignKey(e => e.WallId)
+                  .OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(e => e.WallId);
+        });
+
+        // ScreenWall — muros de pantallas sincronizadas
+        modelBuilder.Entity<ScreenWall>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(120).IsRequired();
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => e.AffiliateId);
         });
 
         // Customer

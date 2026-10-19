@@ -43,4 +43,12 @@ public class Screen : BaseEntity
     /// del negocio (comportamiento previo, default). Lista (incluso vacía) = solo esos IDs;
     /// una lista vacía explícita significa "sin comerciales en esta pantalla".
     public string? AdIds { get; set; }
+
+    /// Muro sincronizado al que pertenece esta TV (null = pantalla suelta, comportamiento previo).
+    /// WallCol/WallRow = posición física en el muro (0-based). Se asignan desde ScreenWallService,
+    /// no desde UpdateScreenRequest (ese form manda estado completo y los borraría).
+    public Guid? WallId { get; set; }
+    public ScreenWall? Wall { get; set; }
+    public int? WallCol { get; set; }
+    public int? WallRow { get; set; }
 }

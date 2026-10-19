@@ -11,7 +11,10 @@ public record ScreenDto(
     string? TransitionEffect = null,
     string ContentMode = "Menu",
     IReadOnlyList<Guid>? AdIds = null,
-    string? Layout = null
+    string? Layout = null,
+    Guid? WallId = null,
+    int? WallCol = null,
+    int? WallRow = null
 );
 
 public record CreateScreenRequest(
