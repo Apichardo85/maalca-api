@@ -221,9 +221,50 @@ public class StripeBillingService : IStripeBillingService
             {
                 Customer = affiliate.StripeCustomerId,
                 ReturnUrl = returnUrl,
+                Configuration = await EnsurePortalConfigurationAsync(),
             });
 
         return new PortalSessionResponseDto(session.Url);
+    }
+
+    /// <summary>
+    /// El Billing Portal falla si la cuenta (en ese modo) nunca guardó su configuración en el
+    /// Dashboard. Si no hay default, se usa (o se crea una vez) una configuración propia
+    /// marcada metadata maalca=1: actualizar tarjeta, datos de facturación, historial de facturas y
+    /// cancelar al final del período. Así test y live funcionan sin pasos manuales.
+    /// Devuelve null cuando ya existe un default (Stripe lo usa solo).
+    /// </summary>
+    private static async Task<string?> EnsurePortalConfigurationAsync()
+    {
+        var service = new Stripe.BillingPortal.ConfigurationService();
+        var list = await service.ListAsync(new Stripe.BillingPortal.ConfigurationListOptions { Active = true, Limit = 20 });
+        if (list.Data.Any(c => c.IsDefault)) return null;
+
+        var ours = list.Data.FirstOrDefault(c => c.Metadata is not null
+            && c.Metadata.TryGetValue("maalca", out var tag) && tag == "1");
+        if (ours is not null) return ours.Id;
+
+        var created = await service.CreateAsync(new Stripe.BillingPortal.ConfigurationCreateOptions
+        {
+            BusinessProfile = new Stripe.BillingPortal.ConfigurationBusinessProfileOptions { Headline = "MaalCa" },
+            Features = new Stripe.BillingPortal.ConfigurationFeaturesOptions
+            {
+                InvoiceHistory = new Stripe.BillingPortal.ConfigurationFeaturesInvoiceHistoryOptions { Enabled = true },
+                PaymentMethodUpdate = new Stripe.BillingPortal.ConfigurationFeaturesPaymentMethodUpdateOptions { Enabled = true },
+                CustomerUpdate = new Stripe.BillingPortal.ConfigurationFeaturesCustomerUpdateOptions
+                {
+                    Enabled = true,
+                    AllowedUpdates = new List<string> { "email", "address", "name" },
+                },
+                SubscriptionCancel = new Stripe.BillingPortal.ConfigurationFeaturesSubscriptionCancelOptions
+                {
+                    Enabled = true,
+                    Mode = "at_period_end",
+                },
+            },
+            Metadata = new Dictionary<string, string> { ["maalca"] = "1" },
+        });
+        return created.Id;
     }
 
     // ─────────────────────────────── Resumen y pantallas extra ───────────────────────────────
