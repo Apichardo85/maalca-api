@@ -4314,7 +4314,8 @@ app.MapPost("/api/webhooks/stripe-connect", async (HttpContext ctx, IStripeConne
     var stripeKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY") ?? "";
     var stripeMode = stripeKey.StartsWith("sk_live_") || stripeKey.StartsWith("rk_live_") ? "LIVE"
         : stripeKey.StartsWith("sk_test_") || stripeKey.StartsWith("rk_test_") ? "TEST" : "SIN LLAVE";
-    app.Logger.LogInformation("Stripe: modo {StripeMode}", stripeMode);
+    // Console directo: el nivel Info de la app está filtrado en producción (appsettings).
+    Console.WriteLine($"Stripe: modo {stripeMode}");
 }
 
 // Apply migrations + seed on startup
