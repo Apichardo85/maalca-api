@@ -104,6 +104,15 @@ public class Affiliate : BaseEntity
     // CreatedAt. Ver PlanLimitService.IsTrialExpired.
     public DateTime? TrialOverrideEndsAt { get; set; }
 
+    // ── Facturación de la suscripción (StripeBillingService) ─────────────
+    // ExtraScreens: pantallas pagadas aparte (quantity del item "maalca_extra_screen_*" en la
+    // suscripción). El webhook la sincroniza desde Stripe, que es la fuente de verdad.
+    // BillingInterval: "month" | "year" (null = sin suscripción).
+    // SetupFeePaidAt: el setup ($150) se cobra solo en la primera suscripción del negocio.
+    public int ExtraScreens { get; set; } = 0;
+    public string? BillingInterval { get; set; }
+    public DateTime? SetupFeePaidAt { get; set; }
+
     // ── MaalCa Comunidad: quién opera el afiliado ────────────────────────
     // NO decide si puede tener voluntarios (eso es independiente, Fase 3+). Solo decide el staff
     // administrativo del dashboard: en un afiliado Community con OperatorType=Individual,

@@ -78,6 +78,7 @@ public class AppDbContext : DbContext
         // Affiliate
         modelBuilder.Entity<Affiliate>(entity =>
         {
+            entity.Property(e => e.BillingInterval).HasMaxLength(8);
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired();
             entity.Property(e => e.PickupNewCustomerLimit).HasPrecision(10, 2);

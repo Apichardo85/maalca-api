@@ -2675,9 +2675,69 @@ app.MapPost("/api/affiliates/{id}/billing/checkout-session", async (
         var session = await billingService.CreateCheckoutSessionAsync(id, request);
         return Results.Ok(session);
     }
+    catch (InvalidOperationException ex) when (ex.Message == StripeBillingService.AlreadySubscribedMessage)
+    {
+        return Results.Conflict(new { error = new { code = "ALREADY_SUBSCRIBED", message = ex.Message } });
+    }
     catch (KeyNotFoundException ex)
     {
         return Results.NotFound(new { error = new { code = "NOT_FOUND", message = ex.Message } });
+    }
+    catch (Stripe.StripeException ex)
+    {
+        return Results.Json(new { error = new { code = "STRIPE_ERROR", message = ex.Message } }, statusCode: 502);
+    }
+});
+
+// Plan, estado, pantallas (incluidas/extra/usadas) y precios vigentes — sección "Plan" del dashboard.
+app.MapGet("/api/affiliates/{id}/billing/summary", async (
+    HttpContext ctx, IStripeBillingService billingService, Guid id) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    try
+    {
+        return Results.Ok(await billingService.GetSummaryAsync(id));
+    }
+    catch (KeyNotFoundException ex)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = ex.Message } });
+    }
+});
+
+// Cambia la cantidad de pantallas extra de la suscripción (cobra el prorrateo al momento).
+app.MapPut("/api/affiliates/{id}/billing/extra-screens", async (
+    HttpContext ctx, IStripeBillingService billingService, Guid id, UpdateExtraScreensRequest request) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+
+    var role = ctx.User.FindFirst("role")?.Value;
+    if (role == "Staff")
+        return Results.Forbid();
+
+    try
+    {
+        return Results.Ok(await billingService.UpdateExtraScreensAsync(id, request.ExtraScreens));
+    }
+    catch (InvalidOperationException ex) when (ex.Message == StripeBillingService.NoSubscriptionMessage)
+    {
+        return Results.Json(new { error = new { code = "NO_SUBSCRIPTION", message = ex.Message } }, statusCode: 402);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+    catch (KeyNotFoundException ex)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = ex.Message } });
+    }
+    catch (Stripe.StripeException ex)
+    {
+        return Results.Json(new { error = new { code = "STRIPE_ERROR", message = ex.Message } }, statusCode: 502);
     }
 });
 
@@ -3059,6 +3119,11 @@ app.MapPost("/api/affiliates/{id}/screens", async (
         var screen = await screenService.CreateAsync(id, request);
         return Results.Created($"/api/affiliates/{id}/screens/{screen.Id}", screen);
     }
+    catch (ScreenLimitException ex)
+    {
+        return Results.Json(new { error = new { code = "SCREEN_LIMIT_REACHED", message = ex.Message,
+            allowance = ex.Allowance, used = ex.Used, requested = ex.Requested } }, statusCode: 402);
+    }
     catch (ArgumentException ex)
     {
         return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
@@ -3128,6 +3193,11 @@ app.MapPost("/api/affiliates/{id}/screen-walls", async (
         var wall = await wallService.CreateAsync(id, request);
         return Results.Created($"/api/affiliates/{id}/screen-walls/{wall.Id}", wall);
     }
+    catch (ScreenLimitException ex)
+    {
+        return Results.Json(new { error = new { code = "SCREEN_LIMIT_REACHED", message = ex.Message,
+            allowance = ex.Allowance, used = ex.Used, requested = ex.Requested } }, statusCode: 402);
+    }
     catch (ArgumentException ex)
     {
         return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
@@ -3144,6 +3214,11 @@ app.MapPatch("/api/affiliates/{id}/screen-walls/{wallId}", async (
     try
     {
         return Results.Ok(await wallService.UpdateAsync(id, wallId, request));
+    }
+    catch (ScreenLimitException ex)
+    {
+        return Results.Json(new { error = new { code = "SCREEN_LIMIT_REACHED", message = ex.Message,
+            allowance = ex.Allowance, used = ex.Used, requested = ex.Requested } }, statusCode: 402);
     }
     catch (KeyNotFoundException)
     {
@@ -4232,6 +4307,15 @@ app.MapPost("/api/webhooks/stripe-connect", async (HttpContext ctx, IStripeConne
     }
 })
 .AllowAnonymous();
+
+// Modo de Stripe al arrancar (solo el prefijo de la llave, nunca el valor): confirma en los logs
+// de Railway si producción cobra en test o live — ver maalca-web/docs/billing/stripe.md.
+{
+    var stripeKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY") ?? "";
+    var stripeMode = stripeKey.StartsWith("sk_live_") || stripeKey.StartsWith("rk_live_") ? "LIVE"
+        : stripeKey.StartsWith("sk_test_") || stripeKey.StartsWith("rk_test_") ? "TEST" : "SIN LLAVE";
+    app.Logger.LogInformation("Stripe: modo {StripeMode}", stripeMode);
+}
 
 // Apply migrations + seed on startup
 using (var scope = app.Services.CreateScope())

@@ -1,3 +1,4 @@
+using Maalca.Application.Common;
 using Maalca.Application.Common.Interfaces;
 using Maalca.Domain.Entities;
 using Maalca.Domain.Enums;
@@ -65,6 +66,29 @@ public class PlanLimitService : IPlanLimitService
 
             _ => 0
         };
+    }
+
+    // ── Pantallas (Menu Board / muros) ──────────────────────────────────
+    // Incluidas por plan: Starter (Free) 1 · Growth (Entrepreneur) 1 · Professional (Enterprise) 2.
+    // Las extra se pagan aparte ($15/mes c/u) y viven en Affiliate.ExtraScreens.
+    public int GetIncludedScreens(Plan plan) => plan switch
+    {
+        Plan.Enterprise => 2,
+        _ => 1
+    };
+
+    public int GetScreenAllowance(Affiliate affiliate)
+        => GetIncludedScreens(affiliate.Plan) + Math.Max(0, affiliate.ExtraScreens);
+
+    public async Task EnsureScreenCapacityAsync(Guid affiliateId, int adding)
+    {
+        if (adding <= 0) return;
+        var affiliate = await _db.Affiliates.FindAsync(affiliateId)
+            ?? throw new KeyNotFoundException("Affiliate not found");
+        var used = await _db.Screens.CountAsync(s => s.AffiliateId == affiliateId);
+        var allowance = GetScreenAllowance(affiliate);
+        if (used + adding > allowance)
+            throw new ScreenLimitException(allowance, used, adding);
     }
 
     public async Task<bool> CanAddItemAsync(Guid affiliateId)

@@ -19,8 +19,13 @@ public class ScreenWallService : IScreenWallService
     public const int MaxCols = 4;
     public const int MaxRows = 3;
     private readonly AppDbContext _db;
+    private readonly IPlanLimitService _planLimit;
 
-    public ScreenWallService(AppDbContext db) => _db = db;
+    public ScreenWallService(AppDbContext db, IPlanLimitService planLimit)
+    {
+        _db = db;
+        _planLimit = planLimit;
+    }
 
     public async Task<List<ScreenWallDto>> GetAllAsync(Guid affiliateId)
     {
@@ -43,6 +48,8 @@ public class ScreenWallService : IScreenWallService
             Rows = ClampRows(request.Rows ?? 1),
             BezelPx = ClampBezel(request.BezelPx ?? 0),
         };
+        // Antes de guardar nada: un muro nuevo crea Cols×Rows TVs y todas cuentan para el plan.
+        await _planLimit.EnsureScreenCapacityAsync(affiliateId, wall.Cols * wall.Rows);
         _db.ScreenWalls.Add(wall);
         await _db.SaveChangesAsync();
         var screens = await EnsureSlotsAsync(wall);
@@ -58,6 +65,8 @@ public class ScreenWallService : IScreenWallService
         if (request.Rows.HasValue) wall.Rows = ClampRows(request.Rows.Value);
         if (request.BezelPx.HasValue) wall.BezelPx = ClampBezel(request.BezelPx.Value);
         if (request.Calibrate.HasValue) wall.Calibrate = request.Calibrate.Value;
+        // Agrandar la grilla crea TVs nuevas: validar el plan antes de guardar el cambio.
+        await _planLimit.EnsureScreenCapacityAsync(affiliateId, await MissingSlotsAsync(wall));
         wall.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
         var screens = await EnsureSlotsAsync(wall);
@@ -100,6 +109,15 @@ public class ScreenWallService : IScreenWallService
         foreach (var s in members) { s.WallId = null; s.WallCol = null; s.WallRow = null; }
         _db.ScreenWalls.Remove(wall);
         await _db.SaveChangesAsync();
+    }
+
+    /// <summary>Cuántas TVs nuevas crearía EnsureSlotsAsync con la grilla actual (sin tocar nada).</summary>
+    private async Task<int> MissingSlotsAsync(ScreenWall wall)
+    {
+        var positions = await _db.Screens.Where(s => s.WallId == wall.Id && s.WallCol != null && s.WallRow != null)
+            .Select(s => new { Col = s.WallCol!.Value, Row = s.WallRow!.Value }).ToListAsync();
+        var inside = positions.Where(p => p.Col < wall.Cols && p.Row < wall.Rows).Distinct().Count();
+        return wall.Cols * wall.Rows - inside;
     }
 
     /// <summary>Una TV por posición: crea las que faltan, desprende las que sobran.</summary>

@@ -1,7 +1,34 @@
 namespace Maalca.Application.Common.DTOs;
 
-/// <param name="Plan">"Entrepreneur" (default) o "Enterprise". Cada uno usa su propio price de Stripe.</param>
-public record CreateCheckoutSessionRequest(string SuccessUrl, string CancelUrl, string? Plan = null);
+/// <param name="Plan">"Entrepreneur"/"Growth" (default) o "Enterprise"/"Professional".</param>
+/// <param name="Interval">"month" (default) o "year".</param>
+/// <param name="ExtraScreens">Pantallas extra a contratar desde el inicio (0–20).</param>
+public record CreateCheckoutSessionRequest(string SuccessUrl, string CancelUrl, string? Plan = null,
+    string? Interval = null, int ExtraScreens = 0);
+
+/// <summary>Cambia la cantidad de pantallas extra de la suscripción activa (0 = ninguna).</summary>
+public record UpdateExtraScreensRequest(int ExtraScreens);
+
+/// <summary>Un precio del catálogo de Stripe, identificado por su lookup_key (maalca_*).</summary>
+public record BillingPriceDto(string LookupKey, decimal Amount, string? Interval);
+
+/// <summary>
+/// Todo lo que el dashboard necesita para la sección de plan: nombre público, estado, intervalo,
+/// pantallas (incluidas/extra/usadas) y los precios vigentes leídos de Stripe.
+/// </summary>
+public record BillingSummaryDto(
+    string Plan,              // "Free" | "Entrepreneur" | "Enterprise" (interno)
+    string PlanName,          // "Starter" | "Growth" | "Professional" (público)
+    string PlanStatus,        // "Active" | "PastDue" | "Canceled" | "DowngradedLocked"
+    string? Interval,         // "month" | "year" | null
+    bool HasSubscription,
+    int IncludedScreens,
+    int ExtraScreens,
+    int ScreenAllowance,
+    int ScreensUsed,
+    bool SetupFeeDue,
+    IReadOnlyList<BillingPriceDto> Prices
+);
 
 public record CheckoutSessionResponseDto(string Url);
 

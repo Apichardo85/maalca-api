@@ -314,6 +314,16 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<bool>("PickupNoShowRequiresCard")
                         .HasColumnType("boolean");
 
+                    b.Property<int>("ExtraScreens")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("BillingInterval")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<DateTime?>("SetupFeePaidAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Slug")

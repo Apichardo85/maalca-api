@@ -11,8 +11,13 @@ namespace Maalca.Application.Services;
 public class ScreenService : IScreenService
 {
     private readonly AppDbContext _db;
+    private readonly IPlanLimitService _planLimit;
 
-    public ScreenService(AppDbContext db) => _db = db;
+    public ScreenService(AppDbContext db, IPlanLimitService planLimit)
+    {
+        _db = db;
+        _planLimit = planLimit;
+    }
 
     public async Task<List<ScreenDto>> GetAllAsync(Guid affiliateId)
         => (await _db.Screens
@@ -25,6 +30,8 @@ public class ScreenService : IScreenService
     {
         if (string.IsNullOrWhiteSpace(request.Name))
             throw new ArgumentException("El nombre de la pantalla es obligatorio.");
+
+        await _planLimit.EnsureScreenCapacityAsync(affiliateId, 1);
 
         var theme = ParseTheme(request.BoardTheme);
         var maxSort = await _db.Screens.Where(s => s.AffiliateId == affiliateId)
