@@ -38,4 +38,6 @@ public record ScreenWallSlotInput(Guid ScreenId, int Col, int Row);
 public record UpdateScreenWallSlotsRequest(IReadOnlyList<ScreenWallSlotInput> Slots);
 
 /// <summary>Lo que recibe cada TV en el catálogo público: modo del muro y SU posición.</summary>
-public record PublicWallDto(string Mode, int Cols, int Rows, int Col, int Row, int BezelPx, bool Calibrate);
+/// PerTvContent = muro donde cada TV tiene su propio menú (categorías distintas); los comerciales
+/// siguen siendo comunes (de la TV en la posición 1).
+public record PublicWallDto(string Mode, int Cols, int Rows, int Col, int Row, int BezelPx, bool Calibrate, bool PerTvContent = false);

@@ -87,6 +87,7 @@ public class ScreenWallService : IScreenWallService
             byId[slot.ScreenId].WallCol = slot.Col;
             byId[slot.ScreenId].WallRow = slot.Row;
         }
+        RenumberAutoNames(wall, members);
         await _db.SaveChangesAsync();
         return ToDto(wall, members);
     }
@@ -136,8 +137,22 @@ public class ScreenWallService : IScreenWallService
             _db.Screens.Add(screen);
             inside.Add(screen);
         }
+        RenumberAutoNames(wall, inside);
         await _db.SaveChangesAsync();
         return inside;
+    }
+
+    /// <summary>Los nombres automáticos ("{muro} · TV n") siguen a la posición: al intercambiar dos
+    /// TVs, "TV 1" vuelve a ser la de la izquierda. Un nombre que el dueño cambió a mano no se toca.</summary>
+    private static void RenumberAutoNames(ScreenWall wall, IEnumerable<Screen> members)
+    {
+        var prefix = $"{wall.Name} · TV ";
+        foreach (var s in members)
+        {
+            if (s.WallCol is not int col || s.WallRow is not int row) continue;
+            if (!s.Name.StartsWith(prefix, StringComparison.Ordinal) || !int.TryParse(s.Name[prefix.Length..], out _)) continue;
+            s.Name = $"{prefix}{row * wall.Cols + col + 1}";
+        }
     }
 
     private async Task<ScreenWall> FindAsync(Guid affiliateId, Guid wallId)

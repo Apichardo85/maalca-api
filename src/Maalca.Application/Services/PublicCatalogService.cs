@@ -50,22 +50,34 @@ public class PublicCatalogService : IPublicCatalogService
             if (screen == null) return null;
         }
 
-        // Muro sincronizado: esta TV recibe el modo del muro y SU posición, pero el CONTENIDO sale
-        // de la pantalla líder (posición 0,0) — todas las TVs del muro necesitan exactamente la
-        // misma lista de slides para que el timeline determinista del board coincida.
+        // Muro sincronizado: esta TV recibe el modo del muro y SU posición. Los comerciales (y su
+        // frecuencia) salen SIEMPRE de la pantalla líder (posición 0,0): cruzan el muro todas juntas.
+        // El menú depende de cómo lo configuró el dueño:
+        //  - Espejo, o Muro sin categorías distintas por TV → todas usan el menú de la líder (el
+        //    board reparte las slides entre TVs).
+        //  - Muro con categorías/modo distintos por TV (PerTvContent) → cada TV muestra SU menú; el
+        //    board alinea los cambios de slide y los comerciales con un timeline común por slots.
         PublicWallDto? wallDto = null;
+        var adsScreen = screen;
         if (screen != null && screen.WallId is Guid wallId && screen.WallCol.HasValue && screen.WallRow.HasValue)
         {
             var wall = await _db.ScreenWalls.FirstOrDefaultAsync(w => w.Id == wallId);
             if (wall != null)
             {
-                wallDto = new PublicWallDto(wall.Mode.ToString(), wall.Cols, wall.Rows,
-                    screen.WallCol.Value, screen.WallRow.Value, wall.BezelPx, wall.Calibrate);
-                var lead = await _db.Screens
+                var members = await _db.Screens
                     .Where(s => s.WallId == wallId && s.WallCol != null && s.WallRow != null)
                     .OrderBy(s => s.WallRow).ThenBy(s => s.WallCol)
-                    .FirstOrDefaultAsync();
-                if (lead != null) screen = lead;
+                    .ToListAsync();
+                var lead = members.FirstOrDefault();
+                var perTv = wall.Mode == ScreenWallMode.Span && lead != null
+                    && members.Any(m => !SameMenuContent(m, lead));
+                wallDto = new PublicWallDto(wall.Mode.ToString(), wall.Cols, wall.Rows,
+                    screen.WallCol.Value, screen.WallRow.Value, wall.BezelPx, wall.Calibrate, perTv);
+                if (lead != null)
+                {
+                    adsScreen = lead;
+                    if (!perTv) screen = lead;
+                }
             }
         }
 
@@ -160,7 +172,7 @@ public class PublicCatalogService : IPublicCatalogService
         // por afiliado, pero cada pantalla puede filtrarlo con AdIds (Fase 9 Etapa C): null =
         // hereda todos (comportamiento previo); lista = solo esos IDs (puede ser vacía = ninguno).
         var now = DateTime.UtcNow;
-        var adIdsFilter = screen?.AdIds is null ? null : JsonArrayField.Parse<Guid>(screen.AdIds).ToHashSet();
+        var adIdsFilter = adsScreen?.AdIds is null ? null : JsonArrayField.Parse<Guid>(adsScreen.AdIds).ToHashSet();
         var screenAds = (await _db.ScreenAds
             .Where(a => a.AffiliateId == affiliate.Id && a.Active
                 && (a.StartsAt == null || a.StartsAt <= now)
@@ -176,12 +188,22 @@ public class PublicCatalogService : IPublicCatalogService
             items,
             BuildCapabilities(affiliate.Plan) with { StripeReady = affiliate.StripeConnectChargesEnabled && !string.IsNullOrEmpty(affiliate.StripeConnectAccountId) },
             screenAds,
-            screen?.AdFrequency ?? affiliate.AdFrequency,
+            adsScreen?.AdFrequency ?? affiliate.AdFrequency,
             screen?.Language ?? affiliate.Language,
             (screen?.BoardTheme ?? affiliate.BoardTheme).ToString(),
             (screen?.TransitionEffect ?? affiliate.TransitionEffect).ToString(),
             (screen?.Layout ?? affiliate.BoardLayout).ToString(),
             wallDto);
+    }
+
+    /// <summary>¿Dos TVs de un muro muestran el mismo menú? (categorías sin importar orden ni
+    /// mayúsculas + modo de contenido). Lo visual (tema, idioma) no cuenta: no cambia las slides.</summary>
+    private static bool SameMenuContent(Domain.Entities.Screen a, Domain.Entities.Screen b)
+    {
+        static string Norm(string? f) => string.Join("|", (f ?? "")
+            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Select(c => c.ToLowerInvariant()).OrderBy(c => c));
+        return a.ContentMode == b.ContentMode && Norm(a.CategoryFilter) == Norm(b.CategoryFilter);
     }
 
     public async Task<List<FeaturedAffiliateDto>> GetFeaturedAffiliatesAsync()
