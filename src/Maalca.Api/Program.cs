@@ -2894,6 +2894,66 @@ app.MapPatch("/api/affiliates/{id}/orders/{orderId}/acknowledge", async (
     return Results.Ok(result);
 });
 
+// "No vino": pedido para recoger que nunca buscaron (y deshacerlo si fue un error).
+app.MapPatch("/api/affiliates/{id}/orders/{orderId}/no-show", async (
+    HttpContext ctx, IOrderService orderService, Guid id, Guid orderId) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+    try
+    {
+        var result = await orderService.MarkNoShowAsync(id, orderId);
+        return result is null
+            ? Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Order not found" } })
+            : Results.Ok(result);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+});
+
+app.MapDelete("/api/affiliates/{id}/orders/{orderId}/no-show", async (
+    HttpContext ctx, IOrderService orderService, Guid id, Guid orderId) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+    var result = await orderService.UndoNoShowAsync(id, orderId);
+    return result is null
+        ? Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Order not found" } })
+        : Results.Ok(result);
+});
+
+// Reglas de confianza para "pagar al recoger" (dashboard → Pedidos).
+app.MapGet("/api/affiliates/{id}/pickup-rules", async (
+    HttpContext ctx, IOrderService orderService, Guid id) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+    var rules = await orderService.GetPickupRulesAsync(id);
+    return rules is null ? Results.NotFound() : Results.Ok(rules);
+});
+
+app.MapPut("/api/affiliates/{id}/pickup-rules", async (
+    HttpContext ctx, IOrderService orderService, Guid id, PickupRulesDto request) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+    try
+    {
+        var rules = await orderService.UpdatePickupRulesAsync(id, request);
+        return rules is null ? Results.NotFound() : Results.Ok(rules);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+});
+
 app.MapPatch("/api/affiliates/{id}/orders/{orderId}/collect", async (
     HttpContext ctx, IOrderService orderService, Guid id, Guid orderId, CollectOrderPaymentRequest request) =>
 {

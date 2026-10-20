@@ -156,6 +156,13 @@ public class Affiliate : BaseEntity
     // quien no configure esto). Simple a propósito — nada de listas de orden explícito todavía.
     public int? AdFrequency { get; set; }
 
+    // Reglas de confianza para "pagar al recoger" (configurables desde el dashboard → Pedidos):
+    // - PickupNewCustomerLimit: un cliente sin visitas previas solo puede pagar al recoger hasta
+    //   este total; más que eso, con tarjeta. Null = sin límite (default, comportamiento previo).
+    // - PickupNoShowRequiresCard: un cliente con algún "No vino" ya no puede pagar al recoger.
+    public decimal? PickupNewCustomerLimit { get; set; }
+    public bool PickupNoShowRequiresCard { get; set; } = true;
+
     // Fase 9 — preferencia del NEGOCIO, no del visitante. El Menu Board no tiene usuario que le
     // dé click a un toggle de idioma (nadie interactúa con una TV) — a diferencia del resto del
     // sitio público, que usa la preferencia de cada visitante (useSimpleLanguage). "es" es el

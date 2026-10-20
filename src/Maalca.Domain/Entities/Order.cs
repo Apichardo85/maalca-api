@@ -83,4 +83,9 @@ public class Order : BaseEntity
     // online con Stripe), queda null hasta que alguien lo toca en la estación — así la alarma
     // sabe qué pedidos siguen sin que nadie los vea, sin depender de qué pantalla esté abierta.
     public DateTime? AcknowledgedAt { get; set; }
+
+    // "No vino": el cliente pidió para recoger (pagar al recoger) y nunca vino. El pedido queda
+    // Canceled y el cliente suma un NoShow — con eso las reglas de confianza le exigen tarjeta en
+    // sus próximos pedidos (ver Affiliate.PickupNoShowRequiresCard). Null = no aplica.
+    public DateTime? NoShowAt { get; set; }
 }

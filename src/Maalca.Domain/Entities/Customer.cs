@@ -12,6 +12,8 @@ public class Customer : AuditableEntity
     public string Status { get; set; } = "Active"; // Active, Inactive
     public DateTime? LastVisit { get; set; }
     public int TotalVisits { get; set; } = 0;
+    /// Pedidos para recoger que nunca vino a buscar (marcados "No vino" en la Estación/Pedidos).
+    public int NoShows { get; set; } = 0;
 
     public Affiliate? Affiliate { get; set; }
 }

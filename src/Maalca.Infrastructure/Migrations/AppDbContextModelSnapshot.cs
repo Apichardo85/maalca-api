@@ -307,6 +307,13 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<string>("ZoomLink")
                         .HasColumnType("text");
 
+                    b.Property<decimal?>("PickupNewCustomerLimit")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<bool>("PickupNoShowRequiresCard")
+                        .HasColumnType("boolean");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Slug")
@@ -963,6 +970,9 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<string>("UpdatedBy")
                         .HasColumnType("text");
 
+                    b.Property<int>("NoShows")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AffiliateId");
@@ -1604,6 +1614,9 @@ namespace Maalca.Infrastructure.Migrations
                         .HasColumnType("character varying(64)");
 
                     b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("NoShowAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");

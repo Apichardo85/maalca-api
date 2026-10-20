@@ -114,7 +114,10 @@ public record PlanCapabilitiesDto(
     bool CustomDomain,
     bool MenuBoard,
     // true = el afiliado completó Stripe Connect (ChargesEnabled): solo entonces la web ofrece pago con tarjeta.
-    bool StripeReady = false
+    bool StripeReady = false,
+    // Regla de confianza: un cliente nuevo paga al recoger solo hasta este total (null = sin límite).
+    // El checkout lo muestra como aviso; el API lo hace cumplir al crear el pedido.
+    decimal? PickupNewCustomerLimit = null
 );
 
 public record PublicCatalogResponse(

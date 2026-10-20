@@ -80,6 +80,7 @@ public class AppDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired();
+            entity.Property(e => e.PickupNewCustomerLimit).HasPrecision(10, 2);
             entity.Property(e => e.Description).HasMaxLength(1000);
             entity.Property(e => e.PrimaryColor).HasMaxLength(7);
             entity.Property(e => e.Slug).HasMaxLength(100);

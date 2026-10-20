@@ -61,8 +61,17 @@ public record OrderDto(
     string? CollectedMethod = null,
     DateTime? EstimatedReadyAt = null,
     DateTime? AcknowledgedAt = null,
-    string? CollectedReference = null
+    string? CollectedReference = null,
+    // "No vino" (ver Order.NoShowAt).
+    DateTime? NoShowAt = null,
+    // Historial del cliente para la Estación/Pedidos (null = sin cliente enlazado o no calculado
+    // en esta respuesta — p. ej. eventos en tiempo real; el front conserva el valor que ya tenía).
+    int? CustomerVisits = null,
+    int? CustomerNoShows = null
 );
+
+/// <summary>Reglas de confianza para pagar al recoger (dashboard → Pedidos).</summary>
+public record PickupRulesDto(decimal? NewCustomerLimit, bool NoShowRequiresCard);
 
 public record UpdateOrderStatusRequest(string Status, int? EstimatedMinutes = null);
 

@@ -60,7 +60,7 @@ public class OrderService : IOrderService
             request.CustomerEmail, request.CustomerPhone);
 
         var tableNumber = await ValidateTableAsync(affiliate, request);
-        if (request.PayAtPickup) await ValidatePickupAsync(affiliate, request, tableNumber);
+        if (request.PayAtPickup) await ValidatePickupAsync(affiliate, request, tableNumber, priced.Total);
         var customer = await LinkCustomerAsync(affiliate.Id, request.CustomerName, request.CustomerPhone, request.CustomerEmail);
 
         var order = new Order
@@ -95,7 +95,8 @@ public class OrderService : IOrderService
             await _notifications.NotifyPayAtTableRequestedAsync(order);
             order.Affiliate = affiliate;
             await _notifications.NotifyOrderReceivedAsync(order);
-            await _realtime.NotifyOrderUpdatedAsync(affiliate.Id, ToDto(order));
+            // Con el historial del cliente: la Estación muestra "Cliente nuevo" / "No vino ×N" al instante.
+            await _realtime.NotifyOrderUpdatedAsync(affiliate.Id, ToDto(order, customer));
             return new CreateOrderResponseDto(order.Id, CheckoutUrl: null, TrackingToken: order.TrackingToken);
         }
 
@@ -487,7 +488,14 @@ public class OrderService : IOrderService
             .OrderByDescending(o => o.CreatedAt)
             .ToListAsync();
 
-        return orders.Select(ToDto).ToList();
+        // Historial de cada cliente en una sola consulta (no N+1) para los indicadores de confianza.
+        var customerIds = orders.Where(o => o.CustomerId != null).Select(o => o.CustomerId!.Value).Distinct().ToList();
+        var customers = customerIds.Count == 0
+            ? new Dictionary<Guid, Maalca.Domain.Entities.Customer>()
+            : await _db.Customers.Where(c => c.AffiliateId == affiliateId && customerIds.Contains(c.Id))
+                .ToDictionaryAsync(c => c.Id);
+
+        return orders.Select(o => ToDto(o, o.CustomerId is { } cid && customers.TryGetValue(cid, out var c) ? c : null)).ToList();
     }
 
     public async Task<OrderDto?> UpdateStatusAsync(Guid affiliateId, Guid orderId, string status, int? estimatedMinutes = null)
@@ -941,8 +949,9 @@ public class OrderService : IOrderService
     private const int MaxPendingPickupPerContact = 2;
 
     /// <summary>Pedido para recoger pagando en el local: sin cobro online no hay otra barrera, así que
-    /// exige contacto real y limita los pendientes por contacto (anti-spam).</summary>
-    private async Task ValidatePickupAsync(Affiliate affiliate, CreateOrderRequest request, string? tableNumber)
+    /// exige contacto real, limita los pendientes por contacto (anti-spam) y aplica las reglas de
+    /// confianza del negocio (ver PickupTrustDecision).</summary>
+    private async Task ValidatePickupAsync(Affiliate affiliate, CreateOrderRequest request, string? tableNumber, decimal total)
     {
         if (tableNumber is not null) throw new ArgumentException("Pay-at-pickup cannot be combined with a table number.");
         var name = request.CustomerName?.Trim();
@@ -957,6 +966,104 @@ public class OrderService : IOrderService
             ((phone != null && phone != "" && o.CustomerPhone == phone) || (email != null && email != "" && o.CustomerEmail == email)));
         if (pending >= MaxPendingPickupPerContact)
             throw new ArgumentException("Ya tienes pedidos pendientes. Espera a que el negocio los confirme.");
+
+        // Reglas de confianza: mismo criterio de identificación que LinkCustomerAsync (teléfono, o
+        // correo si no hay teléfono), pero SIN crear el cliente todavía.
+        var cPhone = Clean(phone);
+        var cEmail = Clean(email);
+        var known = await _db.Customers.FirstOrDefaultAsync(c =>
+            c.AffiliateId == affiliate.Id &&
+            ((cPhone != null && c.Phone == cPhone) || (cEmail != null && c.Email == cEmail)));
+        var stripeReady = affiliate.StripeConnectChargesEnabled && !string.IsNullOrEmpty(affiliate.StripeConnectAccountId);
+        var blocked = PickupTrustDecision(affiliate.PickupNoShowRequiresCard, affiliate.PickupNewCustomerLimit,
+            known?.TotalVisits ?? 0, known?.NoShows ?? 0, total, stripeReady);
+        if (blocked is not null) throw new ArgumentException(blocked);
+    }
+
+    /// <summary>
+    /// Regla de confianza para "pagar al recoger" (pura, sin BD — se prueba aislada). Devuelve null
+    /// si se permite, o el mensaje para el cliente si no. Verificar el teléfono no evita que alguien
+    /// no venga; lo que protege es pedir tarjeta a quien ya falló o a un cliente nuevo con pedido grande.
+    /// El mensaje NO revela si ese teléfono tiene un "No vino" (se dice igual para cualquier caso).
+    /// </summary>
+    internal static string? PickupTrustDecision(bool noShowRequiresCard, decimal? newCustomerLimit,
+        int visits, int noShows, decimal total, bool stripeReady)
+    {
+        var payOnline = stripeReady
+            ? "Puedes completarlo pagando con tarjeta."
+            : "Comunícate directamente con el negocio para hacerlo.";
+        if (noShowRequiresCard && noShows > 0)
+            return $"Para este pedido el negocio requiere pago por adelantado. {payOnline}";
+        if (newCustomerLimit is decimal limit && visits == 0 && total > limit)
+            return $"En tu primer pedido, pagar al recoger está disponible hasta ${limit:0.00}. {payOnline}";
+        return null;
+    }
+
+    public async Task<OrderDto?> MarkNoShowAsync(Guid affiliateId, Guid orderId)
+    {
+        var order = await _db.Orders.FirstOrDefaultAsync(o => o.Id == orderId && o.AffiliateId == affiliateId);
+        if (order is null) return null;
+        if (order.PaymentMethod != PayAtPickupMethod)
+            throw new ArgumentException("Solo los pedidos para pagar al recoger se pueden marcar como \"No vino\".");
+        if (order.CollectedAt is not null || order.Status == OrderStatus.Fulfilled)
+            throw new ArgumentException("Este pedido ya se cobró o entregó.");
+        Maalca.Domain.Entities.Customer? customer = null;
+        if (order.NoShowAt is null)
+        {
+            order.NoShowAt = DateTime.UtcNow;
+            order.Status = OrderStatus.Canceled;
+            order.UpdatedAt = DateTime.UtcNow;
+            if (order.CustomerId is { } cid)
+            {
+                customer = await _db.Customers.FirstOrDefaultAsync(c => c.Id == cid);
+                if (customer is not null) { customer.NoShows += 1; customer.UpdatedAt = DateTime.UtcNow; }
+            }
+            await _db.SaveChangesAsync();
+        }
+        customer ??= order.CustomerId is { } id2 ? await _db.Customers.FirstOrDefaultAsync(c => c.Id == id2) : null;
+        var dto = ToDto(order, customer);
+        await _realtime.NotifyOrderUpdatedAsync(affiliateId, dto);
+        return dto;
+    }
+
+    /// <summary>Deshacer un "No vino" marcado por error: el pedido vuelve a "Listo" y el cliente
+    /// recupera su historial.</summary>
+    public async Task<OrderDto?> UndoNoShowAsync(Guid affiliateId, Guid orderId)
+    {
+        var order = await _db.Orders.FirstOrDefaultAsync(o => o.Id == orderId && o.AffiliateId == affiliateId);
+        if (order is null) return null;
+        Maalca.Domain.Entities.Customer? customer = order.CustomerId is { } cid
+            ? await _db.Customers.FirstOrDefaultAsync(c => c.Id == cid) : null;
+        if (order.NoShowAt is not null)
+        {
+            order.NoShowAt = null;
+            order.Status = OrderStatus.Ready;
+            order.UpdatedAt = DateTime.UtcNow;
+            if (customer is not null && customer.NoShows > 0) { customer.NoShows -= 1; customer.UpdatedAt = DateTime.UtcNow; }
+            await _db.SaveChangesAsync();
+        }
+        var dto = ToDto(order, customer);
+        await _realtime.NotifyOrderUpdatedAsync(affiliateId, dto);
+        return dto;
+    }
+
+    public async Task<PickupRulesDto?> GetPickupRulesAsync(Guid affiliateId)
+    {
+        var a = await _db.Affiliates.FirstOrDefaultAsync(x => x.Id == affiliateId);
+        return a is null ? null : new PickupRulesDto(a.PickupNewCustomerLimit, a.PickupNoShowRequiresCard);
+    }
+
+    public async Task<PickupRulesDto?> UpdatePickupRulesAsync(Guid affiliateId, PickupRulesDto request)
+    {
+        var a = await _db.Affiliates.FirstOrDefaultAsync(x => x.Id == affiliateId);
+        if (a is null) return null;
+        if (request.NewCustomerLimit is decimal l && (l < 0 || l > 10000))
+            throw new ArgumentException("El límite debe estar entre $0 y $10,000.");
+        a.PickupNewCustomerLimit = request.NewCustomerLimit is decimal v ? Math.Round(v, 2) : null;
+        a.PickupNoShowRequiresCard = request.NoShowRequiresCard;
+        a.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+        return new PickupRulesDto(a.PickupNewCustomerLimit, a.PickupNoShowRequiresCard);
     }
     private const int MaxTableLength = 20;
     private const int MaxPendingPayAtTablePerTable = 3;
@@ -1032,7 +1139,9 @@ public class OrderService : IOrderService
         return requested;
     }
 
-    private static OrderDto ToDto(Order o) => new(
+    private static OrderDto ToDto(Order o) => ToDto(o, null);
+
+    private static OrderDto ToDto(Order o, Maalca.Domain.Entities.Customer? customer) => new(
         o.Id,
         o.CustomerName,
         o.CustomerPhone,
@@ -1054,6 +1163,9 @@ public class OrderService : IOrderService
         o.CollectedMethod,
         o.EstimatedReadyAt,
         o.AcknowledgedAt,
-        o.CollectedReference
+        o.CollectedReference,
+        o.NoShowAt,
+        customer?.TotalVisits,
+        customer?.NoShows
     );
 }

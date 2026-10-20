@@ -38,6 +38,10 @@ public interface IOrderService
     /// (para pedidos que llegan ya Paid, p. ej. pagados online con Stripe) — silencia la alarma
     /// de la estación en todos los dispositivos. No-op si ya estaba reconocido.</summary>
     Task<OrderDto?> AcknowledgeAsync(Guid affiliateId, Guid orderId);
+    Task<OrderDto?> MarkNoShowAsync(Guid affiliateId, Guid orderId);
+    Task<OrderDto?> UndoNoShowAsync(Guid affiliateId, Guid orderId);
+    Task<PickupRulesDto?> GetPickupRulesAsync(Guid affiliateId);
+    Task<PickupRulesDto?> UpdatePickupRulesAsync(Guid affiliateId, PickupRulesDto request);
 
     /// <summary>Vista pública del pedido por token de seguimiento (null si el token no existe).</summary>
     Task<OrderTrackingDto?> GetTrackingAsync(string token);
