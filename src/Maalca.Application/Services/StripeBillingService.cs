@@ -117,8 +117,11 @@ public class StripeBillingService : IStripeBillingService
                 Active = true,
                 Limit = 20,
             });
-            _prices = list.Data.Where(p => !string.IsNullOrEmpty(p.LookupKey))
+            var found = list.Data.Where(p => !string.IsNullOrEmpty(p.LookupKey))
                 .GroupBy(p => p.LookupKey).ToDictionary(g => g.Key, g => g.First());
+            // Una lista vacía no se cachea: si los precios se crean después, se ven al instante.
+            if (found.Count == 0) return found;
+            _prices = found;
             _pricesAt = DateTime.UtcNow;
             _pricesKey = apiKey;
             return _prices;

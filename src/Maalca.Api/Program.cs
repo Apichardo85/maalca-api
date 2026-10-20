@@ -4315,7 +4315,16 @@ app.MapPost("/api/webhooks/stripe-connect", async (HttpContext ctx, IStripeConne
     var stripeMode = stripeKey.StartsWith("sk_live_") || stripeKey.StartsWith("rk_live_") ? "LIVE"
         : stripeKey.StartsWith("sk_test_") || stripeKey.StartsWith("rk_test_") ? "TEST" : "SIN LLAVE";
     // Console directo: el nivel Info de la app está filtrado en producción (appsettings).
-    Console.WriteLine($"Stripe: modo {stripeMode}");
+    // La cuenta (acct_…, no es secreta) dice a QUÉ entorno pertenece la llave: un sandbox de
+    // Stripe tiene llaves propias, distintas del test mode clásico de la cuenta.
+    var stripeAccount = "?";
+    try
+    {
+        if (stripeKey.Length > 0)
+            stripeAccount = new Stripe.AccountService(new Stripe.StripeClient(stripeKey)).GetSelf()?.Id ?? "?";
+    }
+    catch (Exception ex) { stripeAccount = $"error: {ex.Message}"; }
+    Console.WriteLine($"Stripe: modo {stripeMode}, cuenta {stripeAccount}");
 }
 
 // Apply migrations + seed on startup
