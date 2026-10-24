@@ -2295,6 +2295,80 @@ namespace Maalca.Infrastructure.Migrations
                     b.ToTable("Screens");
                 });
 
+            modelBuilder.Entity("Maalca.Domain.Entities.ScreenDevice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AffiliateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("AlertSentAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AppVersion")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<bool>("Archived")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("CommandAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeviceId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("FirstSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PendingCommand")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid?>("ScreenId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ShowingKind")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("ShowingLabel")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Viewport")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<bool>("Visible")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LastSeenAt");
+
+                    b.HasIndex("AffiliateId", "DeviceId");
+
+                    b.ToTable("ScreenDevices");
+                });
+
             modelBuilder.Entity("Maalca.Domain.Entities.ScreenWall", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3312,6 +3386,17 @@ namespace Maalca.Infrastructure.Migrations
                     b.Navigation("Affiliate");
 
                     b.Navigation("Wall");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.ScreenDevice", b =>
+                {
+                    b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
+                        .WithMany()
+                        .HasForeignKey("AffiliateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Affiliate");
                 });
 
             modelBuilder.Entity("Maalca.Domain.Entities.ScreenWall", b =>

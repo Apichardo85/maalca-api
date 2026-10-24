@@ -95,6 +95,9 @@ builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IDonationService, DonationService>();
 builder.Services.AddScoped<IScreenAdService, ScreenAdService>();
 builder.Services.AddScoped<IScreenService, ScreenService>();
+builder.Services.AddScoped<IScreenDeviceService, ScreenDeviceService>();
+// Vigila las TVs y avisa a MaalCa cuando una se cae en horario de atención (ver Workers/ScreenMonitorWorker).
+builder.Services.AddHostedService<Maalca.Api.Workers.ScreenMonitorWorker>();
 builder.Services.AddScoped<IScreenWallService, ScreenWallService>();
 builder.Services.AddScoped<IPublicBookingService, PublicBookingService>();
 
@@ -239,6 +242,14 @@ app.MapGet("/api/ops/overview", async (HttpContext ctx, IPlatformAdminService op
     if (ctx.User.FindFirst("platform_admin")?.Value != "true")
         return Results.Forbid();
     return Results.Ok(await opsService.GetOverviewAsync());
+});
+
+// Monitoreo de pantallas — todas las TVs de todos los negocios con su estado (ver ScreenDevice).
+app.MapGet("/api/ops/screen-devices", async (HttpContext ctx, IScreenDeviceService devices) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    return Results.Ok(await devices.GetAllAsync());
 });
 
 app.MapGet("/api/ops/affiliates", async (HttpContext ctx, IPlatformAdminService opsService) =>
@@ -3170,6 +3181,32 @@ app.MapDelete("/api/affiliates/{id}/screens/{screenId}", async (
     }
 });
 
+// ============ SCREEN DEVICES (monitoreo: qué TVs están mostrando cada pantalla) ============
+app.MapGet("/api/affiliates/{id}/screen-devices", async (HttpContext ctx, IScreenDeviceService devices, Guid id) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != id.ToString())
+        return Results.Forbid();
+    return Results.Ok(await devices.GetForAffiliateAsync(id));
+});
+
+// Comando a distancia para una TV ("reload" | "identify"): la TV lo recoge en su próxima señal (≤ 1 min).
+app.MapPost("/api/affiliates/{id}/screen-devices/{deviceRowId}/command", async (
+    HttpContext ctx, IScreenDeviceService devices, Guid id, Guid deviceRowId, ScreenDeviceCommandRequest request) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != id.ToString())
+        return Results.Forbid();
+    return await devices.SetCommandAsync(id, deviceRowId, request.Command) ? Results.NoContent() : Results.NotFound();
+});
+
+// Retirar (o reactivar) una TV: deja de vigilarse y de alertar. Reversible; no borra nada.
+app.MapPut("/api/affiliates/{id}/screen-devices/{deviceRowId}/archived", async (
+    HttpContext ctx, IScreenDeviceService devices, Guid id, Guid deviceRowId, ScreenDeviceArchiveRequest request) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != id.ToString())
+        return Results.Forbid();
+    return await devices.SetArchivedAsync(id, deviceRowId, request.Archived) ? Results.NoContent() : Results.NotFound();
+});
+
 // ============ SCREEN WALLS (muros de pantallas sincronizadas) ============
 app.MapGet("/api/affiliates/{id}/screen-walls", async (
     HttpContext ctx, IScreenWallService wallService, Guid id) =>
@@ -3843,6 +3880,19 @@ app.MapGet("/api/public/affiliates/{slug}/catalog", async (IPublicCatalogService
         return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
     response.Headers.CacheControl = "public, max-age=60";
     return Results.Ok(result);
+})
+.AllowAnonymous();
+
+// Señal de vida del board (cada TV, cada minuto). Anónima como el catálogo; devuelve el comando
+// pendiente para esa TV, si hay. Ver ScreenDevice / ScreenMonitorWorker.
+app.MapPost("/api/public/affiliates/{slug}/screen-heartbeat", async (
+    IScreenDeviceService devices, string slug, ScreenHeartbeatRequest request, HttpResponse response) =>
+{
+    response.Headers.CacheControl = "no-store";
+    var result = await devices.HeartbeatAsync(slug, request);
+    return result is null
+        ? Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } })
+        : Results.Ok(result);
 })
 .AllowAnonymous();
 

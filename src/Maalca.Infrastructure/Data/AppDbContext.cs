@@ -46,6 +46,7 @@ public class AppDbContext : DbContext
     public DbSet<ScreenAd> ScreenAds => Set<ScreenAd>();
     public DbSet<Screen> Screens => Set<Screen>();
     public DbSet<ScreenWall> ScreenWalls => Set<ScreenWall>();
+    public DbSet<ScreenDevice> ScreenDevices => Set<ScreenDevice>();
     public DbSet<TimeBlock> TimeBlocks => Set<TimeBlock>();
     public DbSet<Proposal> Proposals => Set<Proposal>();
     public DbSet<Activity> Activities => Set<Activity>();
@@ -170,6 +171,25 @@ public class AppDbContext : DbContext
                   .HasForeignKey(e => e.WallId)
                   .OnDelete(DeleteBehavior.SetNull);
             entity.HasIndex(e => e.WallId);
+        });
+
+        // ScreenDevice — TVs que reportan señal de vida (monitoreo de pantallas)
+        modelBuilder.Entity<ScreenDevice>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.DeviceId).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.ShowingKind).HasMaxLength(20);
+            entity.Property(e => e.ShowingLabel).HasMaxLength(200);
+            entity.Property(e => e.Viewport).HasMaxLength(20);
+            entity.Property(e => e.UserAgent).HasMaxLength(300);
+            entity.Property(e => e.AppVersion).HasMaxLength(40);
+            entity.Property(e => e.PendingCommand).HasMaxLength(20);
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.AffiliateId, e.DeviceId });
+            entity.HasIndex(e => e.LastSeenAt);
         });
 
         // ScreenWall — muros de pantallas sincronizadas
