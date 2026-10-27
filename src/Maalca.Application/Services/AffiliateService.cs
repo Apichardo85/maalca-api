@@ -68,8 +68,10 @@ public class AffiliateService : IAffiliateService
                 throw new ArgumentException("Name must be between 2 and 100 characters.");
             affiliate.Name = request.Name.Trim();
         }
-        if (request.Description != null) affiliate.Description = request.Description.Trim();
-        if (request.DescriptionEn != null) affiliate.DescriptionEn = request.DescriptionEn.Trim();
+        // Saneo de fondo al guardar: la descripción llega como HTML del RichTextEditor. El display
+        // ya sanea, pero no almacenamos vectores de XSS (cuenta comprometida o POST directo). Ver HtmlScrub.
+        if (request.Description != null) affiliate.Description = HtmlScrub.SanitizeRichText(request.Description.Trim());
+        if (request.DescriptionEn != null) affiliate.DescriptionEn = HtmlScrub.SanitizeRichText(request.DescriptionEn.Trim());
         if (request.LogoUrl != null) affiliate.LogoUrl = request.LogoUrl.Trim();
         if (request.CoverImageUrl != null) affiliate.CoverImageUrl = request.CoverImageUrl.Trim();
         if (request.ContactEmail != null) affiliate.ContactEmail = request.ContactEmail.Trim();
