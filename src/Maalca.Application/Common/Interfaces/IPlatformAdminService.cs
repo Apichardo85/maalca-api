@@ -27,7 +27,7 @@ public interface IPlatformAdminService
     /// plataforma independiente — "tumbar temporalmente" sin tocar su config real, así que al
     /// reactivar vuelve exactamente como estaba. Null en cualquiera de los dos = no lo toques.
     /// </summary>
-    Task<PlatformAffiliateSummaryDto> SetAffiliateStatusAsync(Guid affiliateId, bool? published, bool? active);
+    Task<PlatformAffiliateSummaryDto> SetAffiliateStatusAsync(Guid affiliateId, bool? published, bool? active, bool? isFeatured = null);
 
     /// <summary>Control de módulos por afiliado — MaalCa prende/apaga tokens del whitelist por
     /// encima de lo que el plan normalmente daría.</summary>

@@ -131,18 +131,19 @@ public class PlatformAdminService : IPlatformAdminService
                 a.Published, a.IsActive, a.CreatedAt, orders30d, a.StripeConnectChargesEnabled, alerts, a.LogoUrl,
                 ModuleAccess.ComputeActive(a, rules).ToList(), a.ScreensOnly,
                 ModuleAccess.ParseCourtesy(a.ModulosCortesia).ToList(), ModuleAccess.PublicTierName(ModuleAccess.GetEffectiveTier(a)),
-            ModuleCatalog.FilterActive(a.ModulosActivos, a.BusinessType.ToString()).ToList()));
+            ModuleCatalog.FilterActive(a.ModulosActivos, a.BusinessType.ToString()).ToList(), a.IsFeatured));
         }
         return result;
     }
 
-    public async Task<PlatformAffiliateSummaryDto> SetAffiliateStatusAsync(Guid affiliateId, bool? published, bool? active)
+    public async Task<PlatformAffiliateSummaryDto> SetAffiliateStatusAsync(Guid affiliateId, bool? published, bool? active, bool? isFeatured = null)
     {
         var affiliate = await _context.Affiliates.FindAsync(affiliateId)
             ?? throw new InvalidOperationException("Ese negocio no existe.");
 
         if (published.HasValue) affiliate.Published = published.Value;
         if (active.HasValue) affiliate.IsActive = active.Value;
+        if (isFeatured.HasValue) affiliate.IsFeatured = isFeatured.Value;
         affiliate.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
 
@@ -168,7 +169,7 @@ public class PlatformAdminService : IPlatformAdminService
             affiliate.CreatedAt, orders30d, affiliate.StripeConnectChargesEnabled, alerts, affiliate.LogoUrl,
             (await ModuleAccess.GetActiveModulesAsync(_context, affiliate)).ToList(), affiliate.ScreensOnly,
             ModuleAccess.ParseCourtesy(affiliate.ModulosCortesia).ToList(), ModuleAccess.PublicTierName(ModuleAccess.GetEffectiveTier(affiliate)),
-            ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()).ToList());
+            ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()).ToList(), affiliate.IsFeatured);
     }
 
     /// <summary>
@@ -209,7 +210,7 @@ public class PlatformAdminService : IPlatformAdminService
             affiliate.CreatedAt, orders30d, affiliate.StripeConnectChargesEnabled, alerts, affiliate.LogoUrl,
             (await ModuleAccess.GetActiveModulesAsync(_context, affiliate)).ToList(), affiliate.ScreensOnly,
             ModuleAccess.ParseCourtesy(affiliate.ModulosCortesia).ToList(), ModuleAccess.PublicTierName(ModuleAccess.GetEffectiveTier(affiliate)),
-            ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()).ToList());
+            ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()).ToList(), affiliate.IsFeatured);
     }
 
     /// <summary>
@@ -386,7 +387,7 @@ public class PlatformAdminService : IPlatformAdminService
             affiliate.CreatedAt, orders30d, affiliate.StripeConnectChargesEnabled, alerts, affiliate.LogoUrl,
             (await ModuleAccess.GetActiveModulesAsync(_context, affiliate)).ToList(), affiliate.ScreensOnly,
             ModuleAccess.ParseCourtesy(affiliate.ModulosCortesia).ToList(), ModuleAccess.PublicTierName(ModuleAccess.GetEffectiveTier(affiliate)),
-            ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()).ToList());
+            ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()).ToList(), affiliate.IsFeatured);
     }
 
     /// <summary>
@@ -432,7 +433,7 @@ public class PlatformAdminService : IPlatformAdminService
             affiliate.CreatedAt, orders30d, affiliate.StripeConnectChargesEnabled, alerts, affiliate.LogoUrl,
             (await ModuleAccess.GetActiveModulesAsync(_context, affiliate)).ToList(), affiliate.ScreensOnly,
             ModuleAccess.ParseCourtesy(affiliate.ModulosCortesia).ToList(), ModuleAccess.PublicTierName(ModuleAccess.GetEffectiveTier(affiliate)),
-            ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()).ToList());
+            ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()).ToList(), affiliate.IsFeatured);
     }
 
     /// <summary>

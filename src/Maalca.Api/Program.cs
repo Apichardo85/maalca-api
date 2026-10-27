@@ -272,7 +272,7 @@ app.MapPatch("/api/ops/affiliates/{affiliateId:guid}", async (
 
     try
     {
-        var result = await opsService.SetAffiliateStatusAsync(affiliateId, request.Published, request.Active);
+        var result = await opsService.SetAffiliateStatusAsync(affiliateId, request.Published, request.Active, request.IsFeatured);
         return Results.Ok(result);
     }
     catch (InvalidOperationException ex)

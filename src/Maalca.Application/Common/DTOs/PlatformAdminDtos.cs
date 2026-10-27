@@ -33,7 +33,9 @@ public record PlatformAffiliateSummaryDto(
     /// Nivel efectivo: Starter · Growth · Professional (un trial vigente cuenta como Professional).
     string? EffectiveTier = null,
     // Lo que ops tiene prendido (sin el filtro del plan). ModulosActivos = lo que el negocio VE.
-    List<string>? ModulosSeleccionados = null);
+    List<string>? ModulosSeleccionados = null,
+    /// Destacado en /casos (maalca.com/casos). Lo cura MaalCa desde /ops, no el afiliado.
+    bool IsFeatured = false);
 
 /// <summary>Módulos que MaalCa regala por encima del plan (vacío = ninguno; ["*"] = todo lo prendido).</summary>
 public record SetAffiliateCortesiaRequest(List<string> Modules);
@@ -48,7 +50,7 @@ public record SetAffiliateModulesRequest(List<string> Modules);
 
 public record ImpersonationSessionDto(Guid AffiliateId, string Slug, string Name, DateTime ExpiresAt);
 
-public record SetAffiliateStatusRequest(bool? Published, bool? Active);
+public record SetAffiliateStatusRequest(bool? Published, bool? Active, bool? IsFeatured = null);
 
 /// <summary>Cambio manual de tier desde /ops — MaalCa puede mover un negocio de Gratis a
 /// Emprendedor/Enterprise (o al revés) sin pasar por Stripe, ej. cortesía, negociación directa,

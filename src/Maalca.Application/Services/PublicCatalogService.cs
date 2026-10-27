@@ -227,11 +227,23 @@ public class PublicCatalogService : IPublicCatalogService
     }
 
     public async Task<List<FeaturedAffiliateDto>> GetFeaturedAffiliatesAsync()
-        => await _db.Affiliates
+    {
+        // Dos pasos: el .Select de EF no traduce BusinessType.ToString() a SQL, así que traemos
+        // las columnas (el enum es traducible) y armamos el DTO en memoria.
+        var rows = await _db.Affiliates
             .Where(a => a.IsFeatured && a.Published && a.IsActive)
             .OrderBy(a => a.Name)
-            .Select(a => new FeaturedAffiliateDto(a.Slug!, a.Name, a.Description, a.LogoUrl))
+            .Select(a => new
+            {
+                a.Slug, a.Name, a.Description, a.DescriptionEn, a.LogoUrl, a.CoverImageUrl,
+                a.BusinessType, a.PrimaryColor, a.SecondaryColor, a.AccentColor,
+            })
             .ToListAsync();
+
+        return rows.Select(a => new FeaturedAffiliateDto(
+            a.Slug!, a.Name, a.Description, a.DescriptionEn, a.LogoUrl, a.CoverImageUrl,
+            a.BusinessType.ToString(), a.PrimaryColor, a.SecondaryColor, a.AccentColor)).ToList();
+    }
 
     private async Task<AffiliatePublicDto> MapToAffiliatePublicDtoAsync(Maalca.Domain.Entities.Affiliate a)
     {

@@ -54,7 +54,13 @@ public record FeaturedAffiliateDto(
     string Slug,
     string Name,
     string? Description,
-    string? LogoUrl
+    string? DescriptionEn,
+    string? LogoUrl,
+    string? CoverImageUrl,
+    string BusinessType,
+    string? PrimaryColor,
+    string? SecondaryColor,
+    string? AccentColor
 );
 
 public record CatalogItemDto(
