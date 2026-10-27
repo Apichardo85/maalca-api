@@ -102,11 +102,24 @@ public class OnboardingService : IOnboardingService
             LogoUrl = request.LogoUrl?.Trim()
         };
 
+        // Modo "Solo pantallas": el negocio solo quiere sus TVs. La página pública arranca
+        // apagada (no la pidió) y solo quedan los módulos de pantalla; catalog se deja por si la
+        // pantalla muestra menú. Cualquier otro módulo se prende después desde /ops o su panel.
+        if (request.ScreensOnly == true)
+        {
+            affiliate.ScreensOnly = true;
+            affiliate.Published = false;
+            affiliate.ModulosActivos = "board,catalog,page";
+        }
+
         _db.Affiliates.Add(affiliate);
         await _db.SaveChangesAsync();
 
-        SeedDemoCatalog(affiliate.Id, businessType);
-        await _db.SaveChangesAsync();
+        if (!affiliate.ScreensOnly)
+        {
+            SeedDemoCatalog(affiliate.Id, businessType);
+            await _db.SaveChangesAsync();
+        }
 
         if (!string.IsNullOrWhiteSpace(affiliate.WhatsApp))
             await _canalService.CreateAsync(affiliate.Id,

@@ -99,6 +99,20 @@ public class StripeBillingService : IStripeBillingService
 
     private static bool IsExtraScreenKey(string? key) => key is ExtraScreenMonthly or ExtraScreenYearly;
 
+    /// <summary>Precio plano → Amount = UnitAmount. Escalonado → Amount = primer tramo y Tiers con
+    /// todos (sin esto el panel mostraría $0 para la pantalla extra).</summary>
+    private static BillingPriceDto ToPriceDto(Price p)
+    {
+        if (p.BillingScheme == "tiered" && p.Tiers is { Count: > 0 })
+        {
+            var tiers = p.Tiers
+                .Select(t => new BillingPriceTierDto(t.UpTo, (t.UnitAmount ?? 0) / 100m))
+                .ToList();
+            return new BillingPriceDto(p.LookupKey, tiers[0].Amount, p.Recurring?.Interval, tiers);
+        }
+        return new BillingPriceDto(p.LookupKey, (p.UnitAmount ?? 0) / 100m, p.Recurring?.Interval);
+    }
+
     private static async Task<IReadOnlyDictionary<string, Price>> GetPricesAsync()
     {
         var apiKey = UseApiKey();
@@ -116,6 +130,9 @@ public class StripeBillingService : IStripeBillingService
                 LookupKeys = AllLookupKeys.ToList(),
                 Active = true,
                 Limit = 20,
+                // Los precios escalonados (pantalla extra) no traen UnitAmount: los montos viven
+                // en Tiers, que Stripe solo devuelve si se piden expandidos.
+                Expand = new List<string> { "data.tiers" },
             });
             var found = list.Data.Where(p => !string.IsNullOrEmpty(p.LookupKey))
                 .GroupBy(p => p.LookupKey).ToDictionary(g => g.Key, g => g.First());
@@ -159,7 +176,8 @@ public class StripeBillingService : IStripeBillingService
         var plan = ParsePlan(request.Plan);
         var interval = ParseInterval(request.Interval);
         var extras = Math.Clamp(request.ExtraScreens, 0, MaxExtraScreens);
-        var chargeSetup = affiliate.SetupFeePaidAt is null;
+        // Modo "Solo pantallas": no se cobra setup, el Kit de pantalla ya cubre ese trabajo.
+        var chargeSetup = affiliate.SetupFeePaidAt is null && !affiliate.ScreensOnly;
 
         var lineItems = new List<SessionLineItemOptions>
         {
@@ -287,7 +305,7 @@ public class StripeBillingService : IStripeBillingService
         try
         {
             prices = (await GetPricesAsync()).Values
-                .Select(p => new BillingPriceDto(p.LookupKey, (p.UnitAmount ?? 0) / 100m, p.Recurring?.Interval))
+                .Select(ToPriceDto)
                 .OrderBy(p => p.LookupKey).ToList();
         }
         catch (StripeException)
@@ -305,7 +323,7 @@ public class StripeBillingService : IStripeBillingService
             ExtraScreens: affiliate.ExtraScreens,
             ScreenAllowance: _planLimit.GetScreenAllowance(affiliate),
             ScreensUsed: used,
-            SetupFeeDue: affiliate.SetupFeePaidAt is null,
+            SetupFeeDue: affiliate.SetupFeePaidAt is null && !affiliate.ScreensOnly,
             Prices: prices);
     }
 

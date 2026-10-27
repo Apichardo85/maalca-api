@@ -47,6 +47,7 @@ public class AppDbContext : DbContext
     public DbSet<Screen> Screens => Set<Screen>();
     public DbSet<ScreenWall> ScreenWalls => Set<ScreenWall>();
     public DbSet<ScreenDevice> ScreenDevices => Set<ScreenDevice>();
+    public DbSet<PlatformAddOn> PlatformAddOns => Set<PlatformAddOn>();
     public DbSet<TimeBlock> TimeBlocks => Set<TimeBlock>();
     public DbSet<Proposal> Proposals => Set<Proposal>();
     public DbSet<Activity> Activities => Set<Activity>();
@@ -139,6 +140,21 @@ public class AppDbContext : DbContext
                   .HasForeignKey(e => e.AffiliateId)
                   .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.AffiliateId, e.CreatedAt });
+        });
+
+        // PlatformAddOn — extras de MaalCa editables desde /ops/precios
+        modelBuilder.Entity<PlatformAddOn>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Key).HasMaxLength(60).IsRequired();
+            entity.HasIndex(e => e.Key).IsUnique();
+            entity.Property(e => e.NameEs).HasMaxLength(120).IsRequired();
+            entity.Property(e => e.NameEn).HasMaxLength(120).IsRequired();
+            entity.Property(e => e.DescEs).HasMaxLength(600).IsRequired();
+            entity.Property(e => e.DescEn).HasMaxLength(600).IsRequired();
+            entity.Property(e => e.Price).HasPrecision(10, 2);
+            entity.Property(e => e.VolumePrice).HasPrecision(10, 2);
+            entity.Property(e => e.UpdatedBy).HasMaxLength(255);
         });
 
         // ScreenAd

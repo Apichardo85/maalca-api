@@ -94,6 +94,7 @@ builder.Services.AddScoped<Maalca.Application.Common.Interfaces.IOrderRealtimeNo
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IDonationService, DonationService>();
 builder.Services.AddScoped<IScreenAdService, ScreenAdService>();
+builder.Services.AddScoped<IPlatformAddOnService, PlatformAddOnService>();
 builder.Services.AddScoped<IScreenService, ScreenService>();
 builder.Services.AddScoped<IScreenDeviceService, ScreenDeviceService>();
 // Vigila las TVs y avisa a MaalCa cuando una se cae en horario de atención (ver Workers/ScreenMonitorWorker).
@@ -445,6 +446,22 @@ app.MapPatch("/api/ops/affiliates/{affiliateId:guid}/modules", async (
     {
         var result = await opsService.SetAffiliateModulesAsync(affiliateId, request.Modules);
         return Results.Ok(result);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = ex.Message } });
+    }
+});
+
+// Modo "Solo pantallas" de un negocio (sin setup al pagar). Cualquier admin, como los módulos.
+app.MapPatch("/api/ops/affiliates/{affiliateId:guid}/screens-only", async (
+    HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId, SetScreensOnlyRequest request) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    try
+    {
+        return Results.Ok(await opsService.SetAffiliateScreensOnlyAsync(affiliateId, request.ScreensOnly));
     }
     catch (InvalidOperationException ex)
     {
@@ -3038,6 +3055,54 @@ app.MapPatch("/api/affiliates/{id}/orders/{orderId}/collect", async (
         if (result is null)
             return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Order not found" } });
         return Results.Ok(result);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+});
+
+// ============ EXTRAS DE MAALCA (PlatformAddOns) ============
+// Público: lo que muestra /servicios. Ops: /ops/precios los edita sin desplegar.
+app.MapGet("/api/public/platform-addons", async (IPlatformAddOnService addOns, HttpResponse response) =>
+{
+    response.Headers.CacheControl = "public, max-age=60";
+    return Results.Ok(await addOns.GetPublicAsync());
+})
+.AllowAnonymous();
+
+app.MapGet("/api/ops/platform-addons", async (HttpContext ctx, IPlatformAddOnService addOns) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    return Results.Ok(await addOns.GetAllAsync());
+});
+
+app.MapPost("/api/ops/platform-addons", async (HttpContext ctx, IPlatformAddOnService addOns, UpsertPlatformAddOnRequest request) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    try
+    {
+        var created = await addOns.CreateAsync(request, ctx.User.FindFirst("email")?.Value);
+        return Results.Created($"/api/ops/platform-addons/{created.Key}", created);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+});
+
+app.MapPut("/api/ops/platform-addons/{key}", async (HttpContext ctx, IPlatformAddOnService addOns, string key, UpsertPlatformAddOnRequest request) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    try
+    {
+        var updated = await addOns.UpdateAsync(key, request, ctx.User.FindFirst("email")?.Value);
+        return updated is null
+            ? Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Ese extra no existe." } })
+            : Results.Ok(updated);
     }
     catch (ArgumentException ex)
     {

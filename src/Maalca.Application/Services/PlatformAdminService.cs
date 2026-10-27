@@ -128,7 +128,7 @@ public class PlatformAdminService : IPlatformAdminService
             result.Add(new PlatformAffiliateSummaryDto(
                 a.Id, a.Name, a.Slug ?? "", a.BusinessType.ToString(), a.Plan.ToString(), a.PlanStatus.ToString(),
                 a.Published, a.IsActive, a.CreatedAt, orders30d, a.StripeConnectChargesEnabled, alerts, a.LogoUrl,
-                ModuleCatalog.FilterActive(a.ModulosActivos, a.BusinessType.ToString()).ToList()));
+                ModuleCatalog.FilterActive(a.ModulosActivos, a.BusinessType.ToString()).ToList(), a.ScreensOnly));
         }
         return result;
     }
@@ -163,7 +163,7 @@ public class PlatformAdminService : IPlatformAdminService
             affiliate.Id, affiliate.Name, affiliate.Slug ?? "", affiliate.BusinessType.ToString(),
             affiliate.Plan.ToString(), affiliate.PlanStatus.ToString(), affiliate.Published, affiliate.IsActive,
             affiliate.CreatedAt, orders30d, affiliate.StripeConnectChargesEnabled, alerts, affiliate.LogoUrl,
-            ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()).ToList());
+            ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()).ToList(), affiliate.ScreensOnly);
     }
 
     /// <summary>
@@ -202,7 +202,7 @@ public class PlatformAdminService : IPlatformAdminService
             affiliate.Id, affiliate.Name, affiliate.Slug ?? "", affiliate.BusinessType.ToString(),
             affiliate.Plan.ToString(), affiliate.PlanStatus.ToString(), affiliate.Published, affiliate.IsActive,
             affiliate.CreatedAt, orders30d, affiliate.StripeConnectChargesEnabled, alerts, affiliate.LogoUrl,
-            ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()).ToList());
+            ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()).ToList(), affiliate.ScreensOnly);
     }
 
     /// <summary>
@@ -377,7 +377,7 @@ public class PlatformAdminService : IPlatformAdminService
             affiliate.Id, affiliate.Name, affiliate.Slug ?? "", affiliate.BusinessType.ToString(),
             affiliate.Plan.ToString(), affiliate.PlanStatus.ToString(), affiliate.Published, affiliate.IsActive,
             affiliate.CreatedAt, orders30d, affiliate.StripeConnectChargesEnabled, alerts, affiliate.LogoUrl,
-            ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()).ToList());
+            ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()).ToList(), affiliate.ScreensOnly);
     }
 
     /// <summary>
@@ -421,7 +421,24 @@ public class PlatformAdminService : IPlatformAdminService
             affiliate.Id, affiliate.Name, affiliate.Slug ?? "", affiliate.BusinessType.ToString(),
             affiliate.Plan.ToString(), affiliate.PlanStatus.ToString(), affiliate.Published, affiliate.IsActive,
             affiliate.CreatedAt, orders30d, affiliate.StripeConnectChargesEnabled, alerts, affiliate.LogoUrl,
-            ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()).ToList());
+            ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()).ToList(), affiliate.ScreensOnly);
+    }
+
+    /// <summary>
+    /// Activa/desactiva el modo "Solo pantallas". Solo cambia la bandera (setup exento al pagar);
+    /// no toca módulos ni la página pública — esos se ajustan aparte si hace falta.
+    /// </summary>
+    public async Task<PlatformAffiliateSummaryDto> SetAffiliateScreensOnlyAsync(Guid affiliateId, bool screensOnly)
+    {
+        var affiliate = await _context.Affiliates.FindAsync(affiliateId)
+            ?? throw new InvalidOperationException("Ese negocio no existe.");
+
+        affiliate.ScreensOnly = screensOnly;
+        affiliate.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        // Mismo resumen que devuelven los demás cambios de /ops (alertas, pedidos, módulos).
+        return await SetAffiliateStatusAsync(affiliateId, null, null);
     }
 
     public async Task<ImpersonationSessionDto> StartImpersonationAsync(string adminSupabaseUserId, string adminEmail, Guid affiliateId)

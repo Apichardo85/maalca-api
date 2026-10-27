@@ -9,7 +9,10 @@ public record OnboardingRequest(
     string? LogoUrl = null,
     // "Individual" | "Organization" — solo relevante para BusinessType=Community (ver
     // Affiliate.OperatorType). Omitido = Organization.
-    string? OperatorType = null
+    string? OperatorType = null,
+    // true = modo "Solo pantallas" (ver Affiliate.ScreensOnly): sin catálogo demo, página
+    // apagada, módulos board/catalog/page y sin setup al pagar.
+    bool? ScreensOnly = null
 );
 
 public record OnboardingResponse(

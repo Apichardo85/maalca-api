@@ -10,7 +10,13 @@ public record CreateCheckoutSessionRequest(string SuccessUrl, string CancelUrl, 
 public record UpdateExtraScreensRequest(int ExtraScreens);
 
 /// <summary>Un precio del catálogo de Stripe, identificado por su lookup_key (maalca_*).</summary>
-public record BillingPriceDto(string LookupKey, decimal Amount, string? Interval);
+/// <summary>Precio de Stripe. Amount = precio de la primera unidad. Tiers solo viene en precios
+/// escalonados (ej. pantalla extra: $15 la primera, $10 desde la segunda).</summary>
+public record BillingPriceDto(string LookupKey, decimal Amount, string? Interval,
+    IReadOnlyList<BillingPriceTierDto>? Tiers = null);
+
+/// <summary>Tramo de un precio escalonado: UpTo = hasta qué cantidad aplica (null = sin tope).</summary>
+public record BillingPriceTierDto(long? UpTo, decimal Amount);
 
 /// <summary>
 /// Todo lo que el dashboard necesita para la sección de plan: nombre público, estado, intervalo,

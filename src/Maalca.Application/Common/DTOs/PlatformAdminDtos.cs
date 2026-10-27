@@ -25,7 +25,9 @@ public record PlatformAffiliateSummaryDto(
     /// Módulos efectivamente activos (ya filtrados por ModuleCatalog.FilterActive) — la misma
     /// lista que ve el afiliado en /space/{slug}/modules, expuesta acá para que /ops pueda
     /// mostrar y editar el toggle real.
-    List<string>? ModulosActivos = null);
+    List<string>? ModulosActivos = null,
+    /// Modo "Solo pantallas" (sin setup, sin catálogo demo) — ver Affiliate.ScreensOnly.
+    bool ScreensOnly = false);
 
 /// <summary>Control de módulos por afiliado (Etapa: MaalCa converge plan + overrides) — MaalCa
 /// puede prender/apagar cualquier token del whitelist por encima de lo que el plan normalmente
