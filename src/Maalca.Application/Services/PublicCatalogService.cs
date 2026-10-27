@@ -34,8 +34,11 @@ public class PublicCatalogService : IPublicCatalogService
 
     public async Task<PublicCatalogResponse?> GetCatalogAsync(string slug, Guid? screenId = null)
     {
+        // Un negocio "Solo pantallas" tiene la página pública apagada (Published=false) pero sus
+        // TVs sí deben mostrar el menú/anuncios: este catálogo es lo que lee el board, así que
+        // responde igual para ellos. Su página pública sigue apagada (GetAffiliateBySlugAsync).
         var affiliate = await _db.Affiliates
-            .Where(a => a.Slug == slug && a.Published && a.IsActive)
+            .Where(a => a.Slug == slug && (a.Published || a.ScreensOnly) && a.IsActive)
             .FirstOrDefaultAsync();
 
         if (affiliate == null) return null;
@@ -193,7 +196,8 @@ public class PublicCatalogService : IPublicCatalogService
             (screen?.BoardTheme ?? affiliate.BoardTheme).ToString(),
             (screen?.TransitionEffect ?? affiliate.TransitionEffect).ToString(),
             (screen?.Layout ?? affiliate.BoardLayout).ToString(),
-            wallDto);
+            wallDto,
+            affiliate.Published);
     }
 
     /// <summary>¿Dos TVs de un muro muestran el mismo menú? (categorías sin importar orden ni

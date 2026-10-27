@@ -130,5 +130,8 @@ public record PublicCatalogResponse(
     string? BoardTheme = null,             // Fase 9 — "Dark" | "Light"
     string? TransitionEffect = null,        // Fase 9 — "Fade" | "Slide" | "Zoom" | "None"
     string? Layout = null,                 // "Classic" | "Hero" | "Grid" | ... plantilla visual
-    PublicWallDto? Wall = null             // muro sincronizado: modo + posición de ESTA TV (null = pantalla suelta)
+    PublicWallDto? Wall = null,            // muro sincronizado: modo + posición de ESTA TV (null = pantalla suelta)
+    // false = página pública apagada (negocio "Solo pantallas" sin publicar): el board sí usa
+    // este catálogo, pero la página /{slug}, el kiosko y el detalle de item deben dar 404.
+    bool PagePublished = true
 );
