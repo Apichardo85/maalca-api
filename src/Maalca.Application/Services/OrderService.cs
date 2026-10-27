@@ -44,7 +44,7 @@ public class OrderService : IOrderService
         // con tarjeta), aunque alguien tenga la página abierta de antes o llame al endpoint directo.
         // Mismo criterio que las reservas (PublicBookingService): ModulosActivos explícito manda y null
         // cae al default por tipo de negocio.
-        var activeModules = ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString());
+        var activeModules = await ModuleAccess.GetActiveModulesAsync(_db, affiliate);
         if (!activeModules.Contains("orders", StringComparer.OrdinalIgnoreCase))
             throw new ArgumentException("Este negocio no está recibiendo pedidos en línea por ahora. Contáctalo directamente.");
 

@@ -42,6 +42,10 @@ public class Affiliate : BaseEntity
     // write canonical tokens directly here — no legacy→canonical translation layer.
     public string? ModulosActivos { get; set; }
 
+    // Módulos que MaalCa regala por encima del plan (tokens separados por coma). "*" = conserva
+    // todo lo prendido sin mirar el plan. Ver ModuleAccess. Se edita desde /ops/negocios/{id}.
+    public string? ModulosCortesia { get; set; }
+
     // ── Espacio v2: contenido editorial de la página pública ──────
     // JSON string, sin shape forzado a nivel de DB. ProcessSteps: array de
     // {title, description}. Faq: array de {question, answer}. Horario: array de

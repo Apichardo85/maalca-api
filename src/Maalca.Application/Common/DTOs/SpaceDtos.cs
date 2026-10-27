@@ -41,7 +41,12 @@ public record BusinessDto(
     IReadOnlyDictionary<string, CategoryTranslationDto>? CategoryTranslations = null,
     // Idioma principal del negocio (Affiliate.Language) y bandera junto a "ES" (Settings.spanishFlag).
     string Language = "es",
-    string? SpanishFlag = null
+    string? SpanishFlag = null,
+    // Nivel efectivo (Starter · Growth · Professional; un trial vigente cuenta como Professional),
+    // módulos con candado por plan y pantallas que puede usar hoy. Ver ModuleAccess.
+    string EffectiveTier = "Starter",
+    IReadOnlyList<Maalca.Application.Common.LockedModuleDto>? LockedModules = null,
+    int ScreenAllowance = 0
 );
 
 public record ProcessStepDto(string Title, string Description);

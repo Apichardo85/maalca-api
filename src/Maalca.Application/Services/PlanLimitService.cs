@@ -10,7 +10,6 @@ namespace Maalca.Application.Services;
 public class PlanLimitService : IPlanLimitService
 {
     public const string TrialExpiredMessage = "Tu período gratuito terminó — mejora a Emprendedor para seguir editando.";
-    private const int TrialDays = 30;
 
     private readonly AppDbContext _db;
 
@@ -19,17 +18,9 @@ public class PlanLimitService : IPlanLimitService
         _db = db;
     }
 
-    public bool IsTrialExpired(Affiliate affiliate)
-    {
-        if (affiliate.Plan != Plan.Free) return false;
-
-        // El override manual desde /ops (extender/forzar vencimiento) tiene prioridad sobre el
-        // cálculo normal basado en CreatedAt — ver Affiliate.TrialOverrideEndsAt.
-        if (affiliate.TrialOverrideEndsAt.HasValue)
-            return affiliate.TrialOverrideEndsAt.Value < DateTime.UtcNow;
-
-        return affiliate.CreatedAt.AddDays(TrialDays) < DateTime.UtcNow;
-    }
+    // Una sola definición del trial: ModuleAccess (el override manual desde /ops,
+    // Affiliate.TrialOverrideEndsAt, tiene prioridad sobre CreatedAt + 30 días).
+    public bool IsTrialExpired(Affiliate affiliate) => ModuleAccess.IsTrialExpired(affiliate);
 
     public int GetMaxItems(Plan plan) => plan switch
     {
@@ -69,16 +60,17 @@ public class PlanLimitService : IPlanLimitService
     }
 
     // ── Pantallas (Menu Board / muros) ──────────────────────────────────
-    // Incluidas por plan: Starter (Free) 1 · Growth (Entrepreneur) 1 · Professional (Enterprise) 2.
-    // Las extra se pagan aparte ($15/mes c/u) y viven en Affiliate.ExtraScreens.
+    // Por plan de pago (para cotizar en Stripe): Growth 1 · Professional 2.
     public int GetIncludedScreens(Plan plan) => plan switch
     {
         Plan.Enterprise => 2,
         _ => 1
     };
 
+    // Las que tiene HOY el negocio: trial vigente 1 · Starter vencido 0 (salvo cortesía) ·
+    // Growth 1 · Professional 2 (ModuleAccess.GetIncludedScreens), más las extra pagadas.
     public int GetScreenAllowance(Affiliate affiliate)
-        => GetIncludedScreens(affiliate.Plan) + Math.Max(0, affiliate.ExtraScreens);
+        => ModuleAccess.GetIncludedScreens(affiliate) + Math.Max(0, affiliate.ExtraScreens);
 
     public async Task EnsureScreenCapacityAsync(Guid affiliateId, int adding)
     {

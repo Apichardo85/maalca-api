@@ -186,10 +186,26 @@ public class PublicCatalogService : IPublicCatalogService
             .Select(a => new ScreenAdDto(a.Id, a.MediaUrl, a.MediaType.ToString(), a.DurationSeconds, a.SortOrder, a.Active, a.StartsAt, a.EndsAt, a.Fit.ToString()))
             .ToList();
 
+        // Pantalla en pausa: sin el módulo board activo (plan vencido, apagado en ops) o, si es
+        // una pantalla extra, fuera de la cuota de su plan (ordenadas por SortOrder). El board
+        // muestra "Esta pantalla está en pausa" en vez del menú.
+        var activeModules = await ModuleAccess.GetActiveModulesAsync(_db, affiliate);
+        var allowance = ModuleAccess.GetIncludedScreens(affiliate) + Math.Max(0, affiliate.ExtraScreens);
+        var boardOn = activeModules.Contains("board", StringComparer.OrdinalIgnoreCase) && allowance > 0;
+        if (boardOn && screenId.HasValue)
+        {
+            var order = await _db.Screens
+                .Where(s => s.AffiliateId == affiliate.Id)
+                .OrderBy(s => s.SortOrder).ThenBy(s => s.CreatedAt)
+                .Select(s => s.Id)
+                .ToListAsync();
+            boardOn = order.IndexOf(screenId.Value) < allowance;
+        }
+
         return new PublicCatalogResponse(
             await MapToAffiliatePublicDtoAsync(affiliate),
             items,
-            BuildCapabilities(affiliate.Plan) with { StripeReady = affiliate.StripeConnectChargesEnabled && !string.IsNullOrEmpty(affiliate.StripeConnectAccountId), PickupNewCustomerLimit = affiliate.PickupNewCustomerLimit },
+            BuildCapabilities(ModuleAccess.GetEffectiveTier(affiliate), boardOn) with { StripeReady = affiliate.StripeConnectChargesEnabled && !string.IsNullOrEmpty(affiliate.StripeConnectAccountId), PickupNewCustomerLimit = affiliate.PickupNewCustomerLimit },
             screenAds,
             adsScreen?.AdFrequency ?? affiliate.AdFrequency,
             screen?.Language ?? affiliate.Language,
@@ -249,8 +265,7 @@ public class PublicCatalogService : IPublicCatalogService
             ParseDefaultTheme(a.Settings),
             ParseSpanishFlag(a.Settings),
             a.Language,
-            Maalca.Application.Common.ModuleCatalog
-                .FilterActive(a.ModulosActivos, a.BusinessType.ToString())
+            (await ModuleAccess.GetActiveModulesAsync(_db, a))
                 .Contains("orders", StringComparer.OrdinalIgnoreCase));
     }
 
@@ -297,11 +312,13 @@ public class PublicCatalogService : IPublicCatalogService
     // Single source of truth for what each plan unlocks — flip a value here to change it
     // everywhere it's checked (dashboard teasers, the public /board route gate, etc.),
     // instead of hardcoding a plan check at each call site.
-    private static PlanCapabilitiesDto BuildCapabilities(Plan plan) =>
-        // Enterprise es un tier por ENCIMA de Emprendedor: desbloquea todo lo que desbloquea Emprendedor.
-        plan is Plan.Entrepreneur or Plan.Enterprise
-            ? new PlanCapabilitiesDto(true, true, true, true, true, true, true, MenuBoard: true)
-            : new PlanCapabilitiesDto(false, false, false, false, false, false, false, MenuBoard: false);
+    // Capacidades por NIVEL EFECTIVO (ModuleAccess): un Starter con trial vigente cuenta como
+    // Professional, así el trial se siente como el plan completo. MenuBoard sale del módulo board
+    // y de la cuota de pantallas, no del plan a secas.
+    private static PlanCapabilitiesDto BuildCapabilities(PlanTier tier, bool menuBoard) =>
+        tier >= PlanTier.Growth
+            ? new PlanCapabilitiesDto(true, true, true, true, true, true, true, MenuBoard: menuBoard)
+            : new PlanCapabilitiesDto(false, false, false, false, false, false, false, MenuBoard: menuBoard);
 
     /// <summary>
     /// Catálogo Retail (InventoryItem). En items con control de stock, Stock ya descuenta las unidades

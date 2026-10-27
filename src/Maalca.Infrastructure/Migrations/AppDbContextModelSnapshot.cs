@@ -219,6 +219,10 @@ namespace Maalca.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("ModulosCortesia")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
@@ -2296,6 +2300,27 @@ namespace Maalca.Infrastructure.Migrations
                     b.HasIndex("AffiliateId", "SortOrder");
 
                     b.ToTable("Screens");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.ModulePlanRule", b =>
+                {
+                    b.Property<string>("Token")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<int>("MinTier")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.HasKey("Token");
+
+                    b.ToTable("ModulePlanRules");
                 });
 
             modelBuilder.Entity("Maalca.Domain.Entities.PlatformAddOn", b =>

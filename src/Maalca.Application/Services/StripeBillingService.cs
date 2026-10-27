@@ -319,7 +319,7 @@ public class StripeBillingService : IStripeBillingService
             PlanStatus: affiliate.PlanStatus.ToString(),
             Interval: affiliate.BillingInterval,
             HasSubscription: HasLiveSubscription(affiliate),
-            IncludedScreens: _planLimit.GetIncludedScreens(affiliate.Plan),
+            IncludedScreens: Maalca.Application.Common.ModuleAccess.GetIncludedScreens(affiliate),
             ExtraScreens: affiliate.ExtraScreens,
             ScreenAllowance: _planLimit.GetScreenAllowance(affiliate),
             ScreensUsed: used,

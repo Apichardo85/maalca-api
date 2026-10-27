@@ -453,6 +453,55 @@ app.MapPatch("/api/ops/affiliates/{affiliateId:guid}/modules", async (
     }
 });
 
+// ============ MÓDULOS POR PLAN ============
+// Catálogo único (ModuleCatalog) con el plan mínimo vigente — la web lo usa en /ops/modulos.
+app.MapGet("/api/modules/catalog", async (AppDbContext db) =>
+{
+    var rules = await ModuleAccess.GetRulesAsync(db);
+    return Results.Ok(ModuleCatalog.Modules.Select(m => new
+    {
+        token = m.Token,
+        es = m.Es,
+        en = m.En,
+        descEs = m.DescEs,
+        descEn = m.DescEn,
+        businessTypes = m.BusinessTypes,
+        excludeBusinessTypes = m.ExcludeBusinessTypes,
+        minTier = rules.GetValueOrDefault(m.Token, m.DefaultMinTier).ToString(),
+    }));
+})
+.AllowAnonymous();
+
+app.MapPut("/api/ops/module-rules/{token}", async (HttpContext ctx, IPlatformAdminService opsService, string token, SetModuleRuleRequest request) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    try
+    {
+        await opsService.SetModuleRuleAsync(token, request.MinTier, ctx.User.FindFirst("email")?.Value);
+        return Results.NoContent();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+});
+
+app.MapPatch("/api/ops/affiliates/{affiliateId:guid}/modules-cortesia", async (
+    HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId, SetAffiliateCortesiaRequest request) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    try
+    {
+        return Results.Ok(await opsService.SetAffiliateCortesiaAsync(affiliateId, request.Modules));
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = ex.Message } });
+    }
+});
+
 // Modo "Solo pantallas" de un negocio (sin setup al pagar). Cualquier admin, como los módulos.
 app.MapPatch("/api/ops/affiliates/{affiliateId:guid}/screens-only", async (
     HttpContext ctx, IPlatformAdminService opsService, Guid affiliateId, SetScreensOnlyRequest request) =>
@@ -3861,7 +3910,8 @@ app.MapGet("/api/space/{slug}", async (
         EscaneosQr: new KpiValueDto(escaneosQrCount, true),
         ClicsCanales: new KpiValueDto(clicsCanalesCount, true));
 
-    DateTime? trialEndsAt = affiliate.Plan == Plan.Free ? affiliate.CreatedAt.AddDays(30) : null;
+    // Respeta la extensión/forzado manual del trial desde /ops (TrialOverrideEndsAt).
+    DateTime? trialEndsAt = ModuleAccess.TrialEndsAt(affiliate);
     int? trialDaysRemaining = trialEndsAt is null
         ? null
         : Math.Max(0, (int)Math.Ceiling((trialEndsAt.Value - DateTime.UtcNow).TotalDays));
@@ -3875,7 +3925,7 @@ app.MapGet("/api/space/{slug}", async (
             affiliate.WhatsApp, affiliate.PrimaryColor,
             affiliate.LogoUrl,
             affiliate.DescriptionEn,
-            canales, ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()),
+            canales, await ModuleAccess.GetActiveModulesAsync(db, affiliate),
             JsonArrayField.Parse<ProcessStepDto>(affiliate.ProcessSteps),
             JsonArrayField.Parse<FaqItemDto>(affiliate.Faq),
             JsonArrayField.Parse<HorarioEntryDto>(affiliate.Horario),
@@ -3885,7 +3935,10 @@ app.MapGet("/api/space/{slug}", async (
             JsonObjectField.Parse<Dictionary<string, MealPeriodRangeDto>>(affiliate.MealPeriodHours),
             JsonObjectField.Parse<Dictionary<string, CategoryTranslationDto>>(affiliate.CategoryTranslations),
             affiliate.Language,
-            PublicCatalogService.ParseSpanishFlag(affiliate.Settings)),
+            PublicCatalogService.ParseSpanishFlag(affiliate.Settings),
+            ModuleAccess.PublicTierName(ModuleAccess.GetEffectiveTier(affiliate)),
+            await ModuleAccess.GetLockedModulesAsync(db, affiliate),
+            ModuleAccess.GetIncludedScreens(affiliate) + Math.Max(0, affiliate.ExtraScreens)),
         items, realCount,
         new ProgressDto(
             FirstProductAdded: completedKeys.Contains(MilestoneKeys.FirstProductAdded),

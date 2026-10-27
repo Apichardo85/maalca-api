@@ -80,6 +80,7 @@ public class PlatformAdminService : IPlatformAdminService
         var affiliates = await _context.Affiliates
             .OrderByDescending(a => a.CreatedAt)
             .ToListAsync();
+        var rules = await ModuleAccess.GetRulesAsync(_context);
 
         var orderCounts = await _context.Orders
             .Where(o => o.CreatedAt >= since30d)
@@ -128,7 +129,9 @@ public class PlatformAdminService : IPlatformAdminService
             result.Add(new PlatformAffiliateSummaryDto(
                 a.Id, a.Name, a.Slug ?? "", a.BusinessType.ToString(), a.Plan.ToString(), a.PlanStatus.ToString(),
                 a.Published, a.IsActive, a.CreatedAt, orders30d, a.StripeConnectChargesEnabled, alerts, a.LogoUrl,
-                ModuleCatalog.FilterActive(a.ModulosActivos, a.BusinessType.ToString()).ToList(), a.ScreensOnly));
+                ModuleAccess.ComputeActive(a, rules).ToList(), a.ScreensOnly,
+                ModuleAccess.ParseCourtesy(a.ModulosCortesia).ToList(), ModuleAccess.PublicTierName(ModuleAccess.GetEffectiveTier(a)),
+            ModuleCatalog.FilterActive(a.ModulosActivos, a.BusinessType.ToString()).ToList()));
         }
         return result;
     }
@@ -163,7 +166,9 @@ public class PlatformAdminService : IPlatformAdminService
             affiliate.Id, affiliate.Name, affiliate.Slug ?? "", affiliate.BusinessType.ToString(),
             affiliate.Plan.ToString(), affiliate.PlanStatus.ToString(), affiliate.Published, affiliate.IsActive,
             affiliate.CreatedAt, orders30d, affiliate.StripeConnectChargesEnabled, alerts, affiliate.LogoUrl,
-            ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()).ToList(), affiliate.ScreensOnly);
+            (await ModuleAccess.GetActiveModulesAsync(_context, affiliate)).ToList(), affiliate.ScreensOnly,
+            ModuleAccess.ParseCourtesy(affiliate.ModulosCortesia).ToList(), ModuleAccess.PublicTierName(ModuleAccess.GetEffectiveTier(affiliate)),
+            ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()).ToList());
     }
 
     /// <summary>
@@ -202,7 +207,9 @@ public class PlatformAdminService : IPlatformAdminService
             affiliate.Id, affiliate.Name, affiliate.Slug ?? "", affiliate.BusinessType.ToString(),
             affiliate.Plan.ToString(), affiliate.PlanStatus.ToString(), affiliate.Published, affiliate.IsActive,
             affiliate.CreatedAt, orders30d, affiliate.StripeConnectChargesEnabled, alerts, affiliate.LogoUrl,
-            ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()).ToList(), affiliate.ScreensOnly);
+            (await ModuleAccess.GetActiveModulesAsync(_context, affiliate)).ToList(), affiliate.ScreensOnly,
+            ModuleAccess.ParseCourtesy(affiliate.ModulosCortesia).ToList(), ModuleAccess.PublicTierName(ModuleAccess.GetEffectiveTier(affiliate)),
+            ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()).ToList());
     }
 
     /// <summary>
@@ -377,7 +384,9 @@ public class PlatformAdminService : IPlatformAdminService
             affiliate.Id, affiliate.Name, affiliate.Slug ?? "", affiliate.BusinessType.ToString(),
             affiliate.Plan.ToString(), affiliate.PlanStatus.ToString(), affiliate.Published, affiliate.IsActive,
             affiliate.CreatedAt, orders30d, affiliate.StripeConnectChargesEnabled, alerts, affiliate.LogoUrl,
-            ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()).ToList(), affiliate.ScreensOnly);
+            (await ModuleAccess.GetActiveModulesAsync(_context, affiliate)).ToList(), affiliate.ScreensOnly,
+            ModuleAccess.ParseCourtesy(affiliate.ModulosCortesia).ToList(), ModuleAccess.PublicTierName(ModuleAccess.GetEffectiveTier(affiliate)),
+            ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()).ToList());
     }
 
     /// <summary>
@@ -421,7 +430,53 @@ public class PlatformAdminService : IPlatformAdminService
             affiliate.Id, affiliate.Name, affiliate.Slug ?? "", affiliate.BusinessType.ToString(),
             affiliate.Plan.ToString(), affiliate.PlanStatus.ToString(), affiliate.Published, affiliate.IsActive,
             affiliate.CreatedAt, orders30d, affiliate.StripeConnectChargesEnabled, alerts, affiliate.LogoUrl,
-            ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()).ToList(), affiliate.ScreensOnly);
+            (await ModuleAccess.GetActiveModulesAsync(_context, affiliate)).ToList(), affiliate.ScreensOnly,
+            ModuleAccess.ParseCourtesy(affiliate.ModulosCortesia).ToList(), ModuleAccess.PublicTierName(ModuleAccess.GetEffectiveTier(affiliate)),
+            ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString()).ToList());
+    }
+
+    /// <summary>
+    /// Cortesías de ops: módulos que el negocio ve aunque su plan no los incluya. ["*"] = conserva
+    /// todo lo prendido sin mirar el plan (así quedaron protegidos los clientes existentes).
+    /// </summary>
+    public async Task<PlatformAffiliateSummaryDto> SetAffiliateCortesiaAsync(Guid affiliateId, List<string> modules)
+    {
+        var affiliate = await _context.Affiliates.FindAsync(affiliateId)
+            ?? throw new InvalidOperationException("Ese negocio no existe.");
+
+        var tokens = modules
+            .Where(m => m == ModuleAccess.CourtesyAll || ModuleCatalog.Whitelist.Contains(m))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        affiliate.ModulosCortesia = tokens.Count == 0 ? null : string.Join(",", tokens);
+        affiliate.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        return await SetAffiliateStatusAsync(affiliateId, null, null);
+    }
+
+    /// <summary>Planes mínimos vigentes de todos los módulos (default de ModuleCatalog + lo editado).</summary>
+    public async Task<IReadOnlyDictionary<string, PlanTier>> GetModuleRulesAsync()
+        => await ModuleAccess.GetRulesAsync(_context);
+
+    public async Task SetModuleRuleAsync(string token, string minTier, string? adminEmail)
+    {
+        if (ModuleCatalog.Get(token) is null)
+            throw new ArgumentException($"Módulo desconocido '{token}'.");
+        if (!Enum.TryParse<PlanTier>(minTier, ignoreCase: true, out var tier) || !Enum.IsDefined(tier))
+            throw new ArgumentException("El plan mínimo debe ser Starter, Growth o Professional.");
+
+        var rule = await _context.ModulePlanRules.FirstOrDefaultAsync(r => r.Token == token);
+        if (rule is null)
+        {
+            rule = new ModulePlanRule { Token = ModuleCatalog.Get(token)!.Token };
+            _context.ModulePlanRules.Add(rule);
+        }
+        rule.MinTier = tier;
+        rule.UpdatedAt = DateTime.UtcNow;
+        rule.UpdatedBy = adminEmail;
+        await _context.SaveChangesAsync();
+        ModuleAccess.InvalidateRules();
     }
 
     /// <summary>

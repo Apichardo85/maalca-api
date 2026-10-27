@@ -27,7 +27,19 @@ public record PlatformAffiliateSummaryDto(
     /// mostrar y editar el toggle real.
     List<string>? ModulosActivos = null,
     /// Modo "Solo pantallas" (sin setup, sin catálogo demo) — ver Affiliate.ScreensOnly.
-    bool ScreensOnly = false);
+    bool ScreensOnly = false,
+    /// Módulos regalados por encima del plan ("*" = todo lo prendido). Ver ModuleAccess.
+    List<string>? ModulosCortesia = null,
+    /// Nivel efectivo: Starter · Growth · Professional (un trial vigente cuenta como Professional).
+    string? EffectiveTier = null,
+    // Lo que ops tiene prendido (sin el filtro del plan). ModulosActivos = lo que el negocio VE.
+    List<string>? ModulosSeleccionados = null);
+
+/// <summary>Módulos que MaalCa regala por encima del plan (vacío = ninguno; ["*"] = todo lo prendido).</summary>
+public record SetAffiliateCortesiaRequest(List<string> Modules);
+
+/// <summary>Plan mínimo de un módulo, editable desde /ops/modulos: "Starter" | "Growth" | "Professional".</summary>
+public record SetModuleRuleRequest(string MinTier);
 
 /// <summary>Control de módulos por afiliado (Etapa: MaalCa converge plan + overrides) — MaalCa
 /// puede prender/apagar cualquier token del whitelist por encima de lo que el plan normalmente

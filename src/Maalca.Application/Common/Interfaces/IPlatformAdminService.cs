@@ -33,6 +33,15 @@ public interface IPlatformAdminService
     /// encima de lo que el plan normalmente daría.</summary>
     Task<PlatformAffiliateSummaryDto> SetAffiliateModulesAsync(Guid affiliateId, List<string> modules);
 
+    /// <summary>Cortesías de ops por encima del plan — ver ModuleAccess.</summary>
+    Task<PlatformAffiliateSummaryDto> SetAffiliateCortesiaAsync(Guid affiliateId, List<string> modules);
+
+    /// <summary>Plan mínimo vigente de cada módulo.</summary>
+    Task<IReadOnlyDictionary<string, Maalca.Domain.Enums.PlanTier>> GetModuleRulesAsync();
+
+    /// <summary>Cambia el plan mínimo de un módulo (invalida el cache de reglas).</summary>
+    Task SetModuleRuleAsync(string token, string minTier, string? adminEmail);
+
     /// <summary>Modo "Solo pantallas" (sin setup, sin catálogo demo) — ver Affiliate.ScreensOnly.</summary>
     Task<PlatformAffiliateSummaryDto> SetAffiliateScreensOnlyAsync(Guid affiliateId, bool screensOnly);
 

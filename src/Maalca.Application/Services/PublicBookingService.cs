@@ -319,7 +319,7 @@ public class PublicBookingService : IPublicBookingService
 
         // Reservas solo si el módulo está activo para este afiliado (mismo criterio que el
         // dashboard: ModulosActivos explícito manda, null cae al default por tipo de negocio).
-        var activeModules = ModuleCatalog.FilterActive(affiliate.ModulosActivos, affiliate.BusinessType.ToString());
+        var activeModules = await ModuleAccess.GetActiveModulesAsync(_db, affiliate);
         if (!activeModules.Contains("reservations", StringComparer.OrdinalIgnoreCase))
             throw new ArgumentException("Este negocio no acepta reservas en línea.");
 

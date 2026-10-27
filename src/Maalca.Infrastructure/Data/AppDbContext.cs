@@ -48,6 +48,7 @@ public class AppDbContext : DbContext
     public DbSet<ScreenWall> ScreenWalls => Set<ScreenWall>();
     public DbSet<ScreenDevice> ScreenDevices => Set<ScreenDevice>();
     public DbSet<PlatformAddOn> PlatformAddOns => Set<PlatformAddOn>();
+    public DbSet<ModulePlanRule> ModulePlanRules => Set<ModulePlanRule>();
     public DbSet<TimeBlock> TimeBlocks => Set<TimeBlock>();
     public DbSet<Proposal> Proposals => Set<Proposal>();
     public DbSet<Activity> Activities => Set<Activity>();
@@ -89,6 +90,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Slug).HasMaxLength(100);
             entity.HasIndex(e => e.Slug).IsUnique().HasFilter("\"Slug\" IS NOT NULL");
             entity.Property(e => e.ModulosActivos).HasMaxLength(200);
+            entity.Property(e => e.ModulosCortesia).HasMaxLength(200);
             entity.Property(e => e.StripeCustomerId).HasMaxLength(255);
             entity.Property(e => e.StripeSubscriptionId).HasMaxLength(255);
             entity.Property(e => e.StripeConnectAccountId).HasMaxLength(255);
@@ -140,6 +142,14 @@ public class AppDbContext : DbContext
                   .HasForeignKey(e => e.AffiliateId)
                   .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.AffiliateId, e.CreatedAt });
+        });
+
+        // ModulePlanRule — plan mínimo por módulo, editable desde /ops/modulos
+        modelBuilder.Entity<ModulePlanRule>(entity =>
+        {
+            entity.HasKey(e => e.Token);
+            entity.Property(e => e.Token).HasMaxLength(40);
+            entity.Property(e => e.UpdatedBy).HasMaxLength(255);
         });
 
         // PlatformAddOn — extras de MaalCa editables desde /ops/precios
