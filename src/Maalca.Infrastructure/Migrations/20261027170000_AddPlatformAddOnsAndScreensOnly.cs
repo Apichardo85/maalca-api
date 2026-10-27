@@ -50,9 +50,16 @@ namespace Maalca.Infrastructure.Migrations
 
             var now = new DateTime(2026, 10, 27, 17, 0, 0, DateTimeKind.Utc);
             var columns = new[] { "Id", "Key", "NameEs", "NameEn", "DescEs", "DescEn", "Price", "VolumePrice", "VolumeFromQty", "Unit", "SortOrder", "Active", "CreatedAt" };
+            // Sin Designer no hay modelo destino: InsertData necesita los tipos de columna explícitos.
+            var columnTypes = new[]
+            {
+                "uuid", "character varying(60)", "character varying(120)", "character varying(120)",
+                "character varying(600)", "character varying(600)", "numeric(10,2)", "numeric(10,2)",
+                "integer", "integer", "integer", "boolean", "timestamp with time zone"
+            };
 
             // Unit: 0 OneTime · 1 Monthly · 2 PerLocationMonthly · 3 Block5h (ver AddOnUnit).
-            migrationBuilder.InsertData(table: "PlatformAddOns", columns: columns, values: new object[]
+            migrationBuilder.InsertData(table: "PlatformAddOns", columns: columns, columnTypes: columnTypes, values: new object[]
             {
                 new Guid("a1d0c0de-0000-4000-8000-000000000001"), "screen-kit",
                 "Kit de pantalla", "Screen kit",
@@ -60,7 +67,7 @@ namespace Maalca.Infrastructure.Migrations
                 "Streaming device, wall mount, setup and installation. The business provides the TV.",
                 249m, null, null, 0, 1, true, now
             });
-            migrationBuilder.InsertData(table: "PlatformAddOns", columns: columns, values: new object[]
+            migrationBuilder.InsertData(table: "PlatformAddOns", columns: columns, columnTypes: columnTypes, values: new object[]
             {
                 new Guid("a1d0c0de-0000-4000-8000-000000000002"), "screen-full-service",
                 "Servicio completo de pantallas", "Full screen service",
@@ -68,7 +75,7 @@ namespace Maalca.Infrastructure.Migrations
                 "We load and keep your content up to date (menu, promos and ads), watch every TV and replace the device within 48 h. The design is generated from your catalog.",
                 39m, null, null, 2, 2, true, now
             });
-            migrationBuilder.InsertData(table: "PlatformAddOns", columns: columns, values: new object[]
+            migrationBuilder.InsertData(table: "PlatformAddOns", columns: columns, columnTypes: columnTypes, values: new object[]
             {
                 new Guid("a1d0c0de-0000-4000-8000-000000000003"), "extra-screen",
                 "Pantalla adicional", "Extra screen",
@@ -76,7 +83,7 @@ namespace Maalca.Infrastructure.Migrations
                 "More TV screens for your menu or ads, on top of those included in your plan.",
                 15m, 10m, 2, 1, 3, true, now
             });
-            migrationBuilder.InsertData(table: "PlatformAddOns", columns: columns, values: new object[]
+            migrationBuilder.InsertData(table: "PlatformAddOns", columns: columns, columnTypes: columnTypes, values: new object[]
             {
                 new Guid("a1d0c0de-0000-4000-8000-000000000004"), "social-posts",
                 "Publicaciones en redes sociales", "Social media posts",
@@ -84,7 +91,7 @@ namespace Maalca.Infrastructure.Migrations
                 "8 posts + 1 reel a month (Instagram + Facebook), with design and copy.",
                 249m, null, null, 1, 4, true, now
             });
-            migrationBuilder.InsertData(table: "PlatformAddOns", columns: columns, values: new object[]
+            migrationBuilder.InsertData(table: "PlatformAddOns", columns: columns, columnTypes: columnTypes, values: new object[]
             {
                 new Guid("a1d0c0de-0000-4000-8000-000000000005"), "support-247",
                 "Soporte 24/7", "24/7 support",
@@ -92,7 +99,7 @@ namespace Maalca.Infrastructure.Migrations
                 "Response in under 1h, any day, including weekends and holidays.",
                 200m, null, null, 1, 5, true, now
             });
-            migrationBuilder.InsertData(table: "PlatformAddOns", columns: columns, values: new object[]
+            migrationBuilder.InsertData(table: "PlatformAddOns", columns: columns, columnTypes: columnTypes, values: new object[]
             {
                 new Guid("a1d0c0de-0000-4000-8000-000000000006"), "consulting-block",
                 "Bloque de consultoría", "Consulting block",
