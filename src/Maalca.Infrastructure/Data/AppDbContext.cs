@@ -48,6 +48,7 @@ public class AppDbContext : DbContext
     public DbSet<ScreenWall> ScreenWalls => Set<ScreenWall>();
     public DbSet<ScreenDevice> ScreenDevices => Set<ScreenDevice>();
     public DbSet<PlatformAddOn> PlatformAddOns => Set<PlatformAddOn>();
+    public DbSet<PlatformContent> PlatformContents => Set<PlatformContent>();
     public DbSet<ModulePlanRule> ModulePlanRules => Set<ModulePlanRule>();
     public DbSet<TimeBlock> TimeBlocks => Set<TimeBlock>();
     public DbSet<Proposal> Proposals => Set<Proposal>();
@@ -164,6 +165,17 @@ public class AppDbContext : DbContext
             entity.Property(e => e.DescEn).HasMaxLength(600).IsRequired();
             entity.Property(e => e.Price).HasPrecision(10, 2);
             entity.Property(e => e.VolumePrice).HasPrecision(10, 2);
+            entity.Property(e => e.UpdatedBy).HasMaxLength(255);
+        });
+
+        // PlatformContent — overrides del copy del sitio, editables desde /ops/sitio
+        modelBuilder.Entity<PlatformContent>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Key).HasMaxLength(120).IsRequired();
+            entity.HasIndex(e => e.Key).IsUnique();
+            entity.Property(e => e.Es).HasMaxLength(4000);
+            entity.Property(e => e.En).HasMaxLength(4000);
             entity.Property(e => e.UpdatedBy).HasMaxLength(255);
         });
 

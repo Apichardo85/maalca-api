@@ -95,6 +95,7 @@ builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IDonationService, DonationService>();
 builder.Services.AddScoped<IScreenAdService, ScreenAdService>();
 builder.Services.AddScoped<IPlatformAddOnService, PlatformAddOnService>();
+builder.Services.AddScoped<IPlatformContentService, PlatformContentService>();
 builder.Services.AddScoped<IScreenService, ScreenService>();
 builder.Services.AddScoped<IScreenDeviceService, ScreenDeviceService>();
 // Vigila las TVs y avisa a MaalCa cuando una se cae en horario de atención (ver Workers/ScreenMonitorWorker).
@@ -3157,6 +3158,47 @@ app.MapPut("/api/ops/platform-addons/{key}", async (HttpContext ctx, IPlatformAd
     {
         return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
     }
+});
+
+// ============ SITE CONTENT (copy de maalca.com editable desde /ops/sitio) ============
+// Overrides del copy del sitio. Sin filas = la web usa sus textos por defecto. Es el antídoto
+// al "cuchillo de palo": MaalCa edita su propio contenido como un afiliado edita el suyo.
+app.MapGet("/api/public/site-content", async (IPlatformContentService content, HttpResponse response) =>
+{
+    response.Headers.CacheControl = "public, max-age=60";
+    return Results.Ok(await content.GetAllAsync());
+})
+.AllowAnonymous();
+
+app.MapGet("/api/ops/site-content", async (HttpContext ctx, IPlatformContentService content) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    return Results.Ok(await content.GetAllAsync());
+});
+
+app.MapPut("/api/ops/site-content/{key}", async (HttpContext ctx, IPlatformContentService content, string key, UpsertSiteContentRequest request) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    try
+    {
+        var saved = await content.UpsertAsync(key, request, ctx.User.FindFirst("email")?.Value);
+        // saved == null => se borró el override (ambos idiomas vacíos): la clave vuelve a su default.
+        return Results.Ok(new { key, es = saved?.Es, en = saved?.En, cleared = saved is null });
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+});
+
+app.MapDelete("/api/ops/site-content/{key}", async (HttpContext ctx, IPlatformContentService content, string key) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    await content.DeleteAsync(key);
+    return Results.NoContent();
 });
 
 // ============ SCREEN ADS (comerciales del Menu Board — Fase 9 Etapa A) ============
