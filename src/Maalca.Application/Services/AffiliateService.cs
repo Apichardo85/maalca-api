@@ -241,10 +241,12 @@ public class AffiliateService : IAffiliateService
 
         if (request.DailyMenu != null)
         {
-            var productIds = (await _context.Products
-                .Where(p => p.AffiliateId == affiliateId)
-                .Select(p => p.Id)
-                .ToListAsync()).ToHashSet();
+            // Cualquier ítem del catálogo del negocio, sea cual sea su tipo (platos, servicios o
+            // productos de tienda): el diseño está disponible para todos los negocios, no solo restaurantes.
+            var productIds = (await _context.Products.Where(p => p.AffiliateId == affiliateId).Select(p => p.Id).ToListAsync())
+                .Concat(await _context.Services.Where(s => s.AffiliateId == affiliateId).Select(s => s.Id).ToListAsync())
+                .Concat(await _context.InventoryItems.Where(i => i.AffiliateId == affiliateId).Select(i => i.Id).ToListAsync())
+                .ToHashSet();
             var clean = BoardPanelRules.Normalize(request.DailyMenu, productIds);
             affiliate.DailyMenu = clean is null ? null : JsonObjectField.Serialize(clean);
         }
