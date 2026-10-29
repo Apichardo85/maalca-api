@@ -44,7 +44,9 @@ public record UpdateAffiliateProfileRequest(
     // Paleta (ver Affiliate.SecondaryColor/AccentColor): "#RRGGBB"; "" = borrar y volver al cálculo automático.
     string? SecondaryColor = null,
     string? AccentColor = null,
-    string? BoardLayout = null  // "Classic" | "Hero" | "Grid" | ... (ver BoardLayout enum)
+    string? BoardLayout = null,  // "Classic" | "Hero" | "Grid" | ... (ver BoardLayout enum)
+    string? BoardOrientation = null,  // "Landscape" | "Portrait" (solo cuenta con BoardLayout = Panels)
+    List<BoardPanelDto>? BoardPanels = null  // 1-3 flyers; [] = volver al default
 );
 
 public record AffiliatePublicProfileDto(
@@ -85,7 +87,9 @@ public record UpdateAffiliateContentRequest(
     Dictionary<string, MealPeriodRangeDto>? MealPeriodHours = null,
     // Traducción de los nombres de categoría (clave = nombre guardado). Reemplazo total;
     // null = no se toca; {} = borrar todas.
-    Dictionary<string, CategoryTranslationDto>? CategoryTranslations = null
+    Dictionary<string, CategoryTranslationDto>? CategoryTranslations = null,
+    // Menú del día (rotación semanal). Reemplazo total; null = no se toca; Days vacío = borrar.
+    DailyMenuDto? DailyMenu = null
     // Causas ya NO vive acá (backlog 2026-09-25) -- tiene su propio CRUD en
     // /api/affiliates/{id}/causas (ver ICausaService), igual que Activities. Se sacó del
     // reemplazo-total-del-array porque ya tenía datos reales en producción y necesitaba
@@ -100,8 +104,46 @@ public record AffiliateContentDto(
     IReadOnlyList<string> GalleryImages,
     CommunityImpactDto? CommunityImpact,
     IReadOnlyDictionary<string, MealPeriodRangeDto>? MealPeriodHours = null,
-    IReadOnlyDictionary<string, CategoryTranslationDto>? CategoryTranslations = null
+    IReadOnlyDictionary<string, CategoryTranslationDto>? CategoryTranslations = null,
+    DailyMenuDto? DailyMenu = null
 );
+
+/// <summary>
+/// Menú del día: la rotación semanal que el restaurante anuncia en su flyer ("lunes: arroz blanco,
+/// habichuelas rojas, pollo guisado..."). Days = clave monday..sunday → secciones en orden.
+/// Note/NoteEn = línea corta sobre los combos ("incluye arroz, habichuelas y una guarnición").
+/// </summary>
+public record DailyMenuDto(
+    string? Note,
+    string? NoteEn,
+    Dictionary<string, List<DailyMenuSectionDto>> Days
+);
+
+/// <summary>
+/// Una sección del día. Kind:
+///  - "List": lista simple sin precio (Arroz / Habichuelas / Guarniciones).
+///  - "Combo": fila con platos + precio(s) del Product enlazado (si tiene un grupo de tamaños,
+///    se muestran sus opciones: Pequeño/Mediano/Grande). Ej. Pollo / Cerdo / Res.
+///  - "Featured": tarjeta destacada (Sopa del día, Desayuno) con el precio del Product enlazado.
+/// From/To ("HH:mm", opcionales) = solo se muestra en ese horario (ej. desayuno 10:00–12:00).
+/// El precio NUNCA se escribe acá: sale del producto, así un cambio de precio no deja el flyer viejo.
+/// </summary>
+public record DailyMenuSectionDto(
+    string Name,
+    string? NameEn,
+    string Kind,
+    List<string>? Items,
+    List<string>? ItemsEn,
+    Guid? ProductId = null,
+    string? From = null,
+    string? To = null
+);
+
+/// <summary>
+/// Un flyer vertical del board (BoardLayout.Panels). Kind: "Daily" (menú del día), "Ads"
+/// (comerciales a pantalla completa) o "Category" (los platos de una categoría, ej. Desayuno).
+/// </summary>
+public record BoardPanelDto(string Kind, string? Category = null);
 
 /// <summary>Nombre de una categoría del catálogo en cada idioma (ambos opcionales).</summary>
 public record CategoryTranslationDto(string? Es, string? En);

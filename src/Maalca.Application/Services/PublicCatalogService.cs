@@ -213,7 +213,9 @@ public class PublicCatalogService : IPublicCatalogService
             (screen?.TransitionEffect ?? affiliate.TransitionEffect).ToString(),
             (screen?.Layout ?? affiliate.BoardLayout).ToString(),
             wallDto,
-            affiliate.Published);
+            affiliate.Published,
+            (screen?.Orientation ?? affiliate.BoardOrientation).ToString(),
+            BoardPanelRules.ParsePanels(screen?.Panels) ?? BoardPanelRules.ParsePanels(affiliate.BoardPanels) ?? BoardPanelRules.DefaultPanels);
     }
 
     /// <summary>¿Dos TVs de un muro muestran el mismo menú? (categorías sin importar orden ni
@@ -278,7 +280,8 @@ public class PublicCatalogService : IPublicCatalogService
             ParseSpanishFlag(a.Settings),
             a.Language,
             (await ModuleAccess.GetActiveModulesAsync(_db, a))
-                .Contains("orders", StringComparer.OrdinalIgnoreCase));
+                .Contains("orders", StringComparer.OrdinalIgnoreCase),
+            JsonObjectField.Parse<DailyMenuDto>(a.DailyMenu));
     }
 
     // Affiliate.Settings es un JSON libre ("{}" por defecto). Solo se lee "defaultTheme": "dark" | "light".

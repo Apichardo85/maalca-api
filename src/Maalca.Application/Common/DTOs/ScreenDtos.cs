@@ -14,7 +14,9 @@ public record ScreenDto(
     string? Layout = null,
     Guid? WallId = null,
     int? WallCol = null,
-    int? WallRow = null
+    int? WallRow = null,
+    string? Orientation = null,               // null = hereda del negocio
+    IReadOnlyList<BoardPanelDto>? Panels = null // null = hereda del negocio
 );
 
 public record CreateScreenRequest(
@@ -26,7 +28,9 @@ public record CreateScreenRequest(
     string? TransitionEffect = null,
     string? ContentMode = null,
     IReadOnlyList<Guid>? AdIds = null,
-    string? Layout = null
+    string? Layout = null,
+    string? Orientation = null,
+    List<BoardPanelDto>? Panels = null
 );
 
 /// <summary>
@@ -46,5 +50,7 @@ public record UpdateScreenRequest(
     string? TransitionEffect = null,
     string? ContentMode = null,
     IReadOnlyList<Guid>? AdIds = null,
-    string? Layout = null
+    string? Layout = null,
+    string? Orientation = null,
+    List<BoardPanelDto>? Panels = null
 );

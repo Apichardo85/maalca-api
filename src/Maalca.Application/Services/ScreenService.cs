@@ -50,6 +50,8 @@ public class ScreenService : IScreenService
             CategoryFilter = NormalizeCategoryFilter(request.CategoryFilter),
             ContentMode = ParseContentMode(request.ContentMode),
             AdIds = request.AdIds is null ? null : JsonArrayField.Serialize(request.AdIds),
+            Orientation = BoardPanelRules.ParseOrientation(request.Orientation),
+            Panels = BoardPanelRules.SerializePanels(request.Panels),
         };
         _db.Screens.Add(screen);
         await _db.SaveChangesAsync();
@@ -74,6 +76,9 @@ public class ScreenService : IScreenService
         screen.CategoryFilter = NormalizeCategoryFilter(request.CategoryFilter);
         screen.ContentMode = ParseContentMode(request.ContentMode);
         screen.AdIds = request.AdIds is null ? null : JsonArrayField.Serialize(request.AdIds);
+        // Igual que el resto: estado completo del form; null = hereda del negocio.
+        screen.Orientation = BoardPanelRules.ParseOrientation(request.Orientation);
+        screen.Panels = BoardPanelRules.SerializePanels(request.Panels);
 
         await _db.SaveChangesAsync();
         return ToDto(screen);
@@ -145,5 +150,7 @@ public class ScreenService : IScreenService
         s.TransitionEffect?.ToString(), s.ContentMode.ToString(),
         s.AdIds is null ? null : JsonArrayField.Parse<Guid>(s.AdIds),
         s.Layout?.ToString(),
-        s.WallId, s.WallCol, s.WallRow);
+        s.WallId, s.WallCol, s.WallRow,
+        s.Orientation?.ToString(),
+        BoardPanelRules.ParsePanels(s.Panels));
 }

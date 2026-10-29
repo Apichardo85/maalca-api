@@ -116,6 +116,10 @@ public class AffiliateService : IAffiliateService
                 throw new ArgumentException($"Invalid boardLayout '{request.BoardLayout}'.");
             affiliate.BoardLayout = layout;
         }
+        if (request.BoardOrientation != null)
+            affiliate.BoardOrientation = BoardPanelRules.ParseOrientation(request.BoardOrientation) ?? BoardOrientation.Landscape;
+        if (request.BoardPanels != null)
+            affiliate.BoardPanels = BoardPanelRules.SerializePanels(request.BoardPanels);
 
         await _context.SaveChangesAsync();
 
@@ -235,6 +239,16 @@ public class AffiliateService : IAffiliateService
             affiliate.CategoryTranslations = cleanCats.Count == 0 ? null : JsonObjectField.Serialize(cleanCats);
         }
 
+        if (request.DailyMenu != null)
+        {
+            var productIds = (await _context.Products
+                .Where(p => p.AffiliateId == affiliateId)
+                .Select(p => p.Id)
+                .ToListAsync()).ToHashSet();
+            var clean = BoardPanelRules.Normalize(request.DailyMenu, productIds);
+            affiliate.DailyMenu = clean is null ? null : JsonObjectField.Serialize(clean);
+        }
+
         // Causas ya no se valida/guarda acá -- ver CausaService (backlog 2026-09-25).
 
         if (request.CommunityImpact != null)
@@ -259,6 +273,7 @@ public class AffiliateService : IAffiliateService
             JsonArrayField.Parse<string>(affiliate.GalleryImages),
             JsonObjectField.Parse<CommunityImpactDto>(affiliate.CommunityImpact),
             JsonObjectField.Parse<Dictionary<string, MealPeriodRangeDto>>(affiliate.MealPeriodHours),
-            JsonObjectField.Parse<Dictionary<string, CategoryTranslationDto>>(affiliate.CategoryTranslations));
+            JsonObjectField.Parse<Dictionary<string, CategoryTranslationDto>>(affiliate.CategoryTranslations),
+            JsonObjectField.Parse<DailyMenuDto>(affiliate.DailyMenu));
     }
 }

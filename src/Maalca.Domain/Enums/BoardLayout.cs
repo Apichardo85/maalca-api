@@ -15,4 +15,7 @@ public enum BoardLayout
     Carousel = 4,  // 3 tarjetas redondeadas
     Plates = 5,    // platos flotando, precio grande (estilo QSR)
     Bold = 6,      // título gigante + sticker de precio
+    // Flyers verticales fijos (no rotan): 1 en TV vertical, o 2-3 lado a lado en TV horizontal.
+    // Qué va en cada flyer (Menú del día / Comerciales / Categoría) vive en BoardPanels/Screen.Panels.
+    Panels = 7,
 }
