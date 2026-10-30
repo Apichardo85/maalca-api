@@ -293,6 +293,15 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<int>("BoardLayout")
                         .HasColumnType("integer");
 
+                    b.Property<int>("BoardOrientation")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("BoardPanels")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DailyMenu")
+                        .HasColumnType("text");
+
                     b.Property<int>("TransitionEffect")
                         .HasColumnType("integer");
 
@@ -2249,6 +2258,12 @@ namespace Maalca.Infrastructure.Migrations
 
                     b.Property<Guid>("AffiliateId")
                         .HasColumnType("uuid");
+
+                    b.Property<int?>("Orientation")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Panels")
+                        .HasColumnType("text");
 
                     b.Property<int?>("BoardTheme")
                         .HasColumnType("integer");

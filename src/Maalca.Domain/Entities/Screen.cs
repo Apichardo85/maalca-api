@@ -44,6 +44,11 @@ public class Screen : BaseEntity
     /// una lista vacía explícita significa "sin comerciales en esta pantalla".
     public string? AdIds { get; set; }
 
+    /// Flyers verticales (BoardLayout.Panels): orientación de esta TV y qué flyer va en cada
+    /// espacio (JSON array de BoardPanelDto). null = hereda Affiliate.BoardOrientation/BoardPanels.
+    public BoardOrientation? Orientation { get; set; }
+    public string? Panels { get; set; }
+
     /// Muro sincronizado al que pertenece esta TV (null = pantalla suelta, comportamiento previo).
     /// WallCol/WallRow = posición física en el muro (0-based). Se asignan desde ScreenWallService,
     /// no desde UpdateScreenRequest (ese form manda estado completo y los borraría).

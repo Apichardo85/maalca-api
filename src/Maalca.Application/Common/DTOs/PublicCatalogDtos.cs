@@ -45,7 +45,9 @@ public record AffiliatePublicDto(
     // false = el módulo "orders" está apagado para este negocio (nadie está atendiendo pedidos en línea):
     // la vitrina oculta el carrito/pickup y ofrece el canal directo (WhatsApp/teléfono). Default true
     // para no cambiar nada en clientes que no usan el toggle.
-    bool OrdersEnabled = true
+    bool OrdersEnabled = true,
+    // Menú del día (rotación semanal) — lo usa el flyer "Menú del día" del board.
+    DailyMenuDto? DailyMenu = null
     // Causas ya no viene acá -- tiene su propio endpoint público
     // /api/public/affiliates/{slug}/causas (backlog 2026-09-25, ver Causa.cs).
 );
@@ -99,7 +101,7 @@ public record PublicIngredientDto(Guid InventoryItemId, string Name);
 // Vista pública de un ModifierGroup/ModifierOption — mismo shape que el dashboard (ModifierGroupDto
 // en CatalogCrudDtos.cs) pero sin campos internos de administración (SortOrder de edición, etc.
 // se mantiene porque el cliente sí necesita el orden de despliegue).
-public record PublicModifierOptionDto(Guid Id, string Name, decimal PriceDelta, bool IsDefault);
+public record PublicModifierOptionDto(Guid Id, string Name, decimal PriceDelta, bool IsDefault, string? NameEn = null);
 
 public record PublicModifierGroupDto(
     Guid Id,
@@ -107,7 +109,8 @@ public record PublicModifierGroupDto(
     int MinSelect,
     int MaxSelect,
     bool Required,
-    IReadOnlyList<PublicModifierOptionDto> Options
+    IReadOnlyList<PublicModifierOptionDto> Options,
+    string? NameEn = null
 );
 
 public record PlanCapabilitiesDto(
@@ -139,5 +142,9 @@ public record PublicCatalogResponse(
     PublicWallDto? Wall = null,            // muro sincronizado: modo + posición de ESTA TV (null = pantalla suelta)
     // false = página pública apagada (negocio "Solo pantallas" sin publicar): el board sí usa
     // este catálogo, pero la página /{slug}, el kiosko y el detalle de item deben dar 404.
-    bool PagePublished = true
+    bool PagePublished = true,
+    // Flyers verticales (Layout = "Panels"): orientación de la TV y qué va en cada espacio,
+    // ya resueltos (pantalla extra ?? negocio ?? default).
+    string? Orientation = null,
+    IReadOnlyList<BoardPanelDto>? Panels = null
 );

@@ -216,6 +216,7 @@ public class ModifierService : IModifierService
     private static PublicModifierGroupDto ToPublicDto(ModifierGroup g) => new(
         g.Id, g.Name, g.MinSelect, g.MaxSelect, g.Required,
         g.Options.OrderBy(o => o.SortOrder).ThenBy(o => o.Name)
-            .Select(o => new PublicModifierOptionDto(o.Id, o.Name, o.PriceDelta, o.IsDefault))
-            .ToList());
+            .Select(o => new PublicModifierOptionDto(o.Id, o.Name, o.PriceDelta, o.IsDefault, o.NameEn))
+            .ToList(),
+        g.NameEn);
 }

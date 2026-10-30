@@ -67,6 +67,12 @@ public class Affiliate : BaseEntity
     // el idioma pedido, la web muestra el nombre guardado.
     public string? CategoryTranslations { get; set; }
 
+    // Menú del día (restaurantes con rotación semanal: arroz/habichuelas/guarniciones/proteínas
+    // que cambian por día). JSON DailyMenuDto: { note, noteEn, days: { monday: [secciones] } }.
+    // Cada sección puede enlazar un Product (precio y tamaños salen de ahí, nunca se escriben a
+    // mano). null = sin menú del día. Lo usa el flyer "Menú del día" del board (BoardLayout.Panels).
+    public string? DailyMenu { get; set; }
+
     // Galería de fotos de la página pública — solo fotos, sin texto/caption por diseño.
     // JSON string: array de URLs (string), máximo 12. Parseado con JsonArrayField<string>.
     public string? GalleryImages { get; set; }
@@ -190,6 +196,10 @@ public class Affiliate : BaseEntity
     public BoardTheme BoardTheme { get; set; } = BoardTheme.Dark;
     public BoardLayout BoardLayout { get; set; } = BoardLayout.Classic;
     public BoardTransitionEffect TransitionEffect { get; set; } = BoardTransitionEffect.Fade;
+    // Solo aplica con BoardLayout.Panels: cómo está montada la TV base y qué flyer va en cada
+    // espacio (JSON array de BoardPanelDto, 1-3). null = default (Menú del día + Comerciales).
+    public BoardOrientation BoardOrientation { get; set; } = BoardOrientation.Landscape;
+    public string? BoardPanels { get; set; }
 
     public ICollection<User> Users { get; set; } = new List<User>();
     public ICollection<Customer> Customers { get; set; } = new List<Customer>();
