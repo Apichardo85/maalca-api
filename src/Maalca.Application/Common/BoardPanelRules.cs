@@ -13,7 +13,8 @@ public static class BoardPanelRules
 {
     public static readonly string[] WeekDays = { "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday" };
     public static readonly string[] SectionKinds = { "List", "Combo", "Featured" };
-    public static readonly string[] PanelKinds = { "Daily", "Ads", "Category" };
+    public static readonly string[] PanelKinds = { "Daily", "Ads", "Category", "Image" };
+    public static readonly string[] PanelStyles = { "Modern", "Tropical" };
 
     /// <summary>Default cuando el negocio eligió "Flyers verticales" sin configurar los espacios.</summary>
     public static readonly IReadOnlyList<BoardPanelDto> DefaultPanels = new[]
@@ -55,7 +56,18 @@ public static class BoardPanelRules
                 if (category.Length > 80)
                     throw new ArgumentException("Panels: el nombre de la categoría es demasiado largo.");
             }
-            clean.Add(new BoardPanelDto(kind, category));
+            string? mediaUrl = null;
+            if (kind == "Image")
+            {
+                mediaUrl = p!.MediaUrl?.Trim();
+                if (string.IsNullOrEmpty(mediaUrl) || !mediaUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase) || mediaUrl.Length > 2000)
+                    throw new ArgumentException("Panels: la imagen fija necesita una URL https válida.");
+            }
+            string? style = null;
+            if (kind is "Daily" or "Category" && !string.IsNullOrWhiteSpace(p!.Style))
+                style = PanelStyles.FirstOrDefault(s => string.Equals(s, p.Style.Trim(), StringComparison.OrdinalIgnoreCase))
+                    ?? throw new ArgumentException($"Panels: estilo inválido '{p.Style}'.");
+            clean.Add(new BoardPanelDto(kind, category, mediaUrl, style));
         }
         return JsonArrayField.Serialize(clean);
     }
