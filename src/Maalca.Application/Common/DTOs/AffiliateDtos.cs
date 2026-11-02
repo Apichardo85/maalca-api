@@ -167,4 +167,7 @@ public record AffiliateEventRequest(
     Dictionary<string, string>? Metadata = null
 );
 
-public record AffiliateSlugLookupDto(Guid Id, string Slug, string Name);
+// Timezone viaja desde que el correo de cita adjunta un .ics: la hora de la cita se guarda como
+// fecha "bare" + HH:mm en la zona del negocio, así que sin la zona IANA no hay forma de
+// convertirla a un instante real. Opcional al final del record para no romper a nadie.
+public record AffiliateSlugLookupDto(Guid Id, string Slug, string Name, string? Timezone = null);

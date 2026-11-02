@@ -59,6 +59,10 @@ public record ReschedulePublicAppointmentRequest(DateTime Date, string Time);
 /// cuándo tratar un slot como ocupado para la opción "cualquiera disponible" combinando todas las
 /// listas). Ver task #189: antes el front no sabía nada de esto y el usuario descubría el
 /// choque recién al confirmar (409).
+///
+/// Las claves son staffId (Guid como string) más una reservada,
+/// PublicBookingService.UnassignedStaffKey ("unassigned"), con las citas y bloqueos que no
+/// cuelgan de nadie en particular. El front la usa cuando el negocio no tiene personal.
 /// </summary>
 public record PublicBusyTimesDto(Dictionary<string, List<string>> BusyByStaff);
 

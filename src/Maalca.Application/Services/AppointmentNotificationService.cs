@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Maalca.Application.Common;
 using Maalca.Application.Common.Interfaces;
 using Maalca.Domain.Entities;
 using Microsoft.Extensions.Logging;
@@ -25,15 +26,15 @@ public class AppointmentNotificationService : IAppointmentNotificationService
         _owner = owner;
     }
 
-    public async Task NotifyAppointmentBookedAsync(Appointment appointment, Customer customer, string businessName, string slug, string serviceName, string? staffName, string? zoomLink = null)
+    public async Task NotifyAppointmentBookedAsync(Appointment appointment, Customer customer, string businessName, string slug, string serviceName, string? staffName, string? zoomLink = null, int? durationMinutes = null, string? timezone = null, bool rescheduled = false)
     {
         // Aviso al dueño (badge + push): cita nueva por confirmar. Antes del early-return del correo del cliente.
         var apptWhen = $"{appointment.Date:yyyy-MM-dd} {appointment.Time}";
         await _owner.NotifyAsync(
             appointment.AffiliateId, "appointment",
-            "Nueva cita por confirmar",
+            rescheduled ? "Cita reagendada por el cliente" : "Nueva cita por confirmar",
             $"{customer.Name} · {serviceName} · {apptWhen}",
-            "New appointment to confirm",
+            rescheduled ? "Appointment rescheduled by client" : "New appointment to confirm",
             $"{customer.Name} · {serviceName} · {apptWhen}",
             "agenda", appointment.Id);
 
@@ -66,6 +67,15 @@ public class AppointmentNotificationService : IAppointmentNotificationService
                 staffName,
                 isVirtual = appointment.IsVirtual,
                 zoomLink = appointment.IsVirtual ? zoomLink : null,
+                // Para el .ics que maalca-web adjunta a la confirmacion: Date/Time se guardan como
+                // fecha "bare" + HH:mm en la zona del negocio, asi que sin la zona IANA no hay forma
+                // de convertirlos a un instante real. Ambos pueden ir null (DurationMinutes es
+                // nullable a proposito y no todo afiliado tiene Timezone) y web cae a sus defaults.
+                durationMinutes,
+                timezone,
+                // SEQUENCE del .ics: ver AppointmentSchedule.RevisionStamp. Sube en cada cambio,
+                // así que el calendario del cliente acepta la actualización sin duplicar el evento.
+                sequence = AppointmentSchedule.RevisionStamp(appointment.CreatedAt, appointment.UpdatedAt),
             };
 
             var client = _httpClientFactory.CreateClient();
@@ -91,7 +101,7 @@ public class AppointmentNotificationService : IAppointmentNotificationService
         }
     }
 
-    public async Task NotifyAppointmentStatusAsync(Appointment appointment, Customer customer, string businessName, string slug, string serviceName, string? staffName, string kind, string? zoomLink = null)
+    public async Task NotifyAppointmentStatusAsync(Appointment appointment, Customer customer, string businessName, string slug, string serviceName, string? staffName, string kind, string? zoomLink = null, int? durationMinutes = null, string? timezone = null)
     {
         if (string.IsNullOrWhiteSpace(customer.Email))
             return; // sin correo del cliente no hay a quién notificar
@@ -123,6 +133,9 @@ public class AppointmentNotificationService : IAppointmentNotificationService
                 staffName,
                 isVirtual = appointment.IsVirtual,
                 zoomLink = appointment.IsVirtual ? zoomLink : null,
+                durationMinutes,
+                timezone,
+                sequence = AppointmentSchedule.RevisionStamp(appointment.CreatedAt, appointment.UpdatedAt),
             };
 
             var client = _httpClientFactory.CreateClient();

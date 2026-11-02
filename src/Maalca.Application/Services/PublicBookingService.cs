@@ -14,11 +14,25 @@ namespace Maalca.Application.Services;
 /// existe/no publicado (el endpoint lo convierte en 404).
 ///
 /// Prevención de doble-booking: un mismo miembro del personal no puede tener dos citas
-/// (no canceladas) en la misma fecha+hora. Sin AssignedToId no hay conflicto que chequear —
-/// el negocio decide luego quién la atiende.
+/// (no canceladas) en la misma fecha+hora. Sin AssignedToId el criterio depende de si el
+/// negocio tiene personal activo:
+///  - CON personal: no hay conflicto que chequear, el negocio decide luego quién la atiende
+///    (caso barbería — tres barberos pueden tomar tres clientes en la misma hora).
+///  - SIN personal: la agenda es de una sola persona, así que dos citas a la misma hora se
+///    pisan de verdad. Antes no se chequeaba nada acá y GetPublicBusyTimesAsync descartaba
+///    las citas sin asignar, así que un consultor solo mostraba TODOS los slots libres siempre
+///    y aceptaba reservas ilimitadas en la misma hora — con sala virtual fija, los clientes
+///    caían en la misma reunión.
 /// </summary>
 public class PublicBookingService : IPublicBookingService
 {
+    /// <summary>
+    /// Clave reservada de PublicBusyTimesDto.BusyByStaff para las citas sin profesional
+    /// asignado. No colisiona con un Guid, así que convive con las claves por staffId.
+    /// El front la lee cuando el negocio no tiene personal (ver PublicBookingSection).
+    /// </summary>
+    public const string UnassignedStaffKey = "unassigned";
+
     private readonly AppDbContext _db;
     private readonly IQueueService _queueService;
     private readonly ICustomerService _customerService;
@@ -86,18 +100,32 @@ public class PublicBookingService : IPublicBookingService
         // Kind=Unspecified y la columna es timestamptz.
         var dateUtc = DateTime.SpecifyKind(date.Date, DateTimeKind.Utc);
 
+        // Antes esto filtraba `a.AssignedToId != null`, así que las citas sin profesional
+        // asignado no salían como ocupadas en ningún lado. En un negocio de una sola persona
+        // (sin TeamMembers) eso significaba que el grid de horas nunca tachaba nada.
         var busy = await _db.Appointments
             .Where(a =>
                 a.AffiliateId == affiliate.Id &&
                 a.Date.Date == dateUtc &&
-                a.Status != "Cancelled" &&
-                a.AssignedToId != null)
-            .Select(a => new { StaffId = a.AssignedToId!.Value, a.Time })
+                a.Status != "Cancelled")
+            .Select(a => new { a.AssignedToId, a.Time, Duration = a.Service!.DurationMinutes })
             .ToListAsync();
 
-        var busyByStaff = busy
-            .GroupBy(a => a.StaffId)
-            .ToDictionary(g => g.Key.ToString(), g => g.Select(a => a.Time).Distinct().ToList());
+        // Se reporta cada slot que la cita OCUPA, no solo su hora de inicio: una cita de 60 min
+        // a las 09:00 tacha 09:00 y 09:30. Antes solo viajaba la hora exacta, así que un servicio
+        // largo dejaba vendible el slot de la mitad (ver AppointmentSchedule).
+        var busyByStaff = new Dictionary<string, List<string>>();
+        foreach (var appt in busy)
+        {
+            var staffKey = appt.AssignedToId?.ToString() ?? UnassignedStaffKey;
+            if (!busyByStaff.TryGetValue(staffKey, out var taken))
+            {
+                taken = new List<string>();
+                busyByStaff[staffKey] = taken;
+            }
+            foreach (var slot in AppointmentSchedule.CoveredSlots(appt.Time, appt.Duration))
+                if (!taken.Contains(slot)) taken.Add(slot);
+        }
 
         // Task #192 — bloqueos manuales de horario (almuerzo, ausencias) se mezclan en el mismo
         // dict de "ocupado" que las citas reales, para que el front no tenga que saber que
@@ -123,10 +151,14 @@ public class PublicBookingService : IPublicBookingService
             foreach (var block in blocks)
             {
                 var slots = ExpandBlockToSlots(block.StartTime, block.EndTime);
-                var targetStaffIds = block.StaffId.HasValue ? new List<Guid> { block.StaffId.Value } : allStaffIds;
-                foreach (var staffId in targetStaffIds)
+                // Un bloqueo de TODO el personal (StaffId null) también tapa la línea "sin
+                // asignar": si no, en un negocio de una sola persona allStaffIds va vacío y el
+                // bloqueo no tapaba absolutamente nada (almuerzo o vacaciones invisibles).
+                var targetKeys = block.StaffId.HasValue
+                    ? new List<string> { block.StaffId.Value.ToString() }
+                    : allStaffIds.Select(id => id.ToString()).Append(UnassignedStaffKey).ToList();
+                foreach (var key in targetKeys)
                 {
-                    var key = staffId.ToString();
                     if (!busyByStaff.TryGetValue(key, out var list))
                     {
                         list = new List<string>();
@@ -141,33 +173,28 @@ public class PublicBookingService : IPublicBookingService
         return new PublicBusyTimesDto(busyByStaff);
     }
 
+    /// <summary>Atajo sobre AppointmentOverlapQuery, que es donde vive el criterio compartido.</summary>
+    private Task<bool> HasOverlapAsync(Guid affiliateId, Guid? staffId, DateTime dateUtc, string time, int? durationMinutes, Guid? excludeAppointmentId = null) =>
+        AppointmentOverlapQuery.HasOverlapAsync(_db.Appointments, affiliateId, staffId, dateUtc, time, durationMinutes, excludeAppointmentId);
+
     // Convierte un rango HH:mm-HH:mm en la misma grilla de 30 min que usa generateTimeSlots()
     // del lado del front, para que un bloqueo de "12:00 a 13:00" tache exactamente los slots
     // "12:00" y "12:30" — sin esto, comparar el rango contra un solo string de hora exacta
     // dejaría pasar reservas que caen dentro del bloqueo pero no coinciden con StartTime.
     private static List<string> ExpandBlockToSlots(string startTime, string endTime)
     {
-        var slots = new List<string>();
-        if (!TryParseHm(startTime, out var startMins) || !TryParseHm(endTime, out var endMins))
-            return slots;
-        for (var mins = startMins - (startMins % 30); mins < endMins; mins += 30)
+        if (!AppointmentSchedule.TryParseHm(startTime, out var startMins) ||
+            !AppointmentSchedule.TryParseHm(endTime, out var endMins) ||
+            endMins <= startMins)
         {
-            if (mins < 0) continue;
-            var h = mins / 60;
-            var m = mins % 60;
-            slots.Add($"{h:D2}:{m:D2}");
+            // Rango vacío o invertido (dato malo, o un bloqueo que cruza medianoche, que el resto
+            // de la agenda tampoco contempla): no tapa nada. El guard es explícito porque
+            // CoveredSlots trataría una duración <= 0 como "sin fijar" y caería al default de 30.
+            return new List<string>();
         }
-        return slots;
-    }
 
-    private static bool TryParseHm(string value, out int minutes)
-    {
-        minutes = 0;
-        var parts = value.Split(':');
-        if (parts.Length != 2) return false;
-        if (!int.TryParse(parts[0], out var h) || !int.TryParse(parts[1], out var m)) return false;
-        minutes = h * 60 + m;
-        return true;
+        // Un bloqueo es un intervalo igual que una cita, así que reusa la misma expansión.
+        return AppointmentSchedule.CoveredSlots(startTime, endMins - startMins);
     }
 
     public async Task<PublicAppointmentResultDto> CreatePublicAppointmentAsync(string affiliateSlug, CreatePublicAppointmentRequest request)
@@ -207,6 +234,13 @@ public class PublicBookingService : IPublicBookingService
         if (isVirtual && string.IsNullOrWhiteSpace(affiliate.ZoomLink))
             throw new ArgumentException("Este negocio todavía no configuró su link de reuniones virtuales.");
 
+        // request.Date llega con Kind=Unspecified (fecha "bare" del front) — Npgsql 8+ no
+        // permite compararlo contra la columna timestamptz sin forzar Kind=Utc primero, ni al
+        // comparar ni al escribir. Sin esto el chequeo de conflicto tronaba con
+        // ArgumentException y CADA reserva pública de cita devolvía 400. Bug real reportado
+        // en producción 2026-08-17 — bloqueaba toda la Agenda pública (Barbería/Servicios).
+        var requestDateUtc = DateTime.SpecifyKind(request.Date.Date, DateTimeKind.Utc);
+
         if (request.AssignedToId is Guid assignedToId)
         {
             var validStaff = await _db.TeamMembers
@@ -214,20 +248,48 @@ public class PublicBookingService : IPublicBookingService
             if (!validStaff)
                 throw new ArgumentException("El miembro del personal seleccionado no está disponible.");
 
-            // request.Date llega con Kind=Unspecified (fecha "bare" del front) — Npgsql 8+ no
-            // permite compararlo contra la columna timestamptz sin forzar Kind=Utc primero,
-            // igual que en el Create de abajo. Sin esto el chequeo de conflicto tronaba con
-            // ArgumentException y CADA reserva pública de cita devolvía 400. Bug real reportado
-            // en producción 2026-08-17 — bloqueaba toda la Agenda pública (Barbería/Servicios).
-            var requestDateUtc = DateTime.SpecifyKind(request.Date.Date, DateTimeKind.Utc);
-            var conflict = await _db.Appointments.AnyAsync(a =>
-                a.AffiliateId == affiliate.Id &&
-                a.AssignedToId == assignedToId &&
-                a.Date.Date == requestDateUtc &&
-                a.Time == request.Time &&
-                a.Status != "Cancelled");
-            if (conflict)
+            if (await HasOverlapAsync(affiliate.Id, assignedToId, requestDateUtc, request.Time, service.DurationMinutes))
                 throw new InvalidOperationException("Ese horario ya no está disponible — elige otro.");
+        }
+        else
+        {
+            // Sin profesional elegido el criterio depende de si hay personal (ver doc de clase):
+            // con personal activo el negocio asigna después y no hay nada que chequear; sin
+            // personal la agenda es de una sola persona y dos citas solapadas se pisan de verdad.
+            var hasActiveStaff = await _db.TeamMembers
+                .AnyAsync(t => t.AffiliateId == affiliate.Id && t.IsActive);
+            if (!hasActiveStaff &&
+                await HasOverlapAsync(affiliate.Id, null, requestDateUtc, request.Time, service.DurationMinutes))
+                throw new InvalidOperationException("Ese horario ya no está disponible — elige otro.");
+        }
+
+        // Bloqueos manuales de horario (TimeBlock, task #192). Hasta ahora solo servían para
+        // tachar slots en el grid del front, así que un POST directo al endpoint público los
+        // ignoraba por completo: el almuerzo o las vacaciones del dueño no detenían una reserva.
+        // Se filtran en memoria porque son pocas filas por día y porque comparar StaffId nullable
+        // contra un parámetro nullable en EF es justo el tipo de traducción que sorprende.
+        var dayBlocks = await _db.TimeBlocks
+            .Where(b => b.AffiliateId == affiliate.Id && b.Date.Date == requestDateUtc)
+            .Select(b => new { b.StaffId, b.StartTime, b.EndTime })
+            .ToListAsync();
+
+        if (dayBlocks.Count > 0)
+        {
+            var blocksForThisBooking = dayBlocks
+                .Where(b => b.StaffId is null || b.StaffId == request.AssignedToId);
+
+            foreach (var block in blocksForThisBooking)
+            {
+                if (!AppointmentSchedule.TryParseHm(block.StartTime, out var from) ||
+                    !AppointmentSchedule.TryParseHm(block.EndTime, out var to) ||
+                    to <= from)
+                    continue; // mismo criterio que ExpandBlockToSlots: rango inválido no tapa nada
+
+                // Intervalo contra intervalo, igual que entre citas: una asesoría de 60 min a las
+                // 11:30 cae dentro de un bloqueo de 12:00 a 13:00 aunque no empiece dentro de él.
+                if (AppointmentSchedule.Overlaps(request.Time, service.DurationMinutes, block.StartTime, to - from))
+                    throw new InvalidOperationException("Ese horario no está disponible — elige otro.");
+            }
         }
 
         // Reusa el Customer si ya existe uno con el mismo teléfono para este afiliado (evita
@@ -241,12 +303,9 @@ public class PublicBookingService : IPublicBookingService
             CustomerId = customer!.Id,
             ServiceId = service.Id,
             AssignedToId = request.AssignedToId,
-            // El front manda una fecha "bare" (yyyy-MM-dd, sin hora/offset), que System.Text.Json
-            // deserializa con Kind=Unspecified. La columna es timestamp with time zone y Npgsql 8+
-            // rechaza escribir un DateTime Unspecified ahí (throws en SaveChangesAsync). Como esto
-            // es una fecha de calendario, no un instante real, forzamos Kind=Utc explícitamente en
-            // vez de cambiar el tipo de columna.
-            Date = DateTime.SpecifyKind(request.Date.Date, DateTimeKind.Utc),
+            // Es una fecha de calendario, no un instante real: se guarda con Kind=Utc forzado
+            // (ver requestDateUtc arriba) en vez de cambiar el tipo de columna.
+            Date = requestDateUtc,
             Time = request.Time,
             Status = "Scheduled",
             Notes = request.Notes,
@@ -274,7 +333,7 @@ public class PublicBookingService : IPublicBookingService
             // Se espera (no fire-and-forget) — tarea #135 ya mostró que un fire-and-forget se
             // corta a mitad de camino en el runtime serverless de Railway. El servicio de abajo
             // ya atrapa sus propios errores y nunca tumba la reserva si el correo falla.
-            await _appointmentNotifications.NotifyAppointmentBookedAsync(appointment, customer, affiliate.Name, affiliateSlug, service.Name, staffName, affiliate.ZoomLink);
+            await _appointmentNotifications.NotifyAppointmentBookedAsync(appointment, customer, affiliate.Name, affiliateSlug, service.Name, staffName, affiliate.ZoomLink, service.DurationMinutes, affiliate.Timezone);
         }
 
         return new PublicAppointmentResultDto(appointment.Id, appointment.Date, appointment.Time, appointment.Status, appointment.Token, appointment.IsVirtual, isVirtual ? affiliate.ZoomLink : null);
@@ -512,7 +571,9 @@ public class PublicBookingService : IPublicBookingService
 
     public async Task<PublicAppointmentManageDto> ReschedulePublicAppointmentAsync(Guid token, DateTime date, string time)
     {
-        var appt = await _db.Appointments.Include(a => a.Affiliate).Include(a => a.Service).Include(a => a.AssignedTo)
+        // Customer se incluye para poder avisar por correo al final — antes no hacía falta porque
+        // reagendar no notificaba a nadie.
+        var appt = await _db.Appointments.Include(a => a.Affiliate).Include(a => a.Service).Include(a => a.AssignedTo).Include(a => a.Customer)
             .FirstOrDefaultAsync(a => a.Token == token);
         if (appt is null) throw new KeyNotFoundException();
         if (appt.Status is "Completed" or "Cancelled")
@@ -524,24 +585,44 @@ public class PublicBookingService : IPublicBookingService
 
         var dateUtc = DateTime.SpecifyKind(date.Date, DateTimeKind.Utc);
 
+        // Mismo criterio que CreatePublicAppointmentAsync (ver doc de clase): con personal se
+        // chequea contra el profesional asignado; sin personal activo, contra las demás citas
+        // sin asignar, porque la agenda es de una sola persona. Antes esta rama no existía y el
+        // cliente podía reagendarse encima de otra cita desde /cita/{token}.
+        bool conflict;
         if (appt.AssignedToId is Guid assignedToId)
         {
-            var conflict = await _db.Appointments.AnyAsync(a =>
-                a.Id != appt.Id &&
-                a.AffiliateId == appt.AffiliateId &&
-                a.AssignedToId == assignedToId &&
-                a.Date.Date == dateUtc &&
-                a.Time == time &&
-                a.Status != "Cancelled");
-            if (conflict)
-                throw new InvalidOperationException("Ese horario ya no está disponible — elige otro.");
+            conflict = await HasOverlapAsync(appt.AffiliateId, assignedToId, dateUtc, time, appt.Service?.DurationMinutes, appt.Id);
         }
+        else
+        {
+            var hasActiveStaff = await _db.TeamMembers
+                .AnyAsync(t => t.AffiliateId == appt.AffiliateId && t.IsActive);
+            conflict = !hasActiveStaff &&
+                await HasOverlapAsync(appt.AffiliateId, null, dateUtc, time, appt.Service?.DurationMinutes, appt.Id);
+        }
+        if (conflict)
+            throw new InvalidOperationException("Ese horario ya no está disponible — elige otro.");
 
         appt.Date = dateUtc;
         appt.Time = time;
         appt.Status = "Scheduled"; // vuelve a pedir confirmación tras reagendar
         appt.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
+
+        // Reagendar no avisaba a nadie: el dueño no se enteraba y el cliente se quedaba con la
+        // hora vieja agendada en su calendario (desde que la confirmación manda .ics). El correo
+        // es el mismo de la reserva porque el estado vuelve a ser "Scheduled"; el .ics viaja con
+        // el mismo UID y un SEQUENCE mayor, así que actualiza el evento en vez de duplicarlo.
+        // Se espera, no fire-and-forget, por lo mismo que en Create (tarea #135).
+        if (appt.Customer is not null)
+        {
+            await _appointmentNotifications.NotifyAppointmentBookedAsync(
+                appt, appt.Customer, appt.Affiliate?.Name ?? "", appt.Affiliate?.Slug ?? "",
+                appt.Service?.Name ?? "", appt.AssignedTo?.Name,
+                appt.IsVirtual ? appt.Affiliate?.ZoomLink : null,
+                appt.Service?.DurationMinutes, appt.Affiliate?.Timezone, rescheduled: true);
+        }
 
         return new PublicAppointmentManageDto(appt.Token, appt.Affiliate?.Name ?? "", appt.Service?.Name ?? "", appt.AssignedTo?.Name, appt.Date, appt.Time, appt.Status, appt.IsVirtual, appt.IsVirtual ? appt.Affiliate?.ZoomLink : null);
     }

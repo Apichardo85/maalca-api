@@ -37,7 +37,8 @@ public class AppointmentService : IAppointmentService
         if (kind == null || string.IsNullOrWhiteSpace(appt.Customer.Email)) return;
         await _notifications.NotifyAppointmentStatusAsync(
             appt, appt.Customer, appt.Affiliate.Name, appt.Affiliate.Slug ?? "", appt.Service?.Name ?? "",
-            appt.AssignedTo?.Name, kind, appt.IsVirtual ? appt.Affiliate.ZoomLink : null);
+            appt.AssignedTo?.Name, kind, appt.IsVirtual ? appt.Affiliate.ZoomLink : null,
+            appt.Service?.DurationMinutes, appt.Affiliate.Timezone);
     }
 
     public async Task<PaginatedResponse<Appointment>> GetAppointmentsAsync(Guid affiliateId, DateTime? date = null, string? status = null, int page = 1)
@@ -80,19 +81,31 @@ public class AppointmentService : IAppointmentService
         // Kind=Utc en vez de tocar el tipo de columna.
         appointment.Date = DateTime.SpecifyKind(appointment.Date.Date, DateTimeKind.Utc);
 
-        // Mismo chequeo de choque que ya existe en la reserva pública (PublicBookingService)
-        // — el dashboard nunca lo tuvo y permitía doble-agendar al mismo barbero a la misma hora.
+        // Mismo chequeo de choque que la reserva pública (ver doc de PublicBookingService) — el
+        // dashboard nunca lo tuvo y permitía doble-agendar al mismo barbero a la misma hora. Sin
+        // profesional asignado el criterio también es el mismo: con personal activo el negocio
+        // asigna después y no hay conflicto; sin personal la agenda es de una sola persona.
+        // La duración sale del servicio de la cita, no del body: el dashboard manda ServiceId.
+        var durationMinutes = await _context.Services
+            .Where(sv => sv.Id == appointment.ServiceId)
+            .Select(sv => sv.DurationMinutes)
+            .FirstOrDefaultAsync();
+
+        bool conflict;
         if (appointment.AssignedToId is Guid assignedToId)
         {
-            var conflict = await _context.Appointments.AnyAsync(a =>
-                a.AffiliateId == affiliateId &&
-                a.AssignedToId == assignedToId &&
-                a.Date.Date == appointment.Date.Date &&
-                a.Time == appointment.Time &&
-                a.Status != "Cancelled");
-            if (conflict)
-                throw new InvalidOperationException("Ese horario ya no está disponible — elige otro.");
+            conflict = await Maalca.Application.Common.AppointmentOverlapQuery.HasOverlapAsync(
+                _context.Appointments, affiliateId, assignedToId, appointment.Date.Date, appointment.Time, durationMinutes);
         }
+        else
+        {
+            var hasActiveStaff = await _context.TeamMembers
+                .AnyAsync(t => t.AffiliateId == affiliateId && t.IsActive);
+            conflict = !hasActiveStaff && await Maalca.Application.Common.AppointmentOverlapQuery.HasOverlapAsync(
+                _context.Appointments, affiliateId, null, appointment.Date.Date, appointment.Time, durationMinutes);
+        }
+        if (conflict)
+            throw new InvalidOperationException("Ese horario ya no está disponible — elige otro.");
 
         _context.Appointments.Add(appointment);
         await _context.SaveChangesAsync();

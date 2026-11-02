@@ -4001,7 +4001,7 @@ app.MapGet("/api/affiliates/by-slug/{slug}", async (HttpContext ctx, AppDbContex
 
     var affiliate = await db.Affiliates
         .Where(a => a.Slug == slug)
-        .Select(a => new { a.Id, a.Slug, a.Name })
+        .Select(a => new { a.Id, a.Slug, a.Name, a.Timezone })
         .FirstOrDefaultAsync();
     if (affiliate is null)
         return Results.NotFound();
@@ -4011,7 +4011,7 @@ app.MapGet("/api/affiliates/by-slug/{slug}", async (HttpContext ctx, AppDbContex
     if (!hasAccess)
         return Results.Forbid();
 
-    return Results.Ok(new AffiliateSlugLookupDto(affiliate.Id, affiliate.Slug!, affiliate.Name));
+    return Results.Ok(new AffiliateSlugLookupDto(affiliate.Id, affiliate.Slug!, affiliate.Name, affiliate.Timezone));
 });
 
 // ============ PUBLIC CATALOG ENDPOINTS (no auth) ============
