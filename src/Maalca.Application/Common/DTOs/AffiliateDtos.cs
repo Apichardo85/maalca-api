@@ -141,9 +141,11 @@ public record DailyMenuSectionDto(
 
 /// <summary>
 /// Un flyer vertical del board (BoardLayout.Panels). Kind: "Daily" (menú del día), "Ads"
-/// (comerciales a pantalla completa) o "Category" (los platos de una categoría, ej. Desayuno).
+/// (comerciales a pantalla completa), "Category" (los platos de una categoría, ej. Desayuno) o
+/// "Image" (una imagen fija, ej. el menú impreso del negocio subido como comercial → MediaUrl).
+/// Style (solo Daily/Category): "Modern" (paleta del negocio, default) | "Tropical".
 /// </summary>
-public record BoardPanelDto(string Kind, string? Category = null);
+public record BoardPanelDto(string Kind, string? Category = null, string? MediaUrl = null, string? Style = null);
 
 /// <summary>Nombre de una categoría del catálogo en cada idioma (ambos opcionales).</summary>
 public record CategoryTranslationDto(string? Es, string? En);
