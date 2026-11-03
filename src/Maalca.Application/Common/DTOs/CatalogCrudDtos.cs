@@ -20,7 +20,8 @@ public record CreateCatalogItemRequest(
     string? NameEn = null,                      // Product/Service/InventoryItem — nombre en inglés, fallback a Name si null
     string? Modality = null,                    // Tipos con agenda (Barber/Service) — "InPerson" | "Virtual" | "Both". Null = InPerson (default del enum).
     decimal? CompareAtPrice = null,             // Product/InventoryItem — precio "antes" (oferta). Null/<=0 = sin oferta.
-    bool? TrackStock = null                     // InventoryItem only — activa el control de stock en la tienda pública.
+    bool? TrackStock = null,                    // InventoryItem only — activa el control de stock en la tienda pública.
+    RetailAttributesDto? Retail = null          // InventoryItem only — marca, peso/medidas, hazmat, variantes, reglas de cantidad.
 );
 
 public record UpdateCatalogItemRequest(
@@ -45,7 +46,8 @@ public record UpdateCatalogItemRequest(
     string? NameEn = null,                      // Product/Service/InventoryItem — nombre en inglés, fallback a Name si null
     string? Modality = null,                    // Tipos con agenda (Barber/Service) — "InPerson" | "Virtual" | "Both". Null = no tocar.
     decimal? CompareAtPrice = null,             // Product/InventoryItem — null = no tocar; 0 = quitar la oferta.
-    bool? TrackStock = null                     // InventoryItem only — null = no tocar.
+    bool? TrackStock = null,                    // InventoryItem only — null = no tocar.
+    RetailAttributesDto? Retail = null          // InventoryItem only — null = no tocar; objeto = reemplaza todos sus campos.
 );
 
 // Receta (ProductIngredient) — Product (plato) -> InventoryItem (ingrediente) + cantidad consumida

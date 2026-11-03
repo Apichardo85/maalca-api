@@ -212,10 +212,21 @@ public class PublicCatalogService : IPublicCatalogService
             boardOn = order.IndexOf(screenId.Value) < allowance;
         }
 
+        // Envío a domicilio: solo con el módulo "shipping" activo; sin métodos activos la lista va vacía y el
+        // checkout no ofrece envío.
+        var shippingMethods = activeModules.Contains("shipping", StringComparer.OrdinalIgnoreCase)
+            ? (await _db.ShippingMethods.AsNoTracking()
+                .Where(m => m.AffiliateId == affiliate.Id && m.IsActive)
+                .OrderBy(m => m.SortOrder).ThenBy(m => m.CreatedAt)
+                .ToListAsync())
+                .Select(m => new PublicShippingMethodDto(m.Id, m.Name, m.NameEn, m.Price, m.FreeOverAmount, m.MinDays, m.MaxDays, m.AllowsHazmat))
+                .ToList()
+            : new List<PublicShippingMethodDto>();
+
         return new PublicCatalogResponse(
             await MapToAffiliatePublicDtoAsync(affiliate),
             items,
-            BuildCapabilities(ModuleAccess.GetEffectiveTier(affiliate), boardOn) with { StripeReady = affiliate.StripeConnectChargesEnabled && !string.IsNullOrEmpty(affiliate.StripeConnectAccountId), PickupNewCustomerLimit = affiliate.PickupNewCustomerLimit },
+            BuildCapabilities(ModuleAccess.GetEffectiveTier(affiliate), boardOn) with { StripeReady = affiliate.StripeConnectChargesEnabled && !string.IsNullOrEmpty(affiliate.StripeConnectAccountId), PickupNewCustomerLimit = affiliate.PickupNewCustomerLimit, ShippingMethods = shippingMethods },
             screenAds,
             adsScreen?.AdFrequency ?? affiliate.AdFrequency,
             screen?.Language ?? affiliate.Language,

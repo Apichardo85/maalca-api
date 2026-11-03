@@ -92,6 +92,10 @@ builder.Services.AddScoped<ICommunitySignupService, CommunitySignupService>();
 builder.Services.AddScoped<IProposalNotificationService, ProposalNotificationService>();
 builder.Services.AddScoped<Maalca.Application.Common.Interfaces.IOrderRealtimeNotifier, Maalca.Api.Hubs.SignalROrderRealtimeNotifier>();
 builder.Services.AddScoped<IOrderService, OrderService>();
+builder.Services.AddScoped<Maalca.Application.Common.Payments.IPaymentProvider, Maalca.Application.Services.Payments.StripePaymentProvider>();
+builder.Services.AddScoped<Maalca.Application.Common.Payments.IPaymentProviderResolver, Maalca.Application.Services.Payments.PaymentProviderResolver>();
+builder.Services.AddScoped<IPriceListService, PriceListService>();
+builder.Services.AddScoped<IShippingService, ShippingService>();
 builder.Services.AddScoped<IDonationService, DonationService>();
 builder.Services.AddScoped<IScreenAdService, ScreenAdService>();
 builder.Services.AddScoped<IPlatformAddOnService, PlatformAddOnService>();
@@ -3062,6 +3066,86 @@ app.MapDelete("/api/affiliates/{id}/orders/{orderId}/no-show", async (
     return result is null
         ? Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Order not found" } })
         : Results.Ok(result);
+});
+
+// ── Tienda: listas de precio, envíos y despacho ─────────────────────────────────
+// Mismo gating que /inventory: ser el afiliado activo; escribir además exige no ser Staff
+// (el despacho sí lo puede hacer Staff: es operación diaria, como avanzar un pedido).
+static bool IsActiveAffiliate(HttpContext ctx, Guid id) => ctx.User.FindFirst("active_affiliate_id")?.Value == id.ToString();
+static IResult InvalidInput(ArgumentException ex) => Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+
+app.MapGet("/api/affiliates/{id:guid}/price-lists", async (HttpContext ctx, IPriceListService svc, Guid id) =>
+    !IsActiveAffiliate(ctx, id) ? Results.Forbid() : Results.Ok(await svc.GetAllAsync(id)));
+
+app.MapPost("/api/affiliates/{id:guid}/price-lists", async (HttpContext ctx, IPriceListService svc, Guid id, UpsertPriceListRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try { return Results.Ok(await svc.CreateAsync(id, request)); }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
+
+app.MapPut("/api/affiliates/{id:guid}/price-lists/{listId:guid}", async (HttpContext ctx, IPriceListService svc, Guid id, Guid listId, UpsertPriceListRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await svc.UpdateAsync(id, listId, request);
+        return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
+
+app.MapDelete("/api/affiliates/{id:guid}/price-lists/{listId:guid}", async (HttpContext ctx, IPriceListService svc, Guid id, Guid listId) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    return await svc.DeleteAsync(id, listId) ? Results.NoContent() : Results.NotFound();
+});
+
+app.MapGet("/api/affiliates/{id:guid}/price-lists/{listId:guid}/preview", async (HttpContext ctx, IPriceListService svc, Guid id, Guid listId) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    var result = await svc.PreviewAsync(id, listId);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+
+app.MapGet("/api/affiliates/{id:guid}/shipping-methods", async (HttpContext ctx, IShippingService svc, Guid id) =>
+    !IsActiveAffiliate(ctx, id) ? Results.Forbid() : Results.Ok(await svc.GetMethodsAsync(id)));
+
+app.MapPost("/api/affiliates/{id:guid}/shipping-methods", async (HttpContext ctx, IShippingService svc, Guid id, UpsertShippingMethodRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try { return Results.Ok(await svc.CreateAsync(id, request)); }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
+
+app.MapPut("/api/affiliates/{id:guid}/shipping-methods/{methodId:guid}", async (HttpContext ctx, IShippingService svc, Guid id, Guid methodId, UpsertShippingMethodRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await svc.UpdateAsync(id, methodId, request);
+        return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
+
+app.MapDelete("/api/affiliates/{id:guid}/shipping-methods/{methodId:guid}", async (HttpContext ctx, IShippingService svc, Guid id, Guid methodId) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    return await svc.DeleteAsync(id, methodId) ? Results.NoContent() : Results.NotFound();
+});
+
+app.MapPatch("/api/affiliates/{id:guid}/orders/{orderId:guid}/ship", async (HttpContext ctx, IOrderService orderService, Guid id, Guid orderId, MarkShippedRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    try
+    {
+        var result = await orderService.MarkShippedAsync(id, orderId, request.Carrier, request.TrackingNumber);
+        return result is null
+            ? Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Order not found" } })
+            : Results.Ok(result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
 });
 
 // Reglas de confianza para "pagar al recoger" (dashboard → Pedidos).

@@ -308,6 +308,7 @@ public class CatalogCrudService : ICatalogCrudService
         if (request.Stock.HasValue) item.Quantity = request.Stock.Value;
         if (request.Status is not null) item.Status = request.Status;
         if (request.DescriptionEn is not null) item.DescriptionEn = request.DescriptionEn;
+        if (request.Retail is not null) RetailAttributes.Apply(item, request.Retail);
         if (wasDemo) item.IsDemo = false;
 
         await _db.SaveChangesAsync();
@@ -403,6 +404,7 @@ public class CatalogCrudService : ICatalogCrudService
             IsDemo = false,
             Status = "Active"
         };
+        if (request.Retail is not null) RetailAttributes.Apply(item, request.Retail);
         _db.InventoryItems.Add(item);
         await _db.SaveChangesAsync();
         return CatalogItemMapper.FromInventoryItem(item);
@@ -488,6 +490,7 @@ public class CatalogCrudService : ICatalogCrudService
         if (request.SortOrder.HasValue) item.SortOrder = request.SortOrder.Value;
         if (request.IsPubliclyVisible.HasValue) item.IsPubliclyVisible = request.IsPubliclyVisible.Value;
         if (request.Stock.HasValue) item.Quantity = request.Stock.Value;
+        if (request.Retail is not null) RetailAttributes.Apply(item, request.Retail);
 
         await _db.SaveChangesAsync();
         return CatalogItemMapper.FromInventoryItem(item);

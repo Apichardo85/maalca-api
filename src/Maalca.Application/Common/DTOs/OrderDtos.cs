@@ -29,7 +29,11 @@ public record CreateOrderRequest(
     string? TableNumber = null,
     bool PayAtTable = false,
     string? ScheduledFor = null,
-    bool PayAtPickup = false
+    bool PayAtPickup = false,
+    // Envío a domicilio: FulfillmentType = "shipping" + método elegido + dirección. Null = recoger/mesa como siempre.
+    string? FulfillmentType = null,
+    Guid? ShippingMethodId = null,
+    ShippingAddressDto? ShipTo = null
 );
 
 /// <param name="CheckoutUrl">
@@ -67,7 +71,17 @@ public record OrderDto(
     // Historial del cliente para la Estación/Pedidos (null = sin cliente enlazado o no calculado
     // en esta respuesta — p. ej. eventos en tiempo real; el front conserva el valor que ya tenía).
     int? CustomerVisits = null,
-    int? CustomerNoShows = null
+    int? CustomerNoShows = null,
+    // Lista de precios aplicada (null = precio público) y envío (null = recoger/mesa).
+    string? PriceListName = null,
+    string? FulfillmentType = null,
+    string? ShippingMethodName = null,
+    decimal ShippingCost = 0,
+    ShippingAddressDto? ShipTo = null,
+    string? ShippingCarrier = null,
+    string? TrackingNumber = null,
+    string? TrackingUrl = null,
+    DateTime? ShippedAt = null
 );
 
 /// <summary>Reglas de confianza para pagar al recoger (dashboard → Pedidos).</summary>
@@ -102,7 +116,15 @@ public record OrderTrackingDto(
     string Currency,
     bool Expired,
     bool CanPayOnline = false,
-    string Language = "es");
+    string Language = "es",
+    string? FulfillmentType = null,
+    string? ShippingMethodName = null,
+    decimal ShippingCost = 0,
+    ShippingAddressDto? ShipTo = null,
+    string? ShippingCarrier = null,
+    string? TrackingNumber = null,
+    string? TrackingUrl = null,
+    DateTime? ShippedAt = null);
 
 public record TrackingPayRequest(string SuccessUrl, string CancelUrl);
 

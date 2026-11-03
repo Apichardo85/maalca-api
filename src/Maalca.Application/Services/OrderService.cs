@@ -1,12 +1,11 @@
 using Maalca.Application.Common;
 using Maalca.Application.Common.DTOs;
 using Maalca.Application.Common.Interfaces;
+using Maalca.Application.Common.Payments;
 using Maalca.Domain.Entities;
 using Maalca.Domain.Enums;
 using Maalca.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
-using Stripe;
-using Stripe.Checkout;
 
 namespace Maalca.Application.Services;
 
@@ -27,13 +26,18 @@ public class OrderService : IOrderService
     private readonly AppDbContext _db;
     private readonly IOrderNotificationService _notifications;
     private readonly IOrderRealtimeNotifier _realtime;
+    private readonly IPaymentProviderResolver _payments;
 
-    public OrderService(AppDbContext db, IOrderNotificationService notifications, IOrderRealtimeNotifier realtime)
+    public OrderService(AppDbContext db, IOrderNotificationService notifications, IOrderRealtimeNotifier realtime,
+        IPaymentProviderResolver payments)
     {
         _db = db;
         _notifications = notifications;
         _realtime = realtime;
+        _payments = payments;
     }
+
+    public const string ShippingFulfillment = "shipping";
 
     public async Task<CreateOrderResponseDto?> CreateOrderAsync(string affiliateSlug, CreateOrderRequest request)
     {
@@ -55,12 +59,45 @@ public class OrderService : IOrderService
         // price=0.01 y Stripe cobraba eso (UnitAmount se arma con estos valores).
         // Cerrado ahora => el pedido solo se acepta programado para la próxima apertura, y el menú
         // que se valida es el de esa fecha (no el de hoy).
-        var scheduledFor = ResolveSchedule(affiliate, request);
+        var payments = _payments.For(affiliate);
+        var isShipping = string.Equals(request.FulfillmentType?.Trim(), ShippingFulfillment, StringComparison.OrdinalIgnoreCase);
+        // Un envío no depende del horario de la tienda (se despacha cuando abran): no se programa.
+        var scheduledFor = isShipping ? null : ResolveSchedule(affiliate, request);
+
+        // Lista de precios del cliente (miembro/mayorista). Se resolverá desde la cuenta de cliente de la tienda
+        // (inicio de sesión dentro de /{slug}); hasta entonces todo pedido público va a precio público.
+        PriceListContext? priceList = null;
+
         var priced = await RepriceItemsAsync(affiliate.Id, request.Items, request.Tax, request.Tip, scheduledFor,
-            request.CustomerEmail, request.CustomerPhone);
+            request.CustomerEmail, request.CustomerPhone, priceList);
 
         var tableNumber = await ValidateTableAsync(affiliate, request);
         if (request.PayAtPickup) await ValidatePickupAsync(affiliate, request, tableNumber, priced.Total);
+
+        // Envío a domicilio: método activo del negocio, dirección completa, terrestre si hay perfumes, y pago online
+        // obligatorio (no hay "pagar al recibir": el negocio despacha lo que ya cobró).
+        ShippingMethod? shippingMethod = null;
+        ShippingAddressDto? shipTo = null;
+        decimal shippingCost = 0;
+        if (isShipping)
+        {
+            if (!activeModules.Contains("shipping", StringComparer.OrdinalIgnoreCase))
+                throw new ArgumentException("Este negocio no hace envíos por ahora: elige recoger en tienda.");
+            if (tableNumber is not null) throw new ArgumentException("Un pedido de mesa no se envía.");
+            if (request.PayAtPickup) throw new ArgumentException("Los envíos se pagan en línea al hacer el pedido.");
+            if (!payments.IsReady(affiliate) || string.IsNullOrEmpty(request.SuccessUrl) || string.IsNullOrEmpty(request.CancelUrl))
+                throw new ArgumentException("Este negocio todavía no cobra en línea: elige recoger en tienda.");
+            shippingMethod = request.ShippingMethodId is { } smId
+                ? await _db.ShippingMethods.FirstOrDefaultAsync(m => m.Id == smId && m.AffiliateId == affiliate.Id && m.IsActive)
+                : null;
+            if (shippingMethod is null) throw new ArgumentException("Elige un método de envío.");
+            if (priced.HasHazmat && !shippingMethod.AllowsHazmat)
+                throw new ArgumentException("Tu pedido incluye productos que solo pueden viajar por tierra (como perfumes). Elige un envío terrestre.");
+            shipTo = ValidateShipTo(request.ShipTo, request.CustomerName);
+            if (string.IsNullOrWhiteSpace(request.CustomerEmail) && string.IsNullOrWhiteSpace(request.CustomerPhone))
+                throw new ArgumentException("Déjanos un correo o teléfono para avisarte del envío.");
+            shippingCost = ShippingPricing.Cost(shippingMethod.Price, shippingMethod.FreeOverAmount, priced.Subtotal);
+        }
         var customer = await LinkCustomerAsync(affiliate.Id, request.CustomerName, request.CustomerPhone, request.CustomerEmail);
 
         var order = new Order
@@ -74,11 +111,23 @@ public class OrderService : IOrderService
             Subtotal = priced.Subtotal,
             Tax = priced.Tax,
             Tip = priced.Tip,
-            Total = priced.Total,
+            Total = priced.Total + shippingCost,
             Currency = string.IsNullOrWhiteSpace(request.Currency) ? "USD" : request.Currency.ToUpperInvariant(),
             Status = OrderStatus.Pending,
             TableNumber = tableNumber,
             CustomerId = customer?.Id,
+            PriceListId = priceList?.Id,
+            PriceListName = priceList?.Name,
+            FulfillmentType = isShipping ? ShippingFulfillment : null,
+            ShippingMethodId = shippingMethod?.Id,
+            ShippingMethodName = shippingMethod?.Name,
+            ShippingCost = shippingCost,
+            ShipToName = shipTo?.Name,
+            ShipToLine1 = shipTo?.Line1,
+            ShipToLine2 = shipTo?.Line2,
+            ShipToCity = shipTo?.City,
+            ShipToState = shipTo?.State,
+            ShipToZip = shipTo?.Zip,
             Channel = tableNumber is null ? "Online" : "Table",
             PaymentMethod = tableNumber is not null && request.PayAtTable ? PayAtTableMethod
                 : tableNumber is null && request.PayAtPickup ? PayAtPickupMethod : null,
@@ -100,79 +149,49 @@ public class OrderService : IOrderService
             return new CreateOrderResponseDto(order.Id, CheckoutUrl: null, TrackingToken: order.TrackingToken);
         }
 
-        // Sin Connect activo: el pedido queda guardado igual (visible en el panel admin), pero
+        // Sin pasarela lista: el pedido queda guardado igual (visible en el panel admin), pero
         // no hay cobro online — el storefront cae al botón de WhatsApp de siempre.
-        if (!affiliate.StripeConnectChargesEnabled || string.IsNullOrEmpty(affiliate.StripeConnectAccountId))
+        if (!payments.IsReady(affiliate))
             return new CreateOrderResponseDto(order.Id, CheckoutUrl: null, TrackingToken: order.TrackingToken);
 
         if (string.IsNullOrEmpty(request.SuccessUrl) || string.IsNullOrEmpty(request.CancelUrl))
             return new CreateOrderResponseDto(order.Id, CheckoutUrl: null, TrackingToken: order.TrackingToken);
 
-        StripeConfiguration.ApiKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY") ?? "";
-        var requestOptions = new RequestOptions { StripeAccount = affiliate.StripeConnectAccountId };
-
-        var lineItems = priced.Items.Select(i => new SessionLineItemOptions
-        {
-            Quantity = i.Qty,
-            PriceData = new SessionLineItemPriceDataOptions
-            {
-                Currency = order.Currency.ToLowerInvariant(),
-                UnitAmount = (long)Math.Round(i.Price * 100),
-                ProductData = new SessionLineItemPriceDataProductDataOptions
-                {
-                    Name = string.IsNullOrWhiteSpace(i.Notes) ? i.Name : $"{i.Name} ({i.Notes})",
-                },
-            },
-        }).ToList();
-
-        if (priced.Tax > 0)
-        {
-            lineItems.Add(new SessionLineItemOptions
-            {
-                Quantity = 1,
-                PriceData = new SessionLineItemPriceDataOptions
-                {
-                    Currency = order.Currency.ToLowerInvariant(),
-                    UnitAmount = (long)Math.Round(priced.Tax * 100),
-                    ProductData = new SessionLineItemPriceDataProductDataOptions { Name = "Tax" },
-                },
-            });
-        }
-
-        if (priced.Tip > 0)
-        {
-            lineItems.Add(new SessionLineItemOptions
-            {
-                Quantity = 1,
-                PriceData = new SessionLineItemPriceDataOptions
-                {
-                    Currency = order.Currency.ToLowerInvariant(),
-                    UnitAmount = (long)Math.Round(priced.Tip * 100),
-                    ProductData = new SessionLineItemPriceDataProductDataOptions { Name = "Tip" },
-                },
-            });
-        }
-
-        var session = await new SessionService().CreateAsync(new SessionCreateOptions
-        {
-            Mode = "payment",
-            LineItems = lineItems,
-            SuccessUrl = request.SuccessUrl,
-            CancelUrl = request.CancelUrl,
-            ClientReferenceId = order.Id.ToString(),
+        var checkout = await payments.CreateCheckoutAsync(affiliate, new PaymentCheckoutRequest(
+            order.Id, order.Currency,
+            PaymentLines.For(priced.Items, priced.Tax, priced.Tip, shippingCost, ShippingLineLabel(order)),
+            request.SuccessUrl, request.CancelUrl,
+            CustomerEmail: request.CustomerEmail,
             // La sesión caduca poco antes de que venza la reserva de stock (StripeReservationMinutes): nadie
             // puede pagar unidades que ya se liberaron para otro cliente.
-            ExpiresAt = DateTime.UtcNow.AddMinutes(StripeSessionMinutes),
-            CustomerEmail = string.IsNullOrEmpty(request.CustomerEmail) ? null : request.CustomerEmail,
-            // Pide el teléfono en el Checkout: junto con el nombre/correo que Stripe ya captura,
-            // completa el cliente cuando no lo dio antes de pagar (ver MarkPaidAsync).
-            PhoneNumberCollection = new SessionPhoneNumberCollectionOptions { Enabled = true },
-        }, requestOptions);
+            ExpiresAt: DateTime.UtcNow.AddMinutes(StripeSessionMinutes),
+            CollectPhone: true));
 
-        order.StripeCheckoutSessionId = session.Id;
+        order.StripeCheckoutSessionId = checkout.CheckoutId;
         await _db.SaveChangesAsync();
 
-        return new CreateOrderResponseDto(order.Id, session.Url);
+        return new CreateOrderResponseDto(order.Id, checkout.Url);
+    }
+
+    private static string ShippingLineLabel(Order order) =>
+        string.IsNullOrWhiteSpace(order.ShippingMethodName) ? "Shipping" : $"Shipping ({order.ShippingMethodName})";
+
+    private static ShippingAddressDto ValidateShipTo(ShippingAddressDto? a, string? customerName)
+    {
+        string Cut(string? v, int max) { var t = v?.Trim() ?? ""; return t.Length > max ? t[..max] : t; }
+        if (a is null) throw new ArgumentException("Falta la dirección de envío.");
+        var line1 = Cut(a.Line1, 200);
+        var city = Cut(a.City, 100);
+        var state = Cut(a.State, 50).ToUpperInvariant();
+        var zip = Cut(a.Zip, 20);
+        if (line1.Length < 3 || city.Length < 2 || state.Length < 2)
+            throw new ArgumentException("Completa la dirección de envío (calle, ciudad y estado).");
+        if (!System.Text.RegularExpressions.Regex.IsMatch(zip, @"^\d{5}(-\d{4})?$"))
+            throw new ArgumentException("El código postal (ZIP) no es válido.");
+        var name = Cut(string.IsNullOrWhiteSpace(a.Name) ? customerName : a.Name, 120);
+        if (name.Length < 2) throw new ArgumentException("¿A nombre de quién va el envío?");
+        var line2 = Cut(a.Line2, 200);
+        return new ShippingAddressDto(name, line1, line2.Length == 0 ? null : line2, city, state, zip);
     }
 
     // Stripe exige que la sesión dure al menos 30 min; 31 deja margen por la latencia de la llamada. La
@@ -230,7 +249,7 @@ public class OrderService : IOrderService
     private const decimal MaxTaxFractionOfSubtotal = 0.25m;
 
     private sealed record PricedOrder(
-        IReadOnlyList<OrderItemDto> Items, decimal Subtotal, decimal Tax, decimal Tip, decimal Total);
+        IReadOnlyList<OrderItemDto> Items, decimal Subtotal, decimal Tax, decimal Tip, decimal Total, bool HasHazmat = false);
 
     /// <summary>
     /// Reconstruye las líneas del pedido con nombre y precio del catálogo real del afiliado
@@ -240,7 +259,8 @@ public class OrderService : IOrderService
     /// </summary>
     private async Task<PricedOrder> RepriceItemsAsync(
         Guid affiliateId, IReadOnlyList<OrderItemDto> requested, decimal clientTax, decimal clientTip,
-        DateOnly? scheduledFor = null, string? contactEmail = null, string? contactPhone = null)
+        DateOnly? scheduledFor = null, string? contactEmail = null, string? contactPhone = null,
+        PriceListContext? priceList = null)
     {
         if (requested.Any(i => i.Qty < 1 || i.Qty > MaxQtyPerLine))
             throw new ArgumentException($"Cantidad inválida (debe ser entre 1 y {MaxQtyPerLine}).");
@@ -311,9 +331,22 @@ public class OrderService : IOrderService
         var inventory = await _db.InventoryItems
             .Where(i => i.AffiliateId == affiliateId && distinctIds.Contains(i.Id)
                         && i.IsPubliclyVisible && i.Status == "Active")
-            .Select(i => new { i.Id, i.Name, Price = i.UnitPrice, i.TrackStock, i.Quantity })
+            .Select(i => new
+            {
+                i.Id, i.Name, Price = i.UnitPrice, i.TrackStock, i.Quantity,
+                i.MinOrderQty, i.OrderQtyMultiple, i.MaxPerOrder, i.Hazmat,
+            })
             .ToListAsync();
         foreach (var i in inventory) catalog.TryAdd(i.Id, (i.Name, i.Price));
+
+        // Reglas de cantidad del producto (mínimo, múltiplos de caja, máximo) sobre lo pedido en total de ese
+        // producto. Opt-in: un producto sin reglas no cambia nada.
+        foreach (var inv in inventory.Where(i => i.MinOrderQty is not null || i.OrderQtyMultiple is not null || i.MaxPerOrder is not null))
+        {
+            var wanted = requested.Where(r => Guid.TryParse(r.ItemId, out var rid) && rid == inv.Id).Sum(r => r.Qty);
+            RetailAttributes.ValidateQuantity(inv.Name, wanted, inv.MinOrderQty, inv.OrderQtyMultiple, inv.MaxPerOrder);
+        }
+        var hasHazmat = inventory.Any(i => !string.IsNullOrEmpty(i.Hazmat));
 
         // Control de stock opt-in (InventoryItem.TrackStock): el pedido no puede superar lo que queda.
         // El stock real se descuenta al pagar (Stripe / POS) o al cobrar un "pagar al recoger"; mientras
@@ -342,8 +375,10 @@ public class OrderService : IOrderService
             var req = requested[idx];
             if (!catalog.TryGetValue(ids[idx], out var entry))
                 throw new ArgumentException("Uno de los artículos ya no está disponible.");
-            lines.Add(new OrderItemDto(req.ItemId, entry.Name, entry.Price, req.Qty, req.Notes));
-            subtotal += entry.Price * req.Qty;
+            // Precio de la lista del cliente (miembro/mayorista) si aplica; si no, el público.
+            var unitPrice = PriceListPricing.Resolve(ids[idx], entry.Price, priceList);
+            lines.Add(new OrderItemDto(req.ItemId, entry.Name, unitPrice, req.Qty, req.Notes));
+            subtotal += unitPrice * req.Qty;
         }
 
         subtotal = Math.Round(subtotal, 2);
@@ -351,8 +386,10 @@ public class OrderService : IOrderService
         var tip = Math.Round(clientTip, 2);
         if (tax > Math.Round(subtotal * MaxTaxFractionOfSubtotal, 2))
             throw new ArgumentException("Impuesto inválido para este pedido.");
+        if (priceList?.MinOrderAmount is decimal minOrder && subtotal < minOrder)
+            throw new ArgumentException($"Con tu lista de precios ({priceList.Name}) el pedido mínimo es de {minOrder:0.00}.");
 
-        return new PricedOrder(lines, subtotal, tax, tip, subtotal + tax + tip);
+        return new PricedOrder(lines, subtotal, tax, tip, subtotal + tax + tip, hasHazmat);
     }
 
     public async Task<OrderDto?> CreatePosOrderAsync(Guid affiliateId, CreatePosOrderRequest request)
@@ -400,7 +437,8 @@ public class OrderService : IOrderService
         // A diferencia del storefront público (que cae calladito a WhatsApp si no hay Connect),
         // acá el staff está parado frente al cliente esperando cobrar — mejor fallar visible con
         // un mensaje accionable que devolver un CheckoutUrl null sin explicación.
-        if (!affiliate.StripeConnectChargesEnabled || string.IsNullOrEmpty(affiliate.StripeConnectAccountId))
+        var payments = _payments.For(affiliate);
+        if (!payments.IsReady(affiliate))
             throw new InvalidOperationException("Conecta Stripe en Configuración antes de cobrar con QR.");
 
         var order = new Order
@@ -421,64 +459,14 @@ public class OrderService : IOrderService
         _db.Orders.Add(order);
         await _db.SaveChangesAsync();
 
-        StripeConfiguration.ApiKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY") ?? "";
-        var requestOptions = new RequestOptions { StripeAccount = affiliate.StripeConnectAccountId };
+        var checkout = await payments.CreateCheckoutAsync(affiliate, new PaymentCheckoutRequest(
+            order.Id, order.Currency, PaymentLines.For(request.Items, request.Tax, request.Tip),
+            request.SuccessUrl, request.CancelUrl));
 
-        var lineItems = request.Items.Select(i => new SessionLineItemOptions
-        {
-            Quantity = i.Qty,
-            PriceData = new SessionLineItemPriceDataOptions
-            {
-                Currency = order.Currency.ToLowerInvariant(),
-                UnitAmount = (long)Math.Round(i.Price * 100),
-                ProductData = new SessionLineItemPriceDataProductDataOptions
-                {
-                    Name = string.IsNullOrWhiteSpace(i.Notes) ? i.Name : $"{i.Name} ({i.Notes})",
-                },
-            },
-        }).ToList();
-
-        if (request.Tax > 0)
-        {
-            lineItems.Add(new SessionLineItemOptions
-            {
-                Quantity = 1,
-                PriceData = new SessionLineItemPriceDataOptions
-                {
-                    Currency = order.Currency.ToLowerInvariant(),
-                    UnitAmount = (long)Math.Round(request.Tax * 100),
-                    ProductData = new SessionLineItemPriceDataProductDataOptions { Name = "Tax" },
-                },
-            });
-        }
-
-        if (request.Tip > 0)
-        {
-            lineItems.Add(new SessionLineItemOptions
-            {
-                Quantity = 1,
-                PriceData = new SessionLineItemPriceDataOptions
-                {
-                    Currency = order.Currency.ToLowerInvariant(),
-                    UnitAmount = (long)Math.Round(request.Tip * 100),
-                    ProductData = new SessionLineItemPriceDataProductDataOptions { Name = "Tip" },
-                },
-            });
-        }
-
-        var session = await new SessionService().CreateAsync(new SessionCreateOptions
-        {
-            Mode = "payment",
-            LineItems = lineItems,
-            SuccessUrl = request.SuccessUrl,
-            CancelUrl = request.CancelUrl,
-            ClientReferenceId = order.Id.ToString(),
-        }, requestOptions);
-
-        order.StripeCheckoutSessionId = session.Id;
+        order.StripeCheckoutSessionId = checkout.CheckoutId;
         await _db.SaveChangesAsync();
 
-        return new CreateOrderResponseDto(order.Id, session.Url);
+        return new CreateOrderResponseDto(order.Id, checkout.Url);
     }
 
     public async Task<IReadOnlyList<OrderDto>> GetOrdersAsync(Guid affiliateId)
@@ -597,9 +585,12 @@ public class OrderService : IOrderService
         var order = await _db.Orders.Include(o => o.Affiliate).FirstOrDefaultAsync(o => o.TrackingToken == token);
         if (order?.Affiliate is null) return null;
         var a = order.Affiliate;
-        // Pedido terminado hace más de 24 h: el enlace deja de mostrar el detalle.
-        var expired = order.Status is OrderStatus.Fulfilled or OrderStatus.Canceled
-            && (order.UpdatedAt ?? order.CreatedAt) < DateTime.UtcNow.AddHours(-24);
+        // Pedido terminado hace más de 24 h: el enlace deja de mostrar el detalle. Un envío despachado sigue
+        // visible 30 días (va en camino varios días y el cliente necesita su número de rastreo).
+        var expired = order.ShippedAt is { } shippedAt
+            ? shippedAt < DateTime.UtcNow.AddDays(-30)
+            : order.Status is OrderStatus.Fulfilled or OrderStatus.Canceled
+              && (order.UpdatedAt ?? order.CreatedAt) < DateTime.UtcNow.AddHours(-24);
         var payAtVenue = order.PaymentMethod is PayAtPickupMethod or PayAtTableMethod;
         return new OrderTrackingDto(
             a.Name, a.Slug, string.IsNullOrWhiteSpace(a.LogoUrl) ? a.Logo : a.LogoUrl, a.PrimaryColor, a.Address, a.WhatsApp,
@@ -609,11 +600,64 @@ public class OrderService : IOrderService
             expired ? Array.Empty<OrderItemDto>() : JsonArrayField.Parse<OrderItemDto>(order.ItemsJson),
             order.Subtotal, order.Tax, order.Tip, order.Total, order.Currency, expired,
             CanPayOnline: CanPayOnline(order, a),
-            Language: a.Language == "en" ? "en" : "es");
+            Language: a.Language == "en" ? "en" : "es",
+            FulfillmentType: order.FulfillmentType,
+            ShippingMethodName: order.ShippingMethodName,
+            ShippingCost: order.ShippingCost,
+            ShipTo: expired ? null : ShipToOf(order),
+            ShippingCarrier: order.ShippingCarrier,
+            TrackingNumber: order.TrackingNumber,
+            TrackingUrl: ShippingPricing.TrackingUrl(order.ShippingCarrier, order.TrackingNumber),
+            ShippedAt: order.ShippedAt);
     }
 
-    private static bool CanPayOnline(Order order, Affiliate a) =>
-        a.StripeConnectChargesEnabled && !string.IsNullOrEmpty(a.StripeConnectAccountId)
+    /// <summary>
+    /// Despacho manual de un envío: el negocio compró la etiqueta por su cuenta y anota paquetería + número de
+    /// rastreo. El pedido pasa a Fulfilled (cuenta como visita) y el cliente recibe el aviso push "va en camino".
+    /// Se puede llamar otra vez para corregir el número sin repetir el aviso.
+    /// </summary>
+    public async Task<OrderDto?> MarkShippedAsync(Guid affiliateId, Guid orderId, string carrier, string trackingNumber)
+    {
+        var order = await _db.Orders.Include(o => o.Affiliate)
+            .FirstOrDefaultAsync(o => o.Id == orderId && o.AffiliateId == affiliateId);
+        if (order is null) return null;
+        if (order.FulfillmentType != ShippingFulfillment) throw new ArgumentException("Este pedido no es para envío.");
+        if (order.Status is OrderStatus.Pending or OrderStatus.Canceled)
+            throw new ArgumentException("Solo se despachan pedidos pagados.");
+        var c = carrier?.Trim().ToLowerInvariant() ?? "";
+        if (!ShippingPricing.Carriers.Contains(c)) throw new ArgumentException("Elige la paquetería.");
+        var number = trackingNumber?.Trim() ?? "";
+        if (number.Length < 4 || number.Length > 80) throw new ArgumentException("El número de rastreo no es válido.");
+
+        var firstTime = order.ShippedAt is null;
+        var previousStatus = order.Status;
+        order.ShippingCarrier = c;
+        order.TrackingNumber = number;
+        order.ShippedAt ??= DateTime.UtcNow;
+        order.Status = OrderStatus.Fulfilled;
+        order.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        if (previousStatus != OrderStatus.Fulfilled && order.CustomerId is { } customerId)
+        {
+            var customer = await _db.Customers.FirstOrDefaultAsync(x => x.Id == customerId);
+            if (customer is not null)
+            {
+                customer.TotalVisits += 1;
+                customer.LastVisit = DateTime.UtcNow;
+                customer.UpdatedAt = DateTime.UtcNow;
+                await _db.SaveChangesAsync();
+            }
+        }
+        if (firstTime) await _notifications.NotifyCustomerPushAsync(order, "shipped");
+
+        var dto = ToDto(order);
+        await _realtime.NotifyOrderUpdatedAsync(affiliateId, dto);
+        return dto;
+    }
+
+    private bool CanPayOnline(Order order, Affiliate a) =>
+        _payments.For(a).IsReady(a)
         && order.CollectedAt is null && order.Status != OrderStatus.Canceled
         && (order.PaymentMethod is PayAtPickupMethod or PayAtTableMethod || order.Status == OrderStatus.Pending)
         && order.Status != OrderStatus.Fulfilled;
@@ -658,52 +702,16 @@ public class OrderService : IOrderService
         if (!CanPayOnline(order, order.Affiliate))
             throw new ArgumentException("Online payment is not available for this order.");
 
-        StripeConfiguration.ApiKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY") ?? "";
-        var requestOptions = new RequestOptions { StripeAccount = order.Affiliate.StripeConnectAccountId };
-        var currency = order.Currency.ToLowerInvariant();
-
         // Los precios ya fueron recalculados desde el catálogo al crear el pedido (RepriceItemsAsync): se reusan tal cual.
-        var lineItems = JsonArrayField.Parse<OrderItemDto>(order.ItemsJson).Select(i => new SessionLineItemOptions
-        {
-            Quantity = i.Qty,
-            PriceData = new SessionLineItemPriceDataOptions
-            {
-                Currency = currency,
-                UnitAmount = (long)Math.Round(i.Price * 100),
-                ProductData = new SessionLineItemPriceDataProductDataOptions
-                {
-                    Name = string.IsNullOrWhiteSpace(i.Notes) ? i.Name : $"{i.Name} ({i.Notes})",
-                },
-            },
-        }).ToList();
-        foreach (var (name, amount) in new[] { ("Tax", order.Tax), ("Tip", order.Tip) })
-        {
-            if (amount <= 0) continue;
-            lineItems.Add(new SessionLineItemOptions
-            {
-                Quantity = 1,
-                PriceData = new SessionLineItemPriceDataOptions
-                {
-                    Currency = currency,
-                    UnitAmount = (long)Math.Round(amount * 100),
-                    ProductData = new SessionLineItemPriceDataProductDataOptions { Name = name },
-                },
-            });
-        }
+        var checkout = await _payments.For(order.Affiliate).CreateCheckoutAsync(order.Affiliate, new PaymentCheckoutRequest(
+            order.Id, order.Currency,
+            PaymentLines.For(JsonArrayField.Parse<OrderItemDto>(order.ItemsJson), order.Tax, order.Tip, order.ShippingCost, ShippingLineLabel(order)),
+            successUrl, cancelUrl,
+            CustomerEmail: order.CustomerEmail));
 
-        var session = await new SessionService().CreateAsync(new SessionCreateOptions
-        {
-            Mode = "payment",
-            LineItems = lineItems,
-            SuccessUrl = successUrl,
-            CancelUrl = cancelUrl,
-            ClientReferenceId = order.Id.ToString(),
-            CustomerEmail = string.IsNullOrEmpty(order.CustomerEmail) ? null : order.CustomerEmail,
-        }, requestOptions);
-
-        order.StripeCheckoutSessionId = session.Id;
+        order.StripeCheckoutSessionId = checkout.CheckoutId;
         await _db.SaveChangesAsync();
-        return new TrackingPayResponseDto(session.Url);
+        return new TrackingPayResponseDto(checkout.Url!);
     }
 
     public async Task<OrderTrackingDto?> ConfirmOnlinePaymentAsync(string token, string sessionId)
@@ -774,13 +782,11 @@ public class OrderService : IOrderService
         var payAtVenue = order.PaymentMethod is PayAtPickupMethod or PayAtTableMethod;
         if (order.Status == OrderStatus.Pending || (payAtVenue && order.CollectedAt is null))
         {
-            StripeConfiguration.ApiKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY") ?? "";
-            var requestOptions = new RequestOptions { StripeAccount = order.Affiliate.StripeConnectAccountId };
-            var session = await new SessionService().GetAsync(checkoutSessionId, requestOptions: requestOptions);
+            var status = await _payments.For(order.Affiliate).GetCheckoutStatusAsync(order.Affiliate, checkoutSessionId);
 
-            if (session.PaymentStatus == "paid")
-                await SettleOnlinePaymentAsync(order, session.PaymentIntentId,
-                    session.CustomerDetails?.Name, session.CustomerDetails?.Email, session.CustomerDetails?.Phone);
+            if (status.Paid)
+                await SettleOnlinePaymentAsync(order, status.PaymentReference,
+                    status.CustomerName, status.CustomerEmail, status.CustomerPhone);
         }
 
         return ToDto(order);
@@ -974,7 +980,7 @@ public class OrderService : IOrderService
         var known = await _db.Customers.FirstOrDefaultAsync(c =>
             c.AffiliateId == affiliate.Id &&
             ((cPhone != null && c.Phone == cPhone) || (cEmail != null && c.Email == cEmail)));
-        var stripeReady = affiliate.StripeConnectChargesEnabled && !string.IsNullOrEmpty(affiliate.StripeConnectAccountId);
+        var stripeReady = _payments.For(affiliate).IsReady(affiliate);
         var blocked = PickupTrustDecision(affiliate.PickupNoShowRequiresCard, affiliate.PickupNewCustomerLimit,
             known?.TotalVisits ?? 0, known?.NoShows ?? 0, total, stripeReady);
         if (blocked is not null) throw new ArgumentException(blocked);
@@ -1166,6 +1172,20 @@ public class OrderService : IOrderService
         o.CollectedReference,
         o.NoShowAt,
         customer?.TotalVisits,
-        customer?.NoShows
+        customer?.NoShows,
+        o.PriceListName,
+        o.FulfillmentType,
+        o.ShippingMethodName,
+        o.ShippingCost,
+        ShipToOf(o),
+        o.ShippingCarrier,
+        o.TrackingNumber,
+        ShippingPricing.TrackingUrl(o.ShippingCarrier, o.TrackingNumber),
+        o.ShippedAt
     );
+
+    private static ShippingAddressDto? ShipToOf(Order o) =>
+        o.FulfillmentType != ShippingFulfillment || string.IsNullOrEmpty(o.ShipToLine1)
+            ? null
+            : new ShippingAddressDto(o.ShipToName, o.ShipToLine1, o.ShipToLine2, o.ShipToCity ?? "", o.ShipToState ?? "", o.ShipToZip ?? "");
 }

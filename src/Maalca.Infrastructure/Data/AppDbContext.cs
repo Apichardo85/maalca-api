@@ -61,6 +61,9 @@ public class AppDbContext : DbContext
     public DbSet<OrderPushSubscription> OrderPushSubscriptions => Set<OrderPushSubscription>();
     public DbSet<Donation> Donations => Set<Donation>();
     public DbSet<CommunityProgram> CommunityPrograms => Set<CommunityProgram>();
+    public DbSet<PriceList> PriceLists => Set<PriceList>();
+    public DbSet<PriceListItem> PriceListItems => Set<PriceListItem>();
+    public DbSet<ShippingMethod> ShippingMethods => Set<ShippingMethod>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -143,6 +146,48 @@ public class AppDbContext : DbContext
                   .HasForeignKey(e => e.AffiliateId)
                   .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.AffiliateId, e.CreatedAt });
+            entity.Property(e => e.PriceListName).HasMaxLength(120);
+            entity.Property(e => e.FulfillmentType).HasMaxLength(20);
+            entity.Property(e => e.ShippingMethodName).HasMaxLength(120);
+            entity.Property(e => e.ShippingCost).HasPrecision(18, 2);
+            entity.Property(e => e.ShipToName).HasMaxLength(120);
+            entity.Property(e => e.ShipToLine1).HasMaxLength(200);
+            entity.Property(e => e.ShipToLine2).HasMaxLength(200);
+            entity.Property(e => e.ShipToCity).HasMaxLength(100);
+            entity.Property(e => e.ShipToState).HasMaxLength(50);
+            entity.Property(e => e.ShipToZip).HasMaxLength(20);
+            entity.Property(e => e.ShippingCarrier).HasMaxLength(30);
+            entity.Property(e => e.TrackingNumber).HasMaxLength(80);
+        });
+
+        modelBuilder.Entity<PriceList>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(120).IsRequired();
+            entity.Property(e => e.Description).HasMaxLength(500);
+            entity.Property(e => e.DiscountPercent).HasPrecision(5, 2);
+            entity.Property(e => e.MinOrderAmount).HasPrecision(18, 2);
+            entity.HasOne(e => e.Affiliate).WithMany().HasForeignKey(e => e.AffiliateId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => e.AffiliateId);
+        });
+
+        modelBuilder.Entity<PriceListItem>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Price).HasPrecision(18, 2);
+            entity.HasOne(e => e.PriceList).WithMany(l => l.Items).HasForeignKey(e => e.PriceListId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.PriceListId, e.ItemId }).IsUnique();
+        });
+
+        modelBuilder.Entity<ShippingMethod>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(120).IsRequired();
+            entity.Property(e => e.NameEn).HasMaxLength(120);
+            entity.Property(e => e.Price).HasPrecision(18, 2);
+            entity.Property(e => e.FreeOverAmount).HasPrecision(18, 2);
+            entity.HasOne(e => e.Affiliate).WithMany().HasForeignKey(e => e.AffiliateId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => e.AffiliateId);
         });
 
         // ModulePlanRule — plan mínimo por módulo, editable desde /ops/modulos
@@ -598,6 +643,15 @@ public class AppDbContext : DbContext
             entity.Property(e => e.UnitCost).HasPrecision(18, 4);
             entity.Property(e => e.DescriptionEn).HasMaxLength(1000);
             entity.Property(e => e.Unit).HasMaxLength(20);
+            entity.Property(e => e.Brand).HasMaxLength(120);
+            entity.Property(e => e.WeightOz).HasPrecision(10, 2);
+            entity.Property(e => e.LengthIn).HasPrecision(10, 2);
+            entity.Property(e => e.WidthIn).HasPrecision(10, 2);
+            entity.Property(e => e.HeightIn).HasPrecision(10, 2);
+            entity.Property(e => e.Hazmat).HasMaxLength(30);
+            entity.Property(e => e.ChokingWarning).HasMaxLength(30);
+            entity.Property(e => e.VariantGroup).HasMaxLength(80);
+            entity.Property(e => e.VariantLabel).HasMaxLength(60);
             // Filtro ?expiringBefore= de /inventory-items (alertas de vencimiento en Comunidad).
             entity.HasIndex(e => new { e.AffiliateId, e.ExpirationDate });
             entity.HasOne(e => e.Affiliate)

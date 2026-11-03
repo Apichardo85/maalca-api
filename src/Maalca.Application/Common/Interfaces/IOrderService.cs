@@ -39,6 +39,8 @@ public interface IOrderService
     /// de la estación en todos los dispositivos. No-op si ya estaba reconocido.</summary>
     Task<OrderDto?> AcknowledgeAsync(Guid affiliateId, Guid orderId);
     Task<OrderDto?> MarkNoShowAsync(Guid affiliateId, Guid orderId);
+    /// <summary>Envío despachado a mano: paquetería + número de rastreo (el pedido pasa a Fulfilled).</summary>
+    Task<OrderDto?> MarkShippedAsync(Guid affiliateId, Guid orderId, string carrier, string trackingNumber);
     Task<OrderDto?> UndoNoShowAsync(Guid affiliateId, Guid orderId);
     Task<PickupRulesDto?> GetPickupRulesAsync(Guid affiliateId);
     Task<PickupRulesDto?> UpdatePickupRulesAsync(Guid affiliateId, PickupRulesDto request);

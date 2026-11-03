@@ -121,6 +121,30 @@ public class InventoryItem : AuditableEntity
     /// <summary>Origen del insumo — null en verticales que no lo usan (Retail/Restaurante).</summary>
     public InventorySource? Source { get; set; }
 
+    // ── Tienda (Retail): atributos de producto para vender y enviar ─────────────
+    // Todos opcionales: un producto sin ellos se comporta exactamente como antes.
+    public string? Brand { get; set; }
+    /// <summary>Peso del producto empacado, en onzas (oz) — lo que cotiza cualquier paquetería de EE.UU.</summary>
+    public decimal? WeightOz { get; set; }
+    /// <summary>Medidas del paquete en pulgadas (in).</summary>
+    public decimal? LengthIn { get; set; }
+    public decimal? WidthIn { get; set; }
+    public decimal? HeightIn { get; set; }
+    /// <summary>Material peligroso para envío: null = no; "limited_quantity" = inflamable en cantidad limitada
+    /// (perfumes, colonias, esmaltes). Con esto el checkout solo ofrece métodos de envío terrestres.</summary>
+    public string? Hazmat { get; set; }
+    /// <summary>Advertencia de riesgo de asfixia que debe verse en la venta online (juguetes):
+    /// null | "small_parts" | "small_ball" | "marble" | "balloon".</summary>
+    public string? ChokingWarning { get; set; }
+    /// <summary>Variantes: productos con el mismo VariantGroup se muestran como una sola ficha con selector
+    /// (VariantLabel = "50 ml", "100 ml"). Cada variante sigue siendo su propio item con precio, stock y SKU.</summary>
+    public string? VariantGroup { get; set; }
+    public string? VariantLabel { get; set; }
+    /// <summary>Reglas de cantidad por pedido (todas opcionales): mínimo, múltiplo (cajas de N) y máximo.</summary>
+    public int? MinOrderQty { get; set; }
+    public int? OrderQtyMultiple { get; set; }
+    public int? MaxPerOrder { get; set; }
+
     public Affiliate? Affiliate { get; set; }
     public ICollection<InventoryMovement> Movements { get; set; } = new List<InventoryMovement>();
 }

@@ -90,7 +90,8 @@ public record CatalogItemDto(
     string? Modality = null,                    // Tipos con agenda (Barber/Service) — "InPerson" | "Virtual" | "Both". Null en Product/InventoryItem.
     IReadOnlyList<PublicModifierGroupDto>? ModifierGroups = null, // Product (Restaurante) — grupos reutilizables enlazados (ej. "Guarnición"); null/vacío = sin modificadores
     decimal? CompareAtPrice = null,             // InventoryItem only — precio "antes" tachado (oferta); null = sin oferta
-    bool? TrackStock = null                     // InventoryItem only — true = Stock es real (mostrar Agotado/Quedan N); null/false = sin control
+    bool? TrackStock = null,                    // InventoryItem only — true = Stock es real (mostrar Agotado/Quedan N); null/false = sin control
+    RetailAttributesDto? Retail = null          // InventoryItem only — atributos de tienda (null en Product/Service)
 );
 
 // Solo nombre — a propósito no expone Quantity (cantidad por porción, dato interno de receta)
@@ -126,7 +127,10 @@ public record PlanCapabilitiesDto(
     bool StripeReady = false,
     // Regla de confianza: un cliente nuevo paga al recoger solo hasta este total (null = sin límite).
     // El checkout lo muestra como aviso; el API lo hace cumplir al crear el pedido.
-    decimal? PickupNewCustomerLimit = null
+    decimal? PickupNewCustomerLimit = null,
+    // Envío a domicilio: métodos activos del negocio (vacío = no ofrece envío). El checkout solo lo ofrece si
+    // además hay pago online (StripeReady): un envío se paga antes de despacharse.
+    IReadOnlyList<PublicShippingMethodDto>? ShippingMethods = null
 );
 
 public record PublicCatalogResponse(

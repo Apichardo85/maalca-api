@@ -104,6 +104,13 @@ public class OrderNotificationService : IOrderNotificationService
                     es = "Tu pedido se retrasó un poco"; bodyEs = mins is null ? name : $"Ahora estará listo en ~{mins} min · {name}";
                     en = "Your order is running a little late"; bodyEn = mins is null ? name : $"Now ready in ~{mins} min · {name}";
                     break;
+                case "ready" when order.FulfillmentType == "shipping":
+                    // Un envío no se "recoge": el aviso que vale es "va en camino" (MarkShippedAsync).
+                    return;
+                case "shipped":
+                    es = "Tu pedido va en camino 📦"; bodyEs = $"{(order.ShippingCarrier ?? "").ToUpperInvariant()} {order.TrackingNumber} · {name}";
+                    en = "Your order is on its way 📦"; bodyEn = $"{(order.ShippingCarrier ?? "").ToUpperInvariant()} {order.TrackingNumber} · {name}";
+                    break;
                 case "ready":
                     es = "¡Tu pedido está listo! 🛍️"; bodyEs = unpaid ? $"Pasa a recogerlo · pagas {total} · {name}" : $"Pasa a recogerlo · {name}";
                     en = "Your order is ready! 🛍️"; bodyEn = unpaid ? $"Come pick it up · you pay {total} · {name}" : $"Come pick it up · {name}";

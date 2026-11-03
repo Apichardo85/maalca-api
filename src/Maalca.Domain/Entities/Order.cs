@@ -88,4 +88,27 @@ public class Order : BaseEntity
     // Canceled y el cliente suma un NoShow — con eso las reglas de confianza le exigen tarjeta en
     // sus próximos pedidos (ver Affiliate.PickupNoShowRequiresCard). Null = no aplica.
     public DateTime? NoShowAt { get; set; }
+
+    // Lista de precios aplicada al recalcular el pedido (miembro/mayorista). Null = precio público.
+    // El nombre se congela como el resto del pedido: renombrar o borrar la lista no cambia pedidos viejos.
+    public Guid? PriceListId { get; set; }
+    public string? PriceListName { get; set; }
+
+    // Envío a domicilio. FulfillmentType null = como siempre (recoger / mesa); "shipping" = envío.
+    // El método y su costo se congelan al crear el pedido. Total = Subtotal + Tax + Tip + ShippingCost.
+    public string? FulfillmentType { get; set; }
+    public Guid? ShippingMethodId { get; set; }
+    public string? ShippingMethodName { get; set; }
+    public decimal ShippingCost { get; set; } = 0;
+    public string? ShipToName { get; set; }
+    public string? ShipToLine1 { get; set; }
+    public string? ShipToLine2 { get; set; }
+    public string? ShipToCity { get; set; }
+    public string? ShipToState { get; set; }
+    public string? ShipToZip { get; set; }
+    // Despacho manual (sin agregador todavía): el negocio compra la etiqueta por su cuenta y anota aquí
+    // la paquetería y el número de rastreo. El cliente lo ve en su link de seguimiento (/t/{token}).
+    public string? ShippingCarrier { get; set; }
+    public string? TrackingNumber { get; set; }
+    public DateTime? ShippedAt { get; set; }
 }
