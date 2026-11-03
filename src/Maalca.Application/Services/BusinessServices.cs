@@ -955,6 +955,8 @@ public class InventoryService : IInventoryService
                 ["minqty"] = new[] { "minimopedido", "minqty", "minorderqty" },
                 ["multiple"] = new[] { "multiplo", "multiplos", "casepack", "multiple" },
                 ["maxqty"] = new[] { "maximopedido", "maxqty", "maxperorder" },
+                // Precio por cantidad: "6:24.99; 12:22.50" (desde 6 u. a 24.99 c/u, desde 12 a 22.50).
+                ["volumetiers"] = new[] { "preciovolumen", "preciosporvolumen", "escalones", "volumetiers", "tiers", "volumepricing" },
                 // Código de barras: "Product Code" / "SKU" de la exportación de Clover.
                 ["barcode"] = new[] { "codigodebarras", "codigobarras", "barcode", "upc", "productcode", "sku" },
                 ["cost"] = new[] { "costo", "cost", "unitcost" },
@@ -989,6 +991,7 @@ public class InventoryService : IInventoryService
                 MinOrderQty = Int(Cell(cols, "minqty")) ?? current.MinOrderQty,
                 OrderQtyMultiple = Int(Cell(cols, "multiple")) ?? current.OrderQtyMultiple,
                 MaxPerOrder = Int(Cell(cols, "maxqty")) ?? current.MaxPerOrder,
+                VolumeTiers = Cell(cols, "volumetiers") is { } vt ? (IReadOnlyList<VolumeTierDto>?)ParseTierCell(vt) : current.VolumeTiers,
                 ChokingWarning = Cell(cols, "choking") is { } ch
                     ? (Yes(ch) || ch.Trim().ToLowerInvariant() is "piezas" or "piezaspequenas" ? "small_parts"
                         : ch.Trim().ToLowerInvariant() is "no" or "none" ? null : ch.Trim().ToLowerInvariant())
@@ -1129,6 +1132,19 @@ public class InventoryService : IInventoryService
             if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark && char.IsLetterOrDigit(c))
                 sb.Append(c);
         return sb.ToString();
+    }
+
+    /// <summary>"6:24.99; 12:22.50" → escalones. Un trozo ilegible se ignora; "no"/"0" = quitar escalones.</summary>
+    private static List<VolumeTierDto> ParseTierCell(string value)
+    {
+        var tiers = new List<VolumeTierDto>();
+        foreach (var part in value.Split(new[] { ';', '|' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var kv = part.Split(new[] { ':', '=' }, 2, StringSplitOptions.TrimEntries);
+            if (kv.Length == 2 && int.TryParse(kv[0].Trim('+', 'u', 'U', ' '), out var q) && ParseMoney(kv[1]) is decimal p)
+                tiers.Add(new VolumeTierDto(q, p));
+        }
+        return tiers;
     }
 
     // Número del CSV: "12.50" o "12,50" (coma decimal con 1-2 decimales); "1,250" se lee como miles.

@@ -17,7 +17,11 @@ public record RetailAttributesDto(
     string? VariantLabel = null,
     int? MinOrderQty = null,
     int? OrderQtyMultiple = null,
-    int? MaxPerOrder = null);
+    int? MaxPerOrder = null,
+    // Precio por cantidad: desde MinQty unidades del producto, cada una cuesta Price. null = sin escalones.
+    IReadOnlyList<VolumeTierDto>? VolumeTiers = null);
+
+public record VolumeTierDto(int MinQty, decimal Price);
 
 // ── Listas de precios ─────────────────────────────────────────────────────────
 
@@ -104,7 +108,11 @@ public record MemberPriceDto(Guid ItemId, decimal Price);
 
 public record StoreOrderSummaryDto(
     Guid Id, DateTime CreatedAt, string Status, decimal Total, string Currency, int ItemCount,
-    string? FulfillmentType, string? TrackingToken, string? PriceListName);
+    string? FulfillmentType, string? TrackingToken, string? PriceListName,
+    // Líneas del pedido para "Comprar de nuevo": el carrito las vuelve a cargar y el API recalcula todo al pedir.
+    IReadOnlyList<StoreOrderLineDto>? Items = null);
+
+public record StoreOrderLineDto(string ItemId, string Name, int Qty, decimal UnitPrice);
 
 public record StoreCustomerDto(
     Guid Id, string Name, string Email, string? Phone, string? BusinessName, string? TaxId, string? Message,

@@ -144,6 +144,10 @@ public class InventoryItem : AuditableEntity
     public int? MinOrderQty { get; set; }
     public int? OrderQtyMultiple { get; set; }
     public int? MaxPerOrder { get; set; }
+    /// <summary>Precio por cantidad (mayoreo por volumen), JSON [{"minQty":6,"price":24.99}, …] ordenado por minQty.
+    /// Aplica sobre la cantidad TOTAL pedida del producto; el pedido cobra el menor entre este y el de la lista
+    /// del cliente. null = sin escalones. Ver RetailAttributes.TierPrice.</summary>
+    public string? VolumeTiers { get; set; }
 
     public Affiliate? Affiliate { get; set; }
     public ICollection<InventoryMovement> Movements { get; set; } = new List<InventoryMovement>();

@@ -302,7 +302,8 @@ public class PublicCatalogService : IPublicCatalogService
             a.Language,
             (await ModuleAccess.GetActiveModulesAsync(_db, a))
                 .Contains("orders", StringComparer.OrdinalIgnoreCase),
-            JsonObjectField.Parse<DailyMenuDto>(a.DailyMenu));
+            JsonObjectField.Parse<DailyMenuDto>(a.DailyMenu),
+            a.StoreLayout == "marketplace" ? "marketplace" : "boutique");
     }
 
     // Affiliate.Settings es un JSON libre ("{}" por defecto). Solo se lee "defaultTheme": "dark" | "light".

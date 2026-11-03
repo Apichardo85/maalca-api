@@ -120,6 +120,13 @@ public class AffiliateService : IAffiliateService
             affiliate.BoardOrientation = BoardPanelRules.ParseOrientation(request.BoardOrientation) ?? BoardOrientation.Landscape;
         if (request.BoardPanels != null)
             affiliate.BoardPanels = BoardPanelRules.SerializePanels(request.BoardPanels);
+        if (request.StoreLayout != null)
+        {
+            var storeLayout = request.StoreLayout.Trim().ToLowerInvariant();
+            if (storeLayout is not ("boutique" or "marketplace"))
+                throw new ArgumentException("StoreLayout must be boutique or marketplace.");
+            affiliate.StoreLayout = storeLayout;
+        }
 
         await _context.SaveChangesAsync();
 

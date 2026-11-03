@@ -354,9 +354,18 @@ public class OrderService : IOrderService
             .Select(i => new
             {
                 i.Id, i.Name, Price = i.UnitPrice, i.TrackStock, i.Quantity,
-                i.MinOrderQty, i.OrderQtyMultiple, i.MaxPerOrder, i.Hazmat,
+                i.MinOrderQty, i.OrderQtyMultiple, i.MaxPerOrder, i.Hazmat, i.VolumeTiers,
             })
             .ToListAsync();
+        // Precio por cantidad: el escalón se decide con el TOTAL pedido de ese producto (sumando líneas).
+        var tierUnitPrice = new Dictionary<Guid, decimal>();
+        foreach (var inv in inventory.Where(i => !string.IsNullOrEmpty(i.VolumeTiers)))
+        {
+            var tiers = RetailAttributes.ParseTiers(inv.VolumeTiers);
+            if (tiers.Count == 0) continue;
+            var wanted = requested.Where(r => Guid.TryParse(r.ItemId, out var rid) && rid == inv.Id).Sum(r => r.Qty);
+            if (RetailAttributes.TierPrice(tiers, wanted) is decimal tp) tierUnitPrice[inv.Id] = tp;
+        }
         foreach (var i in inventory) catalog.TryAdd(i.Id, (i.Name, i.Price));
 
         // Reglas de cantidad del producto (mínimo, múltiplos de caja, máximo) sobre lo pedido en total de ese
@@ -397,6 +406,8 @@ public class OrderService : IOrderService
                 throw new ArgumentException("Uno de los artículos ya no está disponible.");
             // Precio de la lista del cliente (miembro/mayorista) si aplica; si no, el público.
             var unitPrice = PriceListPricing.Resolve(ids[idx], entry.Price, priceList);
+            // Con escalón de volumen alcanzado se cobra el menor de los dos (nunca sube el precio de su lista).
+            if (tierUnitPrice.TryGetValue(ids[idx], out var tierPrice) && tierPrice < unitPrice) unitPrice = tierPrice;
             lines.Add(new OrderItemDto(req.ItemId, entry.Name, unitPrice, req.Qty, req.Notes));
             subtotal += unitPrice * req.Qty;
         }

@@ -46,7 +46,9 @@ public record BusinessDto(
     // módulos con candado por plan y pantallas que puede usar hoy. Ver ModuleAccess.
     string EffectiveTier = "Starter",
     IReadOnlyList<Maalca.Application.Common.LockedModuleDto>? LockedModules = null,
-    int ScreenAllowance = 0
+    int ScreenAllowance = 0,
+    // Plantilla de tienda (Retail): "boutique" | "marketplace" — la lee Diseño > Configuración.
+    string StoreLayout = "boutique"
 );
 
 public record ProcessStepDto(string Title, string Description);

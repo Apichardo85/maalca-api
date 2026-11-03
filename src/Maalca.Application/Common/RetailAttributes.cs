@@ -19,8 +19,10 @@ public static class RetailAttributes
         var dto = new RetailAttributesDto(
             i.Brand, i.WeightOz, i.LengthIn, i.WidthIn, i.HeightIn, i.Hazmat, i.ChokingWarning,
             i.VariantGroup, i.VariantLabel, i.MinOrderQty, i.OrderQtyMultiple, i.MaxPerOrder);
+        var tiers = ParseTiers(i.VolumeTiers);
         // Sin ningún atributo: null, para no mandar un objeto vacío por cada producto del catálogo.
-        return dto == new RetailAttributesDto() ? null : dto;
+        if (tiers.Count == 0) return dto == new RetailAttributesDto() ? null : dto;
+        return dto with { VolumeTiers = tiers };
     }
 
     public static void Apply(InventoryItem item, RetailAttributesDto r)
@@ -46,6 +48,53 @@ public static class RetailAttributes
         item.MinOrderQty = min;
         item.MaxPerOrder = max;
         item.OrderQtyMultiple = multiple;
+        item.VolumeTiers = SerializeTiers(r.VolumeTiers);
+    }
+
+    public const int MaxVolumeTiers = 5;
+
+    /// <summary>Escalones guardados, limpios y ordenados por cantidad (JSON roto o vacío = lista vacía).</summary>
+    public static List<VolumeTierDto> ParseTiers(string? json) =>
+        JsonArrayField.Parse<VolumeTierDto>(json)
+            .Where(t => t.MinQty >= 2 && t.Price > 0)
+            .GroupBy(t => t.MinQty).Select(g => g.First())
+            .OrderBy(t => t.MinQty)
+            .Take(MaxVolumeTiers)
+            .ToList();
+
+    /// <summary>Valida y serializa los escalones (null/[] = sin escalones). Lanza ArgumentException con el motivo.</summary>
+    public static string? SerializeTiers(IReadOnlyList<VolumeTierDto>? tiers)
+    {
+        if (tiers is null || tiers.Count == 0) return null;
+        if (tiers.Count > MaxVolumeTiers)
+            throw new ArgumentException($"Máximo {MaxVolumeTiers} escalones de precio por cantidad.");
+        var clean = new List<VolumeTierDto>();
+        foreach (var t in tiers.OrderBy(t => t.MinQty))
+        {
+            if (t.MinQty < 2 || t.MinQty > 100000)
+                throw new ArgumentException("Cada escalón de precio por cantidad empieza en 2 unidades o más.");
+            if (t.Price <= 0 || t.Price > 1_000_000)
+                throw new ArgumentException("Cada escalón de precio por cantidad necesita un precio mayor que 0.");
+            if (clean.Any(c => c.MinQty == t.MinQty))
+                throw new ArgumentException($"Hay dos escalones que empiezan en {t.MinQty} unidades.");
+            if (clean.Count > 0 && t.Price >= clean[^1].Price)
+                throw new ArgumentException("Cada escalón debe tener un precio menor que el anterior.");
+            clean.Add(new VolumeTierDto(t.MinQty, Math.Round(t.Price, 2)));
+        }
+        return JsonArrayField.Serialize(clean);
+    }
+
+    /// <summary>
+    /// Precio por unidad que corresponde a <paramref name="qty"/> unidades del producto según sus escalones (el
+    /// escalón más alto alcanzado). Null = la cantidad no llega a ningún escalón (rige el precio normal).
+    /// Lo usan el pedido (OrderService) y, en espejo, el navegador (lib/commerce.ts tierPriceFor).
+    /// </summary>
+    public static decimal? TierPrice(IReadOnlyList<VolumeTierDto> tiers, int qty)
+    {
+        decimal? price = null;
+        foreach (var t in tiers.OrderBy(t => t.MinQty))
+            if (qty >= t.MinQty) price = t.Price;
+        return price;
     }
 
     /// <summary>

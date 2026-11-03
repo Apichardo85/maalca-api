@@ -156,10 +156,15 @@ public class StoreAccountService : IStoreAccountService
             .OrderByDescending(o => o.CreatedAt).Take(50)
             .Select(o => new { o.Id, o.CreatedAt, o.Status, o.Total, o.Currency, o.ItemsJson, o.FulfillmentType, o.TrackingToken, o.PriceListName })
             .ToListAsync();
-        return orders.Select(o => new StoreOrderSummaryDto(
-            o.Id, o.CreatedAt, o.Status.ToString(), o.Total, o.Currency,
-            JsonArrayField.Parse<OrderItemDto>(o.ItemsJson).Sum(i => i.Qty),
-            o.FulfillmentType, o.TrackingToken, o.PriceListName)).ToList();
+        return orders.Select(o =>
+        {
+            var lines = JsonArrayField.Parse<OrderItemDto>(o.ItemsJson);
+            return new StoreOrderSummaryDto(
+                o.Id, o.CreatedAt, o.Status.ToString(), o.Total, o.Currency,
+                lines.Sum(i => i.Qty),
+                o.FulfillmentType, o.TrackingToken, o.PriceListName,
+                lines.Select(i => new StoreOrderLineDto(i.ItemId, i.Name, i.Qty, i.Price)).ToList());
+        }).ToList();
     }
 
     public async Task<IReadOnlyList<StoreCustomerDto>> ListAsync(Guid affiliateId)

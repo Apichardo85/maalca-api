@@ -47,7 +47,9 @@ public record AffiliatePublicDto(
     // para no cambiar nada en clientes que no usan el toggle.
     bool OrdersEnabled = true,
     // Menú del día (rotación semanal) — lo usa el flyer "Menú del día" del board.
-    DailyMenuDto? DailyMenu = null
+    DailyMenuDto? DailyMenu = null,
+    // Plantilla de tienda (Retail): "boutique" | "marketplace". Ver Affiliate.StoreLayout.
+    string StoreLayout = "boutique"
     // Causas ya no viene acá -- tiene su propio endpoint público
     // /api/public/affiliates/{slug}/causas (backlog 2026-09-25, ver Causa.cs).
 );

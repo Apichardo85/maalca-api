@@ -88,6 +88,7 @@ public class AppDbContext : DbContext
         {
             entity.Property(e => e.BillingInterval).HasMaxLength(8);
             entity.Property(e => e.StoreSignupMode).HasMaxLength(20);
+            entity.Property(e => e.StoreLayout).HasMaxLength(20).HasDefaultValue("boutique");
             entity.Property(e => e.StoreSignupNote).HasMaxLength(500);
             entity.Property(e => e.SalesTaxRate).HasPrecision(6, 3);
             entity.Property(e => e.SalesTaxState).HasMaxLength(2);

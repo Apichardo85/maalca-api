@@ -192,6 +192,10 @@ public class Affiliate : BaseEntity
     // - StoreSignupMode: "approval" (el dueño aprueba cada solicitud) | "open" (entra directo con StoreDefaultPriceListId).
     // - StoreSignupNote: texto que ve el cliente en el formulario (ej. "Mayoristas: incluye tu Tax ID").
     public string StoreSignupMode { get; set; } = "approval";
+    // Estilo de la vitrina de tienda (BusinessType Retail): "boutique" (foto primero, pocas referencias) |
+    // "marketplace" (distribuidor tipo Amazon: buscador, filtros, precio por volumen, comprar de nuevo).
+    // Mismo motor de comercio; solo cambia la plantilla pública. Se elige en Diseño > Configuración.
+    public string StoreLayout { get; set; } = "boutique";
     public Guid? StoreDefaultPriceListId { get; set; }
     public string? StoreSignupNote { get; set; }
 

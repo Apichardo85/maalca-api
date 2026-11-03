@@ -46,7 +46,8 @@ public record UpdateAffiliateProfileRequest(
     string? AccentColor = null,
     string? BoardLayout = null,  // "Classic" | "Hero" | "Grid" | ... (ver BoardLayout enum)
     string? BoardOrientation = null,  // "Landscape" | "Portrait" (solo cuenta con BoardLayout = Panels)
-    List<BoardPanelDto>? BoardPanels = null  // 1-3 flyers; [] = volver al default
+    List<BoardPanelDto>? BoardPanels = null,  // 1-3 flyers; [] = volver al default
+    string? StoreLayout = null  // Tienda: "boutique" | "marketplace" (ver Affiliate.StoreLayout)
 );
 
 public record AffiliatePublicProfileDto(
