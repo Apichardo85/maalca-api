@@ -750,7 +750,9 @@ public class InventoryService : IInventoryService
         var existing = await _context.InventoryItems.FirstOrDefaultAsync(i => i.Id == id && i.AffiliateId == affiliateId);
         if (existing == null) return null;
         existing.Name = item.Name;
+        existing.NameEn = string.IsNullOrWhiteSpace(item.NameEn) ? null : item.NameEn.Trim();
         existing.Description = item.Description;
+        existing.DescriptionEn = string.IsNullOrWhiteSpace(item.DescriptionEn) ? null : item.DescriptionEn.Trim();
         existing.Category = item.Category;
         existing.Quantity = item.Quantity;
         existing.MinStock = item.MinStock;
@@ -939,12 +941,16 @@ public class InventoryService : IInventoryService
                 ["price"] = new[] { "preciounitario", "precio", "price", "unitprice" },
                 ["status"] = new[] { "estado", "status" },
                 ["description"] = new[] { "descripcion", "description" },
-                ["compare"] = new[] { "precioanterior", "precioantes", "compareatprice", "compareprice", "was" },
+                // Traducción de la ficha al OTRO idioma: negocio en español → inglés; negocio en inglés → español
+                // (misma convención que NameEn/DescriptionEn en el formulario del catálogo).
+                ["nameen"] = new[] { "nombreen", "nameen", "nombreingles", "englishname", "traduccionnombre", "translationname", "nametranslation" },
+                ["descriptionen"] = new[] { "descripcionen", "descriptionen", "descripcioningles", "englishdescription", "traducciondescripcion", "translationdescription", "descriptiontranslation" },
+                ["compare"] = new[] { "precioanterior", "precioantes", "compareatprice", "compareprice", "was", "wasprice" },
                 ["image"] = new[] { "foto", "imagen", "image", "imageurl", "fotourl" },
                 ["track"] = new[] { "controlarstock", "controlarinventario", "trackstock" },
                 // Tienda (Retail) — mismos campos que "Detalles de tienda y envío" del formulario.
                 ["brand"] = new[] { "marca", "brand" },
-                ["variantgroup"] = new[] { "productobase", "base", "variantgroup", "grupo" },
+                ["variantgroup"] = new[] { "productobase", "base", "baseproduct", "variantgroup", "grupo" },
                 ["variant"] = new[] { "variante", "tamano", "size", "variant", "presentacion" },
                 ["weight"] = new[] { "pesooz", "peso", "weightoz", "weight" },
                 ["hazmat"] = new[] { "peligroso", "inflamable", "hazmat" },
@@ -1047,6 +1053,8 @@ public class InventoryService : IInventoryService
                     imageUrl = null;
                 }
                 var desc = Cell(cols, "description"); if (desc is not null) found.Description = desc;
+                var nameEn = Cell(cols, "nameen"); if (nameEn is not null) found.NameEn = nameEn;
+                var descEn = Cell(cols, "descriptionen"); if (descEn is not null) found.DescriptionEn = descEn;
                 var cat = CategoryCell(cols); if (cat is not null) found.Category = cat;
                 var qty = ParseMoney(Cell(cols, "quantity")); if (qty is not null) found.Quantity = qty.Value;
                 var unit = Cell(cols, "unit"); if (unit is not null) found.Unit = unit;
@@ -1081,6 +1089,8 @@ public class InventoryService : IInventoryService
                     AffiliateId = affiliateId,
                     Name = name,
                     Description = Cell(cols, "description"),
+                    NameEn = Cell(cols, "nameen"),
+                    DescriptionEn = Cell(cols, "descriptionen"),
                     Category = CategoryCell(cols),
                     Quantity = ParseMoney(Cell(cols, "quantity")) ?? 0m,
                     Unit = Cell(cols, "unit") ?? "unidad",

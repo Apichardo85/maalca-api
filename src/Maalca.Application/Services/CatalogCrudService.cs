@@ -479,7 +479,9 @@ public class CatalogCrudService : ICatalogCrudService
         }
 
         if (request.Name != null) item.Name = request.Name;
+        if (request.NameEn != null) item.NameEn = request.NameEn;
         if (request.Description != null) item.Description = request.Description;
+        if (request.DescriptionEn != null) item.DescriptionEn = request.DescriptionEn;
         if (request.Price.HasValue) item.UnitPrice = request.Price.Value;
         if (request.CompareAtPrice.HasValue) item.CompareAtPrice = request.CompareAtPrice.Value > 0 ? request.CompareAtPrice.Value : null;
         if (request.TrackStock.HasValue) item.TrackStock = request.TrackStock.Value;
