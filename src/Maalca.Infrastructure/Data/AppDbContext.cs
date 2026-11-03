@@ -64,6 +64,7 @@ public class AppDbContext : DbContext
     public DbSet<PriceList> PriceLists => Set<PriceList>();
     public DbSet<PriceListItem> PriceListItems => Set<PriceListItem>();
     public DbSet<ShippingMethod> ShippingMethods => Set<ShippingMethod>();
+    public DbSet<StoreCustomer> StoreCustomers => Set<StoreCustomer>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -86,6 +87,8 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Affiliate>(entity =>
         {
             entity.Property(e => e.BillingInterval).HasMaxLength(8);
+            entity.Property(e => e.StoreSignupMode).HasMaxLength(20);
+            entity.Property(e => e.StoreSignupNote).HasMaxLength(500);
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired();
             entity.Property(e => e.PickupNewCustomerLimit).HasPrecision(10, 2);
@@ -147,6 +150,7 @@ public class AppDbContext : DbContext
                   .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.AffiliateId, e.CreatedAt });
             entity.Property(e => e.PriceListName).HasMaxLength(120);
+            entity.HasIndex(e => e.StoreCustomerId);
             entity.Property(e => e.FulfillmentType).HasMaxLength(20);
             entity.Property(e => e.ShippingMethodName).HasMaxLength(120);
             entity.Property(e => e.ShippingCost).HasPrecision(18, 2);
@@ -177,6 +181,25 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Price).HasPrecision(18, 2);
             entity.HasOne(e => e.PriceList).WithMany(l => l.Items).HasForeignKey(e => e.PriceListId).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.PriceListId, e.ItemId }).IsUnique();
+        });
+
+        modelBuilder.Entity<StoreCustomer>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.SupabaseUserId).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.Email).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Name).HasMaxLength(120).IsRequired();
+            entity.Property(e => e.Phone).HasMaxLength(30);
+            entity.Property(e => e.BusinessName).HasMaxLength(160);
+            entity.Property(e => e.TaxId).HasMaxLength(40);
+            entity.Property(e => e.Message).HasMaxLength(500);
+            entity.Property(e => e.Status).HasMaxLength(20).IsRequired();
+            entity.Property(e => e.Notes).HasMaxLength(1000);
+            entity.HasOne(e => e.Affiliate).WithMany().HasForeignKey(e => e.AffiliateId).OnDelete(DeleteBehavior.Cascade);
+            // Borrar una lista deja a sus miembros a precio público (no los borra).
+            entity.HasOne(e => e.PriceList).WithMany().HasForeignKey(e => e.PriceListId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(e => new { e.AffiliateId, e.SupabaseUserId }).IsUnique();
+            entity.HasIndex(e => new { e.AffiliateId, e.Status });
         });
 
         modelBuilder.Entity<ShippingMethod>(entity =>

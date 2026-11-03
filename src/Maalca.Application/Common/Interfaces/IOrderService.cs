@@ -9,7 +9,8 @@ public interface IOrderService
     /// habilitados, además una Checkout Session de cobro directo contra su cuenta conectada.
     /// Llamado desde el storefront público — resuelve por slug, no por id.
     /// </summary>
-    Task<CreateOrderResponseDto?> CreateOrderAsync(string affiliateSlug, CreateOrderRequest request);
+    /// <param name="storeUserId">Cliente con sesión en la tienda (claim "sub"): aplica su lista de precios. Null = invitado.</param>
+    Task<CreateOrderResponseDto?> CreateOrderAsync(string affiliateSlug, CreateOrderRequest request, string? storeUserId = null);
 
     /// <summary>
     /// POS (Etapa D, fase 1) — venta presencial desde el dashboard. Entra directo como Paid

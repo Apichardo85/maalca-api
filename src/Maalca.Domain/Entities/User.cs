@@ -188,6 +188,13 @@ public class Affiliate : BaseEntity
     public decimal? PickupNewCustomerLimit { get; set; }
     public bool PickupNoShowRequiresCard { get; set; } = true;
 
+    // Cuentas de clientes de la tienda (miembros/mayoristas), módulo "pricelists":
+    // - StoreSignupMode: "approval" (el dueño aprueba cada solicitud) | "open" (entra directo con StoreDefaultPriceListId).
+    // - StoreSignupNote: texto que ve el cliente en el formulario (ej. "Mayoristas: incluye tu Tax ID").
+    public string StoreSignupMode { get; set; } = "approval";
+    public Guid? StoreDefaultPriceListId { get; set; }
+    public string? StoreSignupNote { get; set; }
+
     // Fase 9 — preferencia del NEGOCIO, no del visitante. El Menu Board no tiene usuario que le
     // dé click a un toggle de idioma (nadie interactúa con una TV) — a diferencia del resto del
     // sitio público, que usa la preferencia de cada visitante (useSimpleLanguage). "es" es el

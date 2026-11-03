@@ -126,6 +126,18 @@ public class SupabaseAuthMiddleware
             return;
         }
 
+        // Clientes de una tienda (miembros/mayoristas): inician sesión en /{slug} pero NO tienen negocio propio, así
+        // que no pasan por el resolver de afiliados (que los mandaría a onboarding). Para /api/public/store solo
+        // importa quién es la persona (sub + email); qué es para cada tienda lo decide StoreCustomers.
+        if (context.Request.Path.StartsWithSegments("/api/public/store", StringComparison.OrdinalIgnoreCase))
+        {
+            context.User = new ClaimsPrincipal(new ClaimsIdentity(
+                new[] { new Claim("sub", supabaseUserId), new Claim("email", email ?? string.Empty) },
+                authenticationType: "supabase"));
+            await _next(context);
+            return;
+        }
+
         // Fase 8 — dashboard multiusuario con roles: si el dueño de otro negocio invitó a este
         // correo antes de que esta persona tuviera cuenta, acá es donde se engancha — DEBE ir
         // antes de GetMapsForUserAsync, porque si no, alguien recién invitado que se acaba de

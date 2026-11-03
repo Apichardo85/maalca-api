@@ -130,7 +130,9 @@ public record PlanCapabilitiesDto(
     decimal? PickupNewCustomerLimit = null,
     // Envío a domicilio: métodos activos del negocio (vacío = no ofrece envío). El checkout solo lo ofrece si
     // además hay pago online (StripeReady): un envío se paga antes de despacharse.
-    IReadOnlyList<PublicShippingMethodDto>? ShippingMethods = null
+    IReadOnlyList<PublicShippingMethodDto>? ShippingMethods = null,
+    // Cuentas de clientes (miembros/mayoristas): la tienda muestra "Iniciar sesión" solo si está activo.
+    bool StoreAccounts = false
 );
 
 public record PublicCatalogResponse(

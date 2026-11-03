@@ -93,6 +93,8 @@ public class Order : BaseEntity
     // El nombre se congela como el resto del pedido: renombrar o borrar la lista no cambia pedidos viejos.
     public Guid? PriceListId { get; set; }
     public string? PriceListName { get; set; }
+    // Cuenta de cliente de la tienda que hizo el pedido con sesión iniciada (para "Mis pedidos"). Null = invitado.
+    public Guid? StoreCustomerId { get; set; }
 
     // Envío a domicilio. FulfillmentType null = como siempre (recoger / mesa); "shipping" = envío.
     // El método y su costo se congelan al crear el pedido. Total = Subtotal + Tax + Tip + ShippingCost.

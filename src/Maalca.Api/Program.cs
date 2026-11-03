@@ -96,6 +96,7 @@ builder.Services.AddScoped<Maalca.Application.Common.Payments.IPaymentProvider, 
 builder.Services.AddScoped<Maalca.Application.Common.Payments.IPaymentProviderResolver, Maalca.Application.Services.Payments.PaymentProviderResolver>();
 builder.Services.AddScoped<IPriceListService, PriceListService>();
 builder.Services.AddScoped<IShippingService, ShippingService>();
+builder.Services.AddScoped<IStoreAccountService, StoreAccountService>();
 builder.Services.AddScoped<IDonationService, DonationService>();
 builder.Services.AddScoped<IScreenAdService, ScreenAdService>();
 builder.Services.AddScoped<IPlatformAddOnService, PlatformAddOnService>();
@@ -3144,6 +3145,98 @@ app.MapPatch("/api/affiliates/{id:guid}/orders/{orderId:guid}/ship", async (Http
         return result is null
             ? Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Order not found" } })
             : Results.Ok(result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
+
+// ── Cuentas de clientes de la tienda (miembros/mayoristas) ───────────────────
+// Cliente: /api/public/store/{slug}/... con el token de Supabase del cliente (el middleware solo pone sub + email).
+static string? StoreUser(HttpContext ctx) => ctx.User.FindFirst("sub")?.Value;
+
+app.MapGet("/api/public/store/{slug}/me", async (HttpContext ctx, IStoreAccountService svc, string slug) =>
+{
+    var sub = StoreUser(ctx);
+    if (string.IsNullOrEmpty(sub)) return Results.Unauthorized();
+    var me = await svc.GetMeAsync(slug, sub);
+    return me is null ? Results.NotFound() : Results.Ok(me);
+}).AllowAnonymous();
+
+app.MapPost("/api/public/store/{slug}/join", async (HttpContext ctx, IStoreAccountService svc, string slug, JoinStoreRequest request) =>
+{
+    var sub = StoreUser(ctx);
+    if (string.IsNullOrEmpty(sub)) return Results.Unauthorized();
+    try
+    {
+        var me = await svc.JoinAsync(slug, sub, ctx.User.FindFirst("email")?.Value ?? "", request);
+        return me is null ? Results.NotFound() : Results.Ok(me);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+}).AllowAnonymous();
+
+app.MapGet("/api/public/store/{slug}/prices", async (HttpContext ctx, IStoreAccountService svc, string slug) =>
+{
+    var sub = StoreUser(ctx);
+    if (string.IsNullOrEmpty(sub)) return Results.Unauthorized();
+    var prices = await svc.GetPricesAsync(slug, sub);
+    return prices is null ? Results.NotFound() : Results.Ok(prices);
+}).AllowAnonymous();
+
+app.MapGet("/api/public/store/{slug}/orders", async (HttpContext ctx, IStoreAccountService svc, string slug) =>
+{
+    var sub = StoreUser(ctx);
+    if (string.IsNullOrEmpty(sub)) return Results.Unauthorized();
+    var orders = await svc.GetMyOrdersAsync(slug, sub);
+    return orders is null ? Results.NotFound() : Results.Ok(orders);
+}).AllowAnonymous();
+
+// Mismo pedido que /api/public/affiliates/{slug}/orders, pero con sesión: el API aplica la lista del cliente.
+app.MapPost("/api/public/store/{slug}/orders", async (HttpContext ctx, IOrderService orderService, string slug, CreateOrderRequest request) =>
+{
+    var sub = StoreUser(ctx);
+    if (string.IsNullOrEmpty(sub)) return Results.Unauthorized();
+    try
+    {
+        var result = await orderService.CreateOrderAsync(slug, request, sub);
+        return result is null
+            ? Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } })
+            : Results.Ok(result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+    catch (Stripe.StripeException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "STRIPE_ERROR", message = ex.Message } });
+    }
+}).AllowAnonymous();
+
+// Dueño: miembros de su tienda y cómo se registran.
+app.MapGet("/api/affiliates/{id:guid}/store-customers", async (HttpContext ctx, IStoreAccountService svc, Guid id) =>
+    !IsActiveAffiliate(ctx, id) ? Results.Forbid() : Results.Ok(await svc.ListAsync(id)));
+
+app.MapPatch("/api/affiliates/{id:guid}/store-customers/{customerId:guid}", async (HttpContext ctx, IStoreAccountService svc, Guid id, Guid customerId, UpdateStoreCustomerRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await svc.UpdateAsync(id, customerId, request);
+        return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
+
+app.MapGet("/api/affiliates/{id:guid}/store-settings", async (HttpContext ctx, IStoreAccountService svc, Guid id) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    var result = await svc.GetSettingsAsync(id);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+
+app.MapPut("/api/affiliates/{id:guid}/store-settings", async (HttpContext ctx, IStoreAccountService svc, Guid id, StoreSettingsDto request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await svc.UpdateSettingsAsync(id, request);
+        return result is null ? Results.NotFound() : Results.Ok(result);
     }
     catch (ArgumentException ex) { return InvalidInput(ex); }
 });

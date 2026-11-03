@@ -78,3 +78,37 @@ public record ShippingAddressDto(string? Name, string Line1, string? Line2, stri
 
 /// <summary>Despacho manual: paquetería (usps | ups | fedex | dhl | other) + número de rastreo.</summary>
 public record MarkShippedRequest(string Carrier, string TrackingNumber);
+
+// ── Cuentas de clientes de la tienda (miembros/mayoristas) ───────────────────
+
+/// <summary>
+/// Estado del cliente con sesión en una tienda. Status: "unavailable" (la tienda no tiene cuentas) | "none" (no ha
+/// pedido membresía) | "pending" | "approved" | "rejected". El precio de su lista llega aparte (GET .../prices).
+/// </summary>
+public record StoreMeDto(
+    string Status,
+    string SignupMode,
+    string? SignupNote,
+    string? Name,
+    string? Email,
+    string? PriceListName,
+    decimal? DiscountPercent,
+    decimal? MinOrderAmount);
+
+public record JoinStoreRequest(string Name, string? Phone, string? BusinessName, string? TaxId, string? Message);
+
+public record MemberPriceDto(Guid ItemId, decimal Price);
+
+public record StoreOrderSummaryDto(
+    Guid Id, DateTime CreatedAt, string Status, decimal Total, string Currency, int ItemCount,
+    string? FulfillmentType, string? TrackingToken, string? PriceListName);
+
+public record StoreCustomerDto(
+    Guid Id, string Name, string Email, string? Phone, string? BusinessName, string? TaxId, string? Message,
+    string Status, Guid? PriceListId, string? PriceListName, string? Notes, DateTime CreatedAt, DateTime? ApprovedAt,
+    int OrderCount);
+
+/// <summary>Dueño: aprobar/rechazar, asignar lista y notas. Null = no tocar.</summary>
+public record UpdateStoreCustomerRequest(string? Status, Guid? PriceListId, bool ClearPriceList = false, string? Notes = null);
+
+public record StoreSettingsDto(string SignupMode, Guid? DefaultPriceListId, string? SignupNote);

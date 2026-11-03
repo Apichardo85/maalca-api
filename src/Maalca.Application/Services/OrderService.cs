@@ -39,7 +39,7 @@ public class OrderService : IOrderService
 
     public const string ShippingFulfillment = "shipping";
 
-    public async Task<CreateOrderResponseDto?> CreateOrderAsync(string affiliateSlug, CreateOrderRequest request)
+    public async Task<CreateOrderResponseDto?> CreateOrderAsync(string affiliateSlug, CreateOrderRequest request, string? storeUserId = null)
     {
         var affiliate = await _db.Affiliates.FirstOrDefaultAsync(a => a.Slug == affiliateSlug && a.Published);
         if (affiliate is null) return null;
@@ -64,9 +64,12 @@ public class OrderService : IOrderService
         // Un envío no depende del horario de la tienda (se despacha cuando abran): no se programa.
         var scheduledFor = isShipping ? null : ResolveSchedule(affiliate, request);
 
-        // Lista de precios del cliente (miembro/mayorista). Se resolverá desde la cuenta de cliente de la tienda
-        // (inicio de sesión dentro de /{slug}); hasta entonces todo pedido público va a precio público.
-        PriceListContext? priceList = null;
+        // Lista de precios del cliente (miembro/mayorista): sale de su cuenta en ESTA tienda (sesión iniciada en
+        // /{slug}), nunca del navegador. Invitado, pendiente, rechazado o lista pausada = precio público.
+        StoreAccounts.ResolvedAccount? storeAccount = null;
+        if (!string.IsNullOrEmpty(storeUserId) && activeModules.Contains(StoreAccounts.ModuleToken, StringComparer.OrdinalIgnoreCase))
+            storeAccount = await StoreAccounts.ResolveAsync(_db, affiliate.Id, storeUserId);
+        var priceList = storeAccount?.PriceList;
 
         var priced = await RepriceItemsAsync(affiliate.Id, request.Items, request.Tax, request.Tip, scheduledFor,
             request.CustomerEmail, request.CustomerPhone, priceList);
@@ -118,6 +121,7 @@ public class OrderService : IOrderService
             CustomerId = customer?.Id,
             PriceListId = priceList?.Id,
             PriceListName = priceList?.Name,
+            StoreCustomerId = storeAccount?.StoreCustomerId,
             FulfillmentType = isShipping ? ShippingFulfillment : null,
             ShippingMethodId = shippingMethod?.Id,
             ShippingMethodName = shippingMethod?.Name,
@@ -242,6 +246,7 @@ public class OrderService : IOrderService
         string.IsNullOrEmpty(s) ? string.Empty : new string(s.Where(char.IsDigit).ToArray());
 
     private const int MaxQtyPerLine = 99;
+    private const int MaxQtyPerLineWholesale = 999;
 
     // Todavía no hay tasa de impuesto configurable por afiliado (el storefront manda taxRate=0),
     // así que el servidor no puede recalcular el impuesto: solo lo acota. Cuando exista
@@ -262,8 +267,10 @@ public class OrderService : IOrderService
         DateOnly? scheduledFor = null, string? contactEmail = null, string? contactPhone = null,
         PriceListContext? priceList = null)
     {
-        if (requested.Any(i => i.Qty < 1 || i.Qty > MaxQtyPerLine))
-            throw new ArgumentException($"Cantidad inválida (debe ser entre 1 y {MaxQtyPerLine}).");
+        // Con lista de precios (mayorista) se permiten cantidades de caja grandes; el público sigue con el tope de siempre.
+        var maxLine = priceList is null ? MaxQtyPerLine : MaxQtyPerLineWholesale;
+        if (requested.Any(i => i.Qty < 1 || i.Qty > maxLine))
+            throw new ArgumentException($"Cantidad inválida (debe ser entre 1 y {maxLine}).");
         if (clientTax < 0 || clientTip < 0)
             throw new ArgumentException("Impuesto y propina no pueden ser negativos.");
 

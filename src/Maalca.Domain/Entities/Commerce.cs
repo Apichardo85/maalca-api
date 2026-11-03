@@ -54,3 +54,29 @@ public class ShippingMethod : AuditableEntity
 
     public Affiliate? Affiliate { get; set; }
 }
+
+/// <summary>
+/// Cuenta de cliente DENTRO de una tienda: la misma persona (usuario de Supabase) puede ser miembro de varias
+/// tiendas, con estado y lista de precios distintos en cada una. El precio nunca sale del token: sale de aquí.
+/// Status: "pending" (esperando al dueño) | "approved" | "rejected".
+/// </summary>
+public class StoreCustomer : BaseEntity
+{
+    public Guid AffiliateId { get; set; }
+    public string SupabaseUserId { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string? Phone { get; set; }
+    public string? BusinessName { get; set; }
+    public string? TaxId { get; set; }
+    /// <summary>Lo que el cliente escribió al pedir la membresía.</summary>
+    public string? Message { get; set; }
+    public string Status { get; set; } = "pending";
+    public Guid? PriceListId { get; set; }
+    /// <summary>Notas internas del dueño (el cliente no las ve).</summary>
+    public string? Notes { get; set; }
+    public DateTime? ApprovedAt { get; set; }
+
+    public Affiliate? Affiliate { get; set; }
+    public PriceList? PriceList { get; set; }
+}
