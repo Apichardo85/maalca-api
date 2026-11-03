@@ -5,7 +5,8 @@ namespace Maalca.Application.Common;
 
 /// <summary>Lista de precios ya cargada para recalcular un pedido (sin ir a la base por cada línea).</summary>
 public sealed record PriceListContext(
-    Guid Id, string Name, decimal DiscountPercent, decimal? MinOrderAmount, IReadOnlyDictionary<Guid, decimal> FixedPrices);
+    Guid Id, string Name, decimal DiscountPercent, decimal? MinOrderAmount, IReadOnlyDictionary<Guid, decimal> FixedPrices,
+    bool TaxExempt = false);
 
 /// <summary>
 /// El ÚNICO cálculo de precio por lista (miembro/mayorista): lo usan el pedido (OrderService) y la vista previa del
@@ -26,13 +27,27 @@ public static class PriceListPricing
     {
         var list = await db.PriceLists.AsNoTracking()
             .Where(l => l.Id == priceListId && l.AffiliateId == affiliateId && l.IsActive)
-            .Select(l => new { l.Id, l.Name, l.DiscountPercent, l.MinOrderAmount })
+            .Select(l => new { l.Id, l.Name, l.DiscountPercent, l.MinOrderAmount, l.TaxExempt })
             .FirstOrDefaultAsync();
         if (list is null) return null;
         var fixedPrices = await db.PriceListItems.AsNoTracking()
             .Where(i => i.PriceListId == list.Id)
             .ToDictionaryAsync(i => i.ItemId, i => i.Price);
-        return new PriceListContext(list.Id, list.Name, list.DiscountPercent, list.MinOrderAmount, fixedPrices);
+        return new PriceListContext(list.Id, list.Name, list.DiscountPercent, list.MinOrderAmount, fixedPrices, list.TaxExempt);
+    }
+}
+
+/// <summary>
+/// Impuesto de venta del pedido online, calculado por el API (nunca el navegador) cuando el negocio fijó su tasa.
+/// Base = subtotal (+ envío si el negocio grava el envío). Lista exenta (reventa) = 0.
+/// </summary>
+public static class SalesTax
+{
+    public static decimal Compute(decimal ratePercent, decimal subtotal, decimal shipping, bool taxShipping, bool exempt)
+    {
+        if (exempt || ratePercent <= 0) return 0m;
+        var taxBase = subtotal + (taxShipping ? shipping : 0m);
+        return Math.Round(taxBase * ratePercent / 100m, 2, MidpointRounding.AwayFromZero);
     }
 }
 

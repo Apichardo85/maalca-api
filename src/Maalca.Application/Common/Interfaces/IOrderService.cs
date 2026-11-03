@@ -42,6 +42,9 @@ public interface IOrderService
     Task<OrderDto?> MarkNoShowAsync(Guid affiliateId, Guid orderId);
     /// <summary>Envío despachado a mano: paquetería + número de rastreo (el pedido pasa a Fulfilled).</summary>
     Task<OrderDto?> MarkShippedAsync(Guid affiliateId, Guid orderId, string carrier, string trackingNumber);
+    /// <summary>Impuesto de venta del negocio (tasa % y si grava el envío).</summary>
+    Task<TaxSettingsDto?> GetTaxSettingsAsync(Guid affiliateId);
+    Task<TaxSettingsDto?> UpdateTaxSettingsAsync(Guid affiliateId, TaxSettingsDto request);
     Task<OrderDto?> UndoNoShowAsync(Guid affiliateId, Guid orderId);
     Task<PickupRulesDto?> GetPickupRulesAsync(Guid affiliateId);
     Task<PickupRulesDto?> UpdatePickupRulesAsync(Guid affiliateId, PickupRulesDto request);

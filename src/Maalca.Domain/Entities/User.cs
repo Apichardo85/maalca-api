@@ -195,6 +195,12 @@ public class Affiliate : BaseEntity
     public Guid? StoreDefaultPriceListId { get; set; }
     public string? StoreSignupNote { get; set; }
 
+    // Impuesto de venta: tasa en PORCENTAJE (ej. 8.00 = 8%). Null = sin configurar → comportamiento de siempre
+    // (el impuesto que manda la página, acotado). Con valor, el API calcula el impuesto de cada pedido online.
+    // SalesTaxOnShipping: el envío también paga impuesto (en NY sí, cuando lo que se envía es gravable).
+    public decimal? SalesTaxRate { get; set; }
+    public bool SalesTaxOnShipping { get; set; } = true;
+
     // Fase 9 — preferencia del NEGOCIO, no del visitante. El Menu Board no tiene usuario que le
     // dé click a un toggle de idioma (nadie interactúa con una TV) — a diferencia del resto del
     // sitio público, que usa la preferencia de cada visitante (useSimpleLanguage). "es" es el

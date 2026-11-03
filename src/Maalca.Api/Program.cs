@@ -3149,6 +3149,25 @@ app.MapPatch("/api/affiliates/{id:guid}/orders/{orderId:guid}/ship", async (Http
     catch (ArgumentException ex) { return InvalidInput(ex); }
 });
 
+// Impuesto de venta (dashboard → Pedidos → Impuesto).
+app.MapGet("/api/affiliates/{id:guid}/tax-settings", async (HttpContext ctx, IOrderService orderService, Guid id) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    var result = await orderService.GetTaxSettingsAsync(id);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+
+app.MapPut("/api/affiliates/{id:guid}/tax-settings", async (HttpContext ctx, IOrderService orderService, Guid id, TaxSettingsDto request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await orderService.UpdateTaxSettingsAsync(id, request);
+        return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
+
 // ── Cuentas de clientes de la tienda (miembros/mayoristas) ───────────────────
 // Cliente: /api/public/store/{slug}/... con el token de Supabase del cliente (el middleware solo pone sub + email).
 static string? StoreUser(HttpContext ctx) => ctx.User.FindFirst("sub")?.Value;

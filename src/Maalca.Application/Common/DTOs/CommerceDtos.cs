@@ -31,7 +31,8 @@ public record PriceListDto(
     decimal? MinOrderAmount,
     bool IsActive,
     int SortOrder,
-    IReadOnlyList<PriceListItemDto> Items);
+    IReadOnlyList<PriceListItemDto> Items,
+    bool TaxExempt = false);
 
 public record UpsertPriceListRequest(
     string Name,
@@ -40,7 +41,8 @@ public record UpsertPriceListRequest(
     decimal? MinOrderAmount,
     bool IsActive = true,
     int SortOrder = 0,
-    IReadOnlyList<PriceListItemDto>? Items = null);
+    IReadOnlyList<PriceListItemDto>? Items = null,
+    bool TaxExempt = false);
 
 /// <summary>Vista previa: precio público vs precio con la lista, calculado con el mismo motor que el pedido.</summary>
 public record PriceListPreviewLineDto(Guid ItemId, string Name, string? VariantLabel, decimal PublicPrice, decimal? FixedPrice, decimal FinalPrice);
@@ -93,7 +95,8 @@ public record StoreMeDto(
     string? Email,
     string? PriceListName,
     decimal? DiscountPercent,
-    decimal? MinOrderAmount);
+    decimal? MinOrderAmount,
+    bool TaxExempt = false);
 
 public record JoinStoreRequest(string Name, string? Phone, string? BusinessName, string? TaxId, string? Message);
 
@@ -112,3 +115,6 @@ public record StoreCustomerDto(
 public record UpdateStoreCustomerRequest(string? Status, Guid? PriceListId, bool ClearPriceList = false, string? Notes = null);
 
 public record StoreSettingsDto(string SignupMode, Guid? DefaultPriceListId, string? SignupNote);
+
+/// <summary>Impuesto de venta del negocio. Rate en % (null = sin configurar).</summary>
+public record TaxSettingsDto(decimal? Rate, bool TaxShipping);

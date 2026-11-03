@@ -57,7 +57,7 @@ public class PriceListService : IPriceListService
         // La vista previa usa la lista aunque esté apagada: el dueño la revisa antes de prenderla.
         var raw = await _db.PriceLists.AsNoTracking().Include(l => l.Items).FirstAsync(l => l.Id == id);
         var context = new PriceListContext(raw.Id, raw.Name, raw.DiscountPercent, raw.MinOrderAmount,
-            raw.Items.ToDictionary(i => i.ItemId, i => i.Price));
+            raw.Items.ToDictionary(i => i.ItemId, i => i.Price), raw.TaxExempt);
 
         var items = await _db.InventoryItems.AsNoTracking()
             .Where(i => i.AffiliateId == affiliateId && i.Status == "Active")
@@ -84,6 +84,7 @@ public class PriceListService : IPriceListService
         list.MinOrderAmount = r.MinOrderAmount is decimal m && m > 0 ? Math.Round(m, 2) : null;
         list.IsActive = r.IsActive;
         list.SortOrder = r.SortOrder;
+        list.TaxExempt = r.TaxExempt;
 
         if (r.Items is null) return; // null = no tocar los precios fijos
         if (r.Items.Any(i => i.Price < 0)) throw new ArgumentException("Un precio fijo no puede ser negativo.");
@@ -105,7 +106,7 @@ public class PriceListService : IPriceListService
 
     private static PriceListDto ToDto(PriceList l) => new(
         l.Id, l.Name, l.Description, l.DiscountPercent, l.MinOrderAmount, l.IsActive, l.SortOrder,
-        l.Items.Select(i => new PriceListItemDto(i.ItemId, i.Price)).ToList());
+        l.Items.Select(i => new PriceListItemDto(i.ItemId, i.Price)).ToList(), l.TaxExempt);
 }
 
 /// <summary>Métodos de envío del negocio (costo fijo / gratis desde $X) — dashboard → Envíos.</summary>

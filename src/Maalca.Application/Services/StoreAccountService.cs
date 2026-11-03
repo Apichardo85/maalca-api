@@ -60,7 +60,7 @@ public class StoreAccountService : IStoreAccountService
         // La lista solo se informa si está activa: una lista pausada = precio público (igual que en el pedido).
         var list = account.Status == StoreAccounts.Approved && account.PriceList is { IsActive: true } pl ? pl : null;
         return new StoreMeDto(account.Status, mode, affiliate.StoreSignupNote, account.Name, account.Email,
-            list?.Name, list?.DiscountPercent, list?.MinOrderAmount);
+            list?.Name, list?.DiscountPercent, list?.MinOrderAmount, list?.TaxExempt ?? false);
     }
 
     public async Task<StoreMeDto?> JoinAsync(string slug, string supabaseUserId, string email, JoinStoreRequest r)

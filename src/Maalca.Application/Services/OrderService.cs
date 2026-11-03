@@ -71,11 +71,17 @@ public class OrderService : IOrderService
             storeAccount = await StoreAccounts.ResolveAsync(_db, affiliate.Id, storeUserId);
         var priceList = storeAccount?.PriceList;
 
-        var priced = await RepriceItemsAsync(affiliate.Id, request.Items, request.Tax, request.Tip, scheduledFor,
+        // Impuesto de venta: con tasa configurada lo calcula el API (lo que mande la página se ignora); sin tasa,
+        // el comportamiento de siempre (el de la página, acotado en RepriceItemsAsync).
+        decimal? taxRate = affiliate.SalesTaxRate is decimal configuredRate && configuredRate > 0 ? configuredRate : null;
+        var taxExempt = priceList?.TaxExempt ?? false;
+
+        var priced = await RepriceItemsAsync(affiliate.Id, request.Items, taxRate is null ? request.Tax : 0m, request.Tip, scheduledFor,
             request.CustomerEmail, request.CustomerPhone, priceList);
 
         var tableNumber = await ValidateTableAsync(affiliate, request);
-        if (request.PayAtPickup) await ValidatePickupAsync(affiliate, request, tableNumber, priced.Total);
+        var pickupTax = taxRate is decimal pickupRate ? SalesTax.Compute(pickupRate, priced.Subtotal, 0m, false, taxExempt) : priced.Tax;
+        if (request.PayAtPickup) await ValidatePickupAsync(affiliate, request, tableNumber, priced.Subtotal + pickupTax + priced.Tip);
 
         // Envío a domicilio: método activo del negocio, dirección completa, terrestre si hay perfumes, y pago online
         // obligatorio (no hay "pagar al recibir": el negocio despacha lo que ya cobró).
@@ -101,6 +107,9 @@ public class OrderService : IOrderService
                 throw new ArgumentException("Déjanos un correo o teléfono para avisarte del envío.");
             shippingCost = ShippingPricing.Cost(shippingMethod.Price, shippingMethod.FreeOverAmount, priced.Subtotal);
         }
+        var tax = taxRate is decimal orderRate
+            ? SalesTax.Compute(orderRate, priced.Subtotal, shippingCost, affiliate.SalesTaxOnShipping, taxExempt)
+            : priced.Tax;
         var customer = await LinkCustomerAsync(affiliate.Id, request.CustomerName, request.CustomerPhone, request.CustomerEmail);
 
         var order = new Order
@@ -112,9 +121,10 @@ public class OrderService : IOrderService
             Notes = request.Notes,
             ItemsJson = JsonArrayField.Serialize(priced.Items),
             Subtotal = priced.Subtotal,
-            Tax = priced.Tax,
+            Tax = tax,
+            TaxRate = taxRate is not null && !taxExempt ? taxRate : null,
             Tip = priced.Tip,
-            Total = priced.Total + shippingCost,
+            Total = priced.Subtotal + tax + priced.Tip + shippingCost,
             Currency = string.IsNullOrWhiteSpace(request.Currency) ? "USD" : request.Currency.ToUpperInvariant(),
             Status = OrderStatus.Pending,
             TableNumber = tableNumber,
@@ -163,7 +173,7 @@ public class OrderService : IOrderService
 
         var checkout = await payments.CreateCheckoutAsync(affiliate, new PaymentCheckoutRequest(
             order.Id, order.Currency,
-            PaymentLines.For(priced.Items, priced.Tax, priced.Tip, shippingCost, ShippingLineLabel(order)),
+            PaymentLines.For(priced.Items, tax, priced.Tip, shippingCost, ShippingLineLabel(order)),
             request.SuccessUrl, request.CancelUrl,
             CustomerEmail: request.CustomerEmail,
             // La sesión caduca poco antes de que venza la reserva de stock (StripeReservationMinutes): nadie
@@ -248,9 +258,8 @@ public class OrderService : IOrderService
     private const int MaxQtyPerLine = 99;
     private const int MaxQtyPerLineWholesale = 999;
 
-    // Todavía no hay tasa de impuesto configurable por afiliado (el storefront manda taxRate=0),
-    // así que el servidor no puede recalcular el impuesto: solo lo acota. Cuando exista
-    // Affiliate.TaxRate, este tope se reemplaza por el cálculo real (subtotal * tasa).
+    // Sin tasa configurada (Affiliate.SalesTaxRate null) el impuesto viene de la página y aquí solo se acota.
+    // Con tasa, CreateOrderAsync lo calcula con SalesTax.Compute y este tope no interviene (llega 0).
     private const decimal MaxTaxFractionOfSubtotal = 0.25m;
 
     private sealed record PricedOrder(
@@ -623,6 +632,24 @@ public class OrderService : IOrderService
     /// rastreo. El pedido pasa a Fulfilled (cuenta como visita) y el cliente recibe el aviso push "va en camino".
     /// Se puede llamar otra vez para corregir el número sin repetir el aviso.
     /// </summary>
+    public async Task<TaxSettingsDto?> GetTaxSettingsAsync(Guid affiliateId)
+    {
+        var a = await _db.Affiliates.AsNoTracking().FirstOrDefaultAsync(x => x.Id == affiliateId);
+        return a is null ? null : new TaxSettingsDto(a.SalesTaxRate, a.SalesTaxOnShipping);
+    }
+
+    public async Task<TaxSettingsDto?> UpdateTaxSettingsAsync(Guid affiliateId, TaxSettingsDto request)
+    {
+        var a = await _db.Affiliates.FirstOrDefaultAsync(x => x.Id == affiliateId);
+        if (a is null) return null;
+        if (request.Rate is < 0 or > 25) throw new ArgumentException("La tasa debe estar entre 0 y 25%.");
+        a.SalesTaxRate = request.Rate is decimal newRate && newRate > 0 ? Math.Round(newRate, 3) : null;
+        a.SalesTaxOnShipping = request.TaxShipping;
+        a.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+        return new TaxSettingsDto(a.SalesTaxRate, a.SalesTaxOnShipping);
+    }
+
     public async Task<OrderDto?> MarkShippedAsync(Guid affiliateId, Guid orderId, string carrier, string trackingNumber)
     {
         var order = await _db.Orders.Include(o => o.Affiliate)
@@ -1188,7 +1215,8 @@ public class OrderService : IOrderService
         o.ShippingCarrier,
         o.TrackingNumber,
         ShippingPricing.TrackingUrl(o.ShippingCarrier, o.TrackingNumber),
-        o.ShippedAt
+        o.ShippedAt,
+        o.TaxRate
     );
 
     private static ShippingAddressDto? ShipToOf(Order o) =>

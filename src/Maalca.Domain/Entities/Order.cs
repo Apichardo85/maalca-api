@@ -24,6 +24,8 @@ public class Order : BaseEntity
 
     public decimal Subtotal { get; set; }
     public decimal Tax { get; set; }
+    // Tasa (%) con la que el API calculó Tax. Null = impuesto sin tasa configurada (el que mandó la página) o exento.
+    public decimal? TaxRate { get; set; }
     // Propina — Restaurante. Se suma al Total (Total = Subtotal + Tax + Tip) y viaja como línea
     // aparte en el Checkout de Stripe (mismo patrón que Tax) para que aparezca clara en el recibo
     // y en el reporte de la cuenta Connect del negocio, en vez de mezclarse en el precio de los

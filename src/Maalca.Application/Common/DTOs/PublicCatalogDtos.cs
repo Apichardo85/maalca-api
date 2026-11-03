@@ -132,7 +132,10 @@ public record PlanCapabilitiesDto(
     // además hay pago online (StripeReady): un envío se paga antes de despacharse.
     IReadOnlyList<PublicShippingMethodDto>? ShippingMethods = null,
     // Cuentas de clientes (miembros/mayoristas): la tienda muestra "Iniciar sesión" solo si está activo.
-    bool StoreAccounts = false
+    bool StoreAccounts = false,
+    // Impuesto de venta (%): con valor, el API lo calcula en cada pedido y el checkout muestra el mismo cálculo.
+    decimal? SalesTaxRate = null,
+    bool SalesTaxOnShipping = true
 );
 
 public record PublicCatalogResponse(

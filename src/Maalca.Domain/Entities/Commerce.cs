@@ -17,6 +17,8 @@ public class PriceList : AuditableEntity
     public decimal DiscountPercent { get; set; } = 0;
     /// <summary>Pedido mínimo (subtotal) para comprar con esta lista. Null = sin mínimo.</summary>
     public decimal? MinOrderAmount { get; set; }
+    /// <summary>Compras sin impuesto de venta (reventa con certificado, ej. ST-120 en NY). El dueño valida el certificado.</summary>
+    public bool TaxExempt { get; set; } = false;
     public bool IsActive { get; set; } = true;
     public int SortOrder { get; set; } = 0;
 
