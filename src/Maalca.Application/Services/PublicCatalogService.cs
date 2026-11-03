@@ -34,11 +34,21 @@ public class PublicCatalogService : IPublicCatalogService
 
     public async Task<PublicCatalogResponse?> GetCatalogAsync(string slug, Guid? screenId = null)
     {
-        // Un negocio "Solo pantallas" tiene la página pública apagada (Published=false) pero sus
-        // TVs sí deben mostrar el menú/anuncios: este catálogo es lo que lee el board, así que
-        // responde igual para ellos. Su página pública sigue apagada (GetAffiliateBySlugAsync).
+        // Este catálogo sirve a dos públicos distintos: la página pública /{slug} (y el kiosko y
+        // el detalle de item), y superficies que NO son la página — el board de las TVs, el
+        // preview del dashboard, el ponche del personal. Por eso la consulta ya no filtra por
+        // Published: lo reporta como PagePublished en la respuesta y que cada consumidor decida.
+        // Los que son la página pública ya hacen notFound() cuando viene en false.
+        //
+        // Antes el filtro era (Published || ScreensOnly), un caso especial para que las TVs de un
+        // negocio "Solo pantallas" vieran su menú con la página apagada. Esa excepción era la
+        // primera señal de que Published mezclaba dos cosas; ahora la regla general la cubre y el
+        // caso especial desaparece. Ver GetBookableAffiliateAsync en PublicBookingService, que
+        // separa lo mismo del lado de las citas.
+        //
+        // IsActive sí sigue cortando acá: es la suspensión desde /ops, y apaga todo.
         var affiliate = await _db.Affiliates
-            .Where(a => a.Slug == slug && (a.Published || a.ScreensOnly) && a.IsActive)
+            .Where(a => a.Slug == slug && a.IsActive)
             .FirstOrDefaultAsync();
 
         if (affiliate == null) return null;

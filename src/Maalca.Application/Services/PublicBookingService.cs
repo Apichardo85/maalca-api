@@ -33,6 +33,9 @@ public class PublicBookingService : IPublicBookingService
     /// </summary>
     public const string UnassignedStaffKey = "unassigned";
 
+    /// <summary>Token del módulo de agenda en ModulosActivos — el interruptor del motor de citas.</summary>
+    private const string AppointmentsModule = "appointments";
+
     private readonly AppDbContext _db;
     private readonly IQueueService _queueService;
     private readonly ICustomerService _customerService;
@@ -48,12 +51,36 @@ public class PublicBookingService : IPublicBookingService
         _appointmentNotifications = appointmentNotifications;
     }
 
-    public async Task<List<PublicTeamMemberDto>?> GetPublicTeamAsync(string affiliateSlug)
+    /// <summary>
+    /// El afiliado tal como lo ve la reserva pública de CITAS: activo y con el módulo de agenda
+    /// prendido. A propósito NO mira Published.
+    ///
+    /// Published significaba dos cosas a la vez — "mi página pública se ve" y "mi motor de
+    /// reservas responde" — y eso ya se había roto una vez: los negocios "Solo pantallas" tienen
+    /// Published=false pero sus TVs necesitan el catálogo, y se parchó con (Published ||
+    /// ScreensOnly) en PublicCatalogService. El segundo caso es MaalCa, que agenda videollamadas
+    /// sin querer una página de negocio aparte de su vitrina.
+    ///
+    /// Así que los dos significados viven separados: Published gobierna la página (viaja como
+    /// PagePublished en el catálogo y la apaga con 404), y el interruptor del motor es el módulo
+    /// `appointments`, que el dueño ya prende y apaga desde su panel. Un negocio que quiera dejar
+    /// de recibir citas apaga el módulo, no despublica la página.
+    ///
+    /// IsActive sigue mandando sobre todo: es la suspensión desde /ops.
+    /// </summary>
+    private async Task<Affiliate?> GetBookableAffiliateAsync(string affiliateSlug)
     {
         var affiliate = await _db.Affiliates
-            .Where(a => a.Slug == affiliateSlug && a.Published)
-            .Select(a => new { a.Id })
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(a => a.Slug == affiliateSlug && a.IsActive);
+        if (affiliate is null) return null;
+
+        var modules = await ModuleAccess.GetActiveModulesAsync(_db, affiliate);
+        return modules.Contains(AppointmentsModule) ? affiliate : null;
+    }
+
+    public async Task<List<PublicTeamMemberDto>?> GetPublicTeamAsync(string affiliateSlug)
+    {
+        var affiliate = await GetBookableAffiliateAsync(affiliateSlug);
         if (affiliate is null) return null;
 
         return await _db.TeamMembers
@@ -65,10 +92,7 @@ public class PublicBookingService : IPublicBookingService
 
     public async Task<List<PublicServiceDto>?> GetPublicServicesAsync(string affiliateSlug)
     {
-        var affiliate = await _db.Affiliates
-            .Where(a => a.Slug == affiliateSlug && a.Published)
-            .Select(a => new { a.Id })
-            .FirstOrDefaultAsync();
+        var affiliate = await GetBookableAffiliateAsync(affiliateSlug);
         if (affiliate is null) return null;
 
         return await _db.Services
@@ -90,10 +114,7 @@ public class PublicBookingService : IPublicBookingService
     /// </summary>
     public async Task<PublicBusyTimesDto?> GetPublicBusyTimesAsync(string affiliateSlug, DateTime date)
     {
-        var affiliate = await _db.Affiliates
-            .Where(a => a.Slug == affiliateSlug && a.Published)
-            .Select(a => new { a.Id })
-            .FirstOrDefaultAsync();
+        var affiliate = await GetBookableAffiliateAsync(affiliateSlug);
         if (affiliate is null) return null;
 
         // Misma razón de siempre: la fecha "bare" que llega por query string deserializa con
@@ -199,8 +220,7 @@ public class PublicBookingService : IPublicBookingService
 
     public async Task<PublicAppointmentResultDto> CreatePublicAppointmentAsync(string affiliateSlug, CreatePublicAppointmentRequest request)
     {
-        var affiliate = await _db.Affiliates
-            .FirstOrDefaultAsync(a => a.Slug == affiliateSlug && a.Published);
+        var affiliate = await GetBookableAffiliateAsync(affiliateSlug);
         if (affiliate is null)
             throw new KeyNotFoundException();
 
