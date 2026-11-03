@@ -107,6 +107,10 @@ public class OrderService : IOrderService
                 throw new ArgumentException("Déjanos un correo o teléfono para avisarte del envío.");
             shippingCost = ShippingPricing.Cost(shippingMethod.Price, shippingMethod.FreeOverAmount, priced.Subtotal);
         }
+        // Envío a otro estado: sin impuesto (el negocio solo recauda en su estado, ver Affiliate.SalesTaxState).
+        if (isShipping && taxRate is not null && !string.IsNullOrEmpty(affiliate.SalesTaxState)
+            && !string.Equals(shipTo?.State, affiliate.SalesTaxState, StringComparison.OrdinalIgnoreCase))
+            taxExempt = true;
         var tax = taxRate is decimal orderRate
             ? SalesTax.Compute(orderRate, priced.Subtotal, shippingCost, affiliate.SalesTaxOnShipping, taxExempt)
             : priced.Tax;
@@ -635,7 +639,7 @@ public class OrderService : IOrderService
     public async Task<TaxSettingsDto?> GetTaxSettingsAsync(Guid affiliateId)
     {
         var a = await _db.Affiliates.AsNoTracking().FirstOrDefaultAsync(x => x.Id == affiliateId);
-        return a is null ? null : new TaxSettingsDto(a.SalesTaxRate, a.SalesTaxOnShipping);
+        return a is null ? null : new TaxSettingsDto(a.SalesTaxRate, a.SalesTaxOnShipping, a.SalesTaxState);
     }
 
     public async Task<TaxSettingsDto?> UpdateTaxSettingsAsync(Guid affiliateId, TaxSettingsDto request)
@@ -644,10 +648,14 @@ public class OrderService : IOrderService
         if (a is null) return null;
         if (request.Rate is < 0 or > 25) throw new ArgumentException("La tasa debe estar entre 0 y 25%.");
         a.SalesTaxRate = request.Rate is decimal newRate && newRate > 0 ? Math.Round(newRate, 3) : null;
+        var state = request.State?.Trim().ToUpperInvariant();
+        if (!string.IsNullOrEmpty(state) && !System.Text.RegularExpressions.Regex.IsMatch(state, "^[A-Z]{2}$"))
+            throw new ArgumentException("El estado debe ser de 2 letras (ej. NJ).");
         a.SalesTaxOnShipping = request.TaxShipping;
+        a.SalesTaxState = string.IsNullOrEmpty(state) ? null : state;
         a.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
-        return new TaxSettingsDto(a.SalesTaxRate, a.SalesTaxOnShipping);
+        return new TaxSettingsDto(a.SalesTaxRate, a.SalesTaxOnShipping, a.SalesTaxState);
     }
 
     public async Task<OrderDto?> MarkShippedAsync(Guid affiliateId, Guid orderId, string carrier, string trackingNumber)

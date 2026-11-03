@@ -200,6 +200,9 @@ public class Affiliate : BaseEntity
     // SalesTaxOnShipping: el envío también paga impuesto (en NY sí, cuando lo que se envía es gravable).
     public decimal? SalesTaxRate { get; set; }
     public bool SalesTaxOnShipping { get; set; } = true;
+    // Estado donde el negocio cobra impuesto (ej. "NJ"). Un envío a OTRO estado no lleva impuesto (un vendedor pequeño
+    // sin presencia allá no lo recauda). Null = se cobra a todo pedido (comportamiento sin estado configurado).
+    public string? SalesTaxState { get; set; }
 
     // Fase 9 — preferencia del NEGOCIO, no del visitante. El Menu Board no tiene usuario que le
     // dé click a un toggle de idioma (nadie interactúa con una TV) — a diferencia del resto del

@@ -135,7 +135,9 @@ public record PlanCapabilitiesDto(
     bool StoreAccounts = false,
     // Impuesto de venta (%): con valor, el API lo calcula en cada pedido y el checkout muestra el mismo cálculo.
     decimal? SalesTaxRate = null,
-    bool SalesTaxOnShipping = true
+    bool SalesTaxOnShipping = true,
+    // Estado donde se cobra impuesto: un envío a otro estado va sin impuesto (null = siempre).
+    string? SalesTaxState = null
 );
 
 public record PublicCatalogResponse(

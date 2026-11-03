@@ -117,4 +117,4 @@ public record UpdateStoreCustomerRequest(string? Status, Guid? PriceListId, bool
 public record StoreSettingsDto(string SignupMode, Guid? DefaultPriceListId, string? SignupNote);
 
 /// <summary>Impuesto de venta del negocio. Rate en % (null = sin configurar).</summary>
-public record TaxSettingsDto(decimal? Rate, bool TaxShipping);
+public record TaxSettingsDto(decimal? Rate, bool TaxShipping, string? State = null);

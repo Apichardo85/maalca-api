@@ -90,6 +90,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.StoreSignupMode).HasMaxLength(20);
             entity.Property(e => e.StoreSignupNote).HasMaxLength(500);
             entity.Property(e => e.SalesTaxRate).HasPrecision(6, 3);
+            entity.Property(e => e.SalesTaxState).HasMaxLength(2);
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired();
             entity.Property(e => e.PickupNewCustomerLimit).HasPrecision(10, 2);
