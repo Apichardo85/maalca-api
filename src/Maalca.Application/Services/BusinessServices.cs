@@ -931,7 +931,8 @@ public class InventoryService : IInventoryService
             var aliases = new Dictionary<string, string[]>
             {
                 ["name"] = new[] { "nombre", "name" },
-                ["category"] = new[] { "categoria", "category" },
+                // "categories" = exportación de items de Clover (si trae varias, se usa la primera).
+                ["category"] = new[] { "categoria", "category", "categories", "categorias" },
                 ["quantity"] = new[] { "cantidad", "quantity", "stock", "qty" },
                 ["unit"] = new[] { "unidad", "unit" },
                 ["minstock"] = new[] { "stockminimo", "minstock", "minimo", "minimum" },
@@ -941,6 +942,24 @@ public class InventoryService : IInventoryService
                 ["compare"] = new[] { "precioanterior", "precioantes", "compareatprice", "compareprice", "was" },
                 ["image"] = new[] { "foto", "imagen", "image", "imageurl", "fotourl" },
                 ["track"] = new[] { "controlarstock", "controlarinventario", "trackstock" },
+                // Tienda (Retail) — mismos campos que "Detalles de tienda y envío" del formulario.
+                ["brand"] = new[] { "marca", "brand" },
+                ["variantgroup"] = new[] { "productobase", "base", "variantgroup", "grupo" },
+                ["variant"] = new[] { "variante", "tamano", "size", "variant", "presentacion" },
+                ["weight"] = new[] { "pesooz", "peso", "weightoz", "weight" },
+                ["hazmat"] = new[] { "peligroso", "inflamable", "hazmat" },
+                // Juguetes: "si"/"piezas" = piezas pequeñas; o el token exacto (small_parts, small_ball, marble, balloon).
+                ["choking"] = new[] { "asfixia", "advertenciaasfixia", "choking", "chokingwarning" },
+                ["featured"] = new[] { "destacado", "featured" },
+                ["popular"] = new[] { "popular" },
+                ["minqty"] = new[] { "minimopedido", "minqty", "minorderqty" },
+                ["multiple"] = new[] { "multiplo", "multiplos", "casepack", "multiple" },
+                ["maxqty"] = new[] { "maximopedido", "maxqty", "maxperorder" },
+                // Código de barras: "Product Code" / "SKU" de la exportación de Clover.
+                ["barcode"] = new[] { "codigodebarras", "codigobarras", "barcode", "upc", "productcode", "sku" },
+                ["cost"] = new[] { "costo", "cost", "unitcost" },
+                // Clover: Hidden = "Yes" → producto oculto (inactivo en la tienda).
+                ["hidden"] = new[] { "oculto", "hidden" },
             };
             for (var h = 0; h < headers.Count; h++)
             {
@@ -953,6 +972,38 @@ public class InventoryService : IInventoryService
 
         string? Cell(List<string> cols, string field) =>
             map.TryGetValue(field, out var idx) && idx < cols.Count && !string.IsNullOrWhiteSpace(cols[idx]) ? cols[idx].Trim() : null;
+        static bool Yes(string? v) => v?.Trim().ToLowerInvariant() is "si" or "sí" or "yes" or "true" or "1" or "x";
+        static int? Int(string? v) => int.TryParse(v?.Trim(), out var n) && n > 0 ? n : null;
+
+        // Campos de tienda: solo se tocan las columnas que vienen en el archivo (lo demás se conserva).
+        void ApplyRetailCells(InventoryItem item, List<string> cols, int rowNum)
+        {
+            var current = Maalca.Application.Common.RetailAttributes.From(item) ?? new RetailAttributesDto();
+            var next = current with
+            {
+                Brand = Cell(cols, "brand") ?? current.Brand,
+                VariantGroup = Cell(cols, "variantgroup") ?? current.VariantGroup,
+                VariantLabel = Cell(cols, "variant") ?? current.VariantLabel,
+                WeightOz = ParseMoney(Cell(cols, "weight")) ?? current.WeightOz,
+                Hazmat = Cell(cols, "hazmat") is { } hz ? (Yes(hz) ? Maalca.Application.Common.RetailAttributes.HazmatLimitedQuantity : null) : current.Hazmat,
+                MinOrderQty = Int(Cell(cols, "minqty")) ?? current.MinOrderQty,
+                OrderQtyMultiple = Int(Cell(cols, "multiple")) ?? current.OrderQtyMultiple,
+                MaxPerOrder = Int(Cell(cols, "maxqty")) ?? current.MaxPerOrder,
+                ChokingWarning = Cell(cols, "choking") is { } ch
+                    ? (Yes(ch) || ch.Trim().ToLowerInvariant() is "piezas" or "piezaspequenas" ? "small_parts"
+                        : ch.Trim().ToLowerInvariant() is "no" or "none" ? null : ch.Trim().ToLowerInvariant())
+                    : current.ChokingWarning,
+            };
+            try { Maalca.Application.Common.RetailAttributes.Apply(item, next); }
+            catch (ArgumentException ex) { errors.Add($"Fila {rowNum}: {ex.Message} (se ignoraron los datos de tienda)."); }
+            if (Cell(cols, "featured") is { } f) item.Featured = Yes(f);
+            if (Cell(cols, "popular") is { } pop) item.Popular = Yes(pop);
+            if (Cell(cols, "barcode") is { } bc) item.Barcode = bc;
+            if (ParseMoney(Cell(cols, "cost")) is { } cost) item.UnitCost = cost;
+            if (Cell(cols, "hidden") is { } hid && Yes(hid)) item.Status = "Inactive";
+        }
+        // Clover separa varias categorías con coma dentro de la celda: se queda la primera.
+        string? CategoryCell(List<string> cols) => Cell(cols, "category")?.Split(',')[0].Trim() is { Length: > 0 } c ? c : null;
 
         for (var lineIndex = startIndex; lineIndex < lines.Count; lineIndex++)
         {
@@ -993,7 +1044,7 @@ public class InventoryService : IInventoryService
                     imageUrl = null;
                 }
                 var desc = Cell(cols, "description"); if (desc is not null) found.Description = desc;
-                var cat = Cell(cols, "category"); if (cat is not null) found.Category = cat;
+                var cat = CategoryCell(cols); if (cat is not null) found.Category = cat;
                 var qty = ParseMoney(Cell(cols, "quantity")); if (qty is not null) found.Quantity = qty.Value;
                 var unit = Cell(cols, "unit"); if (unit is not null) found.Unit = unit;
                 var min = ParseMoney(Cell(cols, "minstock")); if (min is not null) found.MinStock = min.Value;
@@ -1002,6 +1053,7 @@ public class InventoryService : IInventoryService
                 if (imageUrl is not null) found.ImageUrl = imageUrl;
                 if (trackCell is not null) found.TrackStock = track;
                 var status = Cell(cols, "status"); if (status is not null) found.Status = status;
+                if (isRetail) ApplyRetailCells(found, cols, rowNum);
                 found.UpdatedAt = now;
                 updated++;
                 continue;
@@ -1020,13 +1072,13 @@ public class InventoryService : IInventoryService
 
             if (!dryRun)
             {
-                _context.InventoryItems.Add(new InventoryItem
+                var newItem = new InventoryItem
                 {
                     Id = Guid.NewGuid(),
                     AffiliateId = affiliateId,
                     Name = name,
                     Description = Cell(cols, "description"),
-                    Category = Cell(cols, "category"),
+                    Category = CategoryCell(cols),
                     Quantity = ParseMoney(Cell(cols, "quantity")) ?? 0m,
                     Unit = Cell(cols, "unit") ?? "unidad",
                     MinStock = ParseMoney(Cell(cols, "minstock")) ?? 0m,
@@ -1037,7 +1089,11 @@ public class InventoryService : IInventoryService
                     Status = Cell(cols, "status") ?? "Active",
                     IsPubliclyVisible = isRetail,
                     CreatedAt = now,
-                });
+                };
+                // Mismo código interno que al crear a mano (CreateInventoryItemAsync): ningún item queda sin código.
+                newItem.InternalCode = $"INT-{newItem.Id.ToString()[..8].ToUpperInvariant()}";
+                if (isRetail) ApplyRetailCells(newItem, cols, rowNum);
+                _context.InventoryItems.Add(newItem);
             }
             created++;
         }
