@@ -278,9 +278,13 @@ public class PublicCatalogService : IPublicCatalogService
                 c.EnlaceGenerado, c.NombreVisible, c.Verificado, c.Orden, c.Activo))
             .ToList();
 
+        // Si el dueño tiene un canal de WhatsApp pero lo apagó, no se cae al campo plano antiguo.
+        var whatsAppOff = !canales.Any(c => c.Tipo == "WhatsApp")
+            && await _db.Canales.AnyAsync(c => c.AffiliateId == a.Id && c.Tipo == Maalca.Domain.Enums.CanalTipo.WhatsApp);
+
         return new(a.Id, a.Name, a.Slug!, a.BusinessType.ToString(),
             a.Description, a.DescriptionEn, a.PrimaryColor, a.LogoUrl, a.CoverImageUrl,
-            a.WhatsApp, a.ContactEmail, a.Address,
+            whatsAppOff ? null : a.WhatsApp, a.ContactEmail, a.Address,
             null,   // City — Affiliate entity does not have this field yet
             a.Website,
             a.ZoomLink,

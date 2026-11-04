@@ -124,7 +124,22 @@ public class CanalService : ICanalService
         if (request.Activo.HasValue) canal.Activo = request.Activo.Value;
 
         await _db.SaveChangesAsync();
+        if (canal.Tipo == CanalTipo.WhatsApp) await ClearLegacyWhatsAppIfNoActiveCanalAsync(affiliateId);
         return Map(canal);
+    }
+
+    // El campo plano Affiliate.WhatsApp es el respaldo para negocios que nunca usaron Canales. Si el
+    // dueño apaga o borra su canal de WhatsApp y el respaldo queda, la tienda lo sigue mostrando
+    // (botón "Confirmar por WhatsApp" en el carrito). Sin canal activo, el respaldo se limpia.
+    private async Task ClearLegacyWhatsAppIfNoActiveCanalAsync(Guid affiliateId)
+    {
+        var stillActive = await _db.Canales.AnyAsync(c =>
+            c.AffiliateId == affiliateId && c.Tipo == CanalTipo.WhatsApp && c.Activo);
+        if (stillActive) return;
+        var affiliate = await _db.Affiliates.FindAsync(affiliateId);
+        if (affiliate == null || string.IsNullOrEmpty(affiliate.WhatsApp)) return;
+        affiliate.WhatsApp = null;
+        await _db.SaveChangesAsync();
     }
 
     public async Task<bool> DeleteAsync(Guid affiliateId, Guid canalId)
@@ -133,8 +148,10 @@ public class CanalService : ICanalService
             .FirstOrDefaultAsync(c => c.Id == canalId && c.AffiliateId == affiliateId);
         if (canal == null) return false;
 
+        var wasWhatsApp = canal.Tipo == CanalTipo.WhatsApp;
         _db.Canales.Remove(canal);
         await _db.SaveChangesAsync();
+        if (wasWhatsApp) await ClearLegacyWhatsAppIfNoActiveCanalAsync(affiliateId);
         return true;
     }
 
