@@ -93,7 +93,8 @@ public record CatalogItemDto(
     IReadOnlyList<PublicModifierGroupDto>? ModifierGroups = null, // Product (Restaurante) — grupos reutilizables enlazados (ej. "Guarnición"); null/vacío = sin modificadores
     decimal? CompareAtPrice = null,             // InventoryItem only — precio "antes" tachado (oferta); null = sin oferta
     bool? TrackStock = null,                    // InventoryItem only — true = Stock es real (mostrar Agotado/Quedan N); null/false = sin control
-    RetailAttributesDto? Retail = null          // InventoryItem only — atributos de tienda (null en Product/Service)
+    RetailAttributesDto? Retail = null,         // InventoryItem only — atributos de tienda (null en Product/Service)
+    string? Barcode = null                      // InventoryItem only — UPC/EAN para lector de código de barras (kiosko/POS)
 );
 
 // Solo nombre — a propósito no expone Quantity (cantidad por porción, dato interno de receta)

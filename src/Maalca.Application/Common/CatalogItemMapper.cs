@@ -31,5 +31,5 @@ public static class CatalogItemMapper
         i.DescriptionEn, Images: JsonArrayField.Parse<string>(i.Images), NameEn: i.NameEn,
         Featured: i.Featured, Popular: i.Popular,
         CompareAtPrice: i.CompareAtPrice, TrackStock: i.TrackStock,
-        Retail: RetailAttributes.From(i));
+        Retail: RetailAttributes.From(i), Barcode: i.Barcode);
 }
