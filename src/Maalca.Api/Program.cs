@@ -1827,6 +1827,13 @@ app.MapGet("/api/affiliates/{affiliateId:guid}/inventory/summary", async (HttpCo
     return Results.Ok(result);
 });
 
+app.MapGet("/api/affiliates/{affiliateId:guid}/inventory/photo-index", async (HttpContext ctx, IInventoryService inventoryService, Guid affiliateId) =>
+{
+    if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
+        return Results.Forbid();
+    return Results.Ok(await inventoryService.GetPhotoIndexAsync(affiliateId));
+});
+
 app.MapGet("/api/affiliates/{affiliateId:guid}/inventory/{itemId:guid}/movements", async (HttpContext ctx, IInventoryService inventoryService, Guid affiliateId, Guid itemId, int page = 1) =>
 {
     if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())

@@ -841,6 +841,17 @@ public class InventoryService : IInventoryService
             low.Select(i => new LowStockItemDto(i.Id, i.Name, i.Quantity, i.MinStock, i.Unit)).ToList());
     }
 
+    public async Task<List<InventoryPhotoIndexDto>> GetPhotoIndexAsync(Guid affiliateId)
+    {
+        return await _context.InventoryItems
+            .Where(i => i.AffiliateId == affiliateId)
+            .OrderBy(i => i.Name)
+            .Select(i => new InventoryPhotoIndexDto(
+                i.Id, i.Name, i.Barcode, i.InternalCode,
+                (i.ImageUrl != null && i.ImageUrl != "") || (i.Images != null && i.Images != "" && i.Images != "[]")))
+            .ToListAsync();
+    }
+
     // Tarea: exportar CSV — carga inicial/backup manual sin depender de agregar item por item.
     public async Task<string> ExportCsvAsync(Guid affiliateId)
     {

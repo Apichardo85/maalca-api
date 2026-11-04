@@ -106,6 +106,9 @@ public interface IInventoryService
     /// y por la alerta del Dashboard.</summary>
     Task<InventorySummaryDto> GetSummaryAsync(Guid affiliateId);
 
+    /// <summary>Lista liviana (sin paginar) de todos los items para emparejar fotos en bloque.</summary>
+    Task<List<InventoryPhotoIndexDto>> GetPhotoIndexAsync(Guid affiliateId);
+
     Task<string> ExportCsvAsync(Guid affiliateId);
     Task<InventoryCsvImportResultDto> ImportCsvAsync(Guid affiliateId, string csvContent, string mode = "skip");
 

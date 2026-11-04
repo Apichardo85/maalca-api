@@ -39,3 +39,6 @@ public record InventoryCsvDuplicateDto(
 // Mode: "preview" (no escribe, solo informa duplicados), "skip" (crea los nuevos, deja los duplicados
 // como están; es el valor por defecto) o "update" (crea los nuevos y actualiza los duplicados).
 public record ImportInventoryCsvRequest(string CsvContent, string? Mode = null);
+
+/// <summary>Índice liviano para emparejar fotos subidas en bloque (por código de barras, código interno o nombre).</summary>
+public record InventoryPhotoIndexDto(Guid Id, string Name, string? Barcode, string? InternalCode, bool HasImage);
