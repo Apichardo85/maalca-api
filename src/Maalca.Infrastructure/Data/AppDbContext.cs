@@ -49,6 +49,7 @@ public class AppDbContext : DbContext
     public DbSet<ScreenDevice> ScreenDevices => Set<ScreenDevice>();
     public DbSet<PlatformAddOn> PlatformAddOns => Set<PlatformAddOn>();
     public DbSet<PlatformContent> PlatformContents => Set<PlatformContent>();
+    public DbSet<ProspectIntake> ProspectIntakes => Set<ProspectIntake>();
     public DbSet<ModulePlanRule> ModulePlanRules => Set<ModulePlanRule>();
     public DbSet<TimeBlock> TimeBlocks => Set<TimeBlock>();
     public DbSet<Proposal> Proposals => Set<Proposal>();
@@ -249,6 +250,27 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Es).HasMaxLength(4000);
             entity.Property(e => e.En).HasMaxLength(4000);
             entity.Property(e => e.UpdatedBy).HasMaxLength(255);
+        });
+
+        // ProspectIntake — levantamientos de prospectos, gestionados desde /ops/levantamientos
+        modelBuilder.Entity<ProspectIntake>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.Token).IsUnique();
+            entity.HasIndex(e => e.Status);
+            entity.Property(e => e.BusinessName).HasMaxLength(160).IsRequired();
+            entity.Property(e => e.ContactName).HasMaxLength(120);
+            entity.Property(e => e.ContactEmail).HasMaxLength(200);
+            entity.Property(e => e.ContactPhone).HasMaxLength(40);
+            entity.Property(e => e.Title).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.IntroMessage).HasMaxLength(2000);
+            entity.Property(e => e.AdvisorName).HasMaxLength(120);
+            entity.Property(e => e.AdvisorContact).HasMaxLength(200);
+            entity.Property(e => e.Language).HasMaxLength(5).IsRequired();
+            entity.Property(e => e.Status).HasMaxLength(20).IsRequired();
+            entity.Property(e => e.SubmittedIp).HasMaxLength(64);
+            entity.Property(e => e.CreatedByEmail).HasMaxLength(255).IsRequired();
+            entity.Property(e => e.Notes).HasMaxLength(4000);
         });
 
         // ScreenAd

@@ -101,6 +101,7 @@ builder.Services.AddScoped<IDonationService, DonationService>();
 builder.Services.AddScoped<IScreenAdService, ScreenAdService>();
 builder.Services.AddScoped<IPlatformAddOnService, PlatformAddOnService>();
 builder.Services.AddScoped<IPlatformContentService, PlatformContentService>();
+builder.Services.AddScoped<IProspectIntakeService, ProspectIntakeService>();
 builder.Services.AddScoped<IScreenService, ScreenService>();
 builder.Services.AddScoped<IScreenDeviceService, ScreenDeviceService>();
 // Vigila las TVs y avisa a MaalCa cuando una se cae en horario de atención (ver Workers/ScreenMonitorWorker).
@@ -3403,6 +3404,136 @@ app.MapDelete("/api/ops/site-content/{key}", async (HttpContext ctx, IPlatformCo
     await content.DeleteAsync(key);
     return Results.NoContent();
 });
+
+// ============ LEVANTAMIENTOS DE PROSPECTOS (/ops/levantamientos → /levantamiento/{token}) ============
+// MaalCa arma la lista de preguntas en /ops y comparte el enlace; el prospecto responde sin login.
+// Lectura y edición: cualquier admin de plataforma (Owner o Support — es trabajo de soporte).
+// Borrar: solo Owner, mismo criterio que el resto de acciones destructivas de /ops.
+
+app.MapGet("/api/ops/intakes", async (HttpContext ctx, IProspectIntakeService intakes) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    return Results.Ok(await intakes.GetAllAsync());
+});
+
+app.MapGet("/api/ops/intakes/{id:guid}", async (HttpContext ctx, IProspectIntakeService intakes, Guid id) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    var intake = await intakes.GetAsync(id);
+    return intake is null
+        ? Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Levantamiento no encontrado." } })
+        : Results.Ok(intake);
+});
+
+app.MapPost("/api/ops/intakes", async (HttpContext ctx, IProspectIntakeService intakes, UpsertProspectIntakeRequest request) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    try
+    {
+        var created = await intakes.CreateAsync(request, ctx.User.FindFirst("email")?.Value ?? "");
+        return Results.Created($"/api/ops/intakes/{created.Id}", created);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+});
+
+app.MapPut("/api/ops/intakes/{id:guid}", async (HttpContext ctx, IProspectIntakeService intakes, Guid id, UpsertProspectIntakeRequest request) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    try
+    {
+        var updated = await intakes.UpdateAsync(id, request);
+        return updated is null
+            ? Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Levantamiento no encontrado." } })
+            : Results.Ok(updated);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+});
+
+app.MapPatch("/api/ops/intakes/{id:guid}/status", async (HttpContext ctx, IProspectIntakeService intakes, Guid id, SetProspectIntakeStatusRequest request) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    try
+    {
+        var updated = await intakes.SetStatusAsync(id, request.Status);
+        return updated is null
+            ? Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Levantamiento no encontrado." } })
+            : Results.Ok(updated);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+});
+
+app.MapDelete("/api/ops/intakes/{id:guid}", async (HttpContext ctx, IProspectIntakeService intakes, Guid id) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    if (ctx.User.FindFirst("platform_role")?.Value != nameof(PlatformAdminRole.Owner))
+        return Results.Json(new { error = new { code = "OWNER_ONLY", message = "Solo un Owner puede borrar levantamientos." } }, statusCode: 403);
+    return await intakes.DeleteAsync(id) ? Results.NoContent() : Results.NotFound();
+});
+
+app.MapGet("/api/public/intakes/{token:guid}", async (IProspectIntakeService intakes, Guid token) =>
+{
+    var intake = await intakes.GetPublicAsync(token);
+    return intake is null
+        ? Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Formulario no encontrado." } })
+        : Results.Ok(intake);
+})
+.AllowAnonymous();
+
+// Autoguardado (submit=false) y envío final (submit=true). La web llama a través de su propia
+// ruta, que manda X-Internal-Secret: solo entonces se devuelve a quién avisar (el correo del admin
+// nunca sale hacia el navegador del prospecto).
+app.MapPut("/api/public/intakes/{token:guid}/answers", async (HttpContext ctx, IProspectIntakeService intakes, Guid token, SaveProspectIntakeAnswersRequest request) =>
+{
+    try
+    {
+        var ip = ctx.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
+                 ?? ctx.Connection.RemoteIpAddress?.ToString();
+        var result = await intakes.SaveAnswersAsync(token, request, ip);
+
+        var secret = Environment.GetEnvironmentVariable("INTERNAL_NOTIFICATIONS_SECRET");
+        var trusted = !string.IsNullOrWhiteSpace(secret) && ctx.Request.Headers["X-Internal-Secret"].ToString() == secret;
+
+        return Results.Ok(new
+        {
+            status = result.Status,
+            lastSavedAt = result.LastSavedAt,
+            submittedAt = result.SubmittedAt,
+            questionCount = result.QuestionCount,
+            answeredCount = result.AnsweredCount,
+            notify = trusted && result.JustSubmitted
+                ? new { id = result.Id, businessName = result.BusinessName, contactName = result.ContactName, to = result.CreatedByEmail }
+                : null,
+        });
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Formulario no encontrado." } });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.Conflict(new { error = new { code = "NOT_OPEN", message = ex.Message } });
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+    }
+})
+.AllowAnonymous();
 
 // ============ SCREEN ADS (comerciales del Menu Board — Fase 9 Etapa A) ============
 app.MapGet("/api/affiliates/{id}/screen-ads", async (
