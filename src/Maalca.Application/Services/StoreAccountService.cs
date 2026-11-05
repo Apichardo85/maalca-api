@@ -118,6 +118,7 @@ public class StoreAccountService : IStoreAccountService
             // Doble clic / dos pestañas: el índice único ya la creó. Se devuelve lo que hay.
             return await GetMeAsync(slug, supabaseUserId);
         }
+        if (open) await EnsureCustomerAsync(account);
         if (!open) await NotifyOwnerAsync(affiliate, account);
         return await GetMeAsync(slug, supabaseUserId);
     }
@@ -195,8 +196,10 @@ public class StoreAccountService : IStoreAccountService
             var status = r.Status.Trim().ToLowerInvariant();
             if (status is not (StoreAccounts.Pending or StoreAccounts.Approved or StoreAccounts.Rejected))
                 throw new ArgumentException("Estado inválido.");
-            if (status == StoreAccounts.Approved && account.Status != StoreAccounts.Approved) account.ApprovedAt = DateTime.UtcNow;
+            var newlyApproved = status == StoreAccounts.Approved && account.Status != StoreAccounts.Approved;
+            if (newlyApproved) account.ApprovedAt = DateTime.UtcNow;
             account.Status = status;
+            if (newlyApproved) await EnsureCustomerAsync(account);
         }
         if (r.ClearPriceList) account.PriceListId = null;
         else if (r.PriceListId is { } listId)
@@ -212,6 +215,45 @@ public class StoreAccountService : IStoreAccountService
 
         var orders = await _db.Orders.CountAsync(o => o.AffiliateId == affiliateId && o.StoreCustomerId == account.Id);
         return ToDto(account, orders);
+    }
+
+    // Un mayorista aprobado es un cliente del negocio: hasta ahora vivía solo en "Miembros de
+    // tienda" y la pantalla de Clientes salía vacía, así que no se le podía facturar ni cobrarle
+    // en el punto de venta sin volver a escribirlo a mano. Se da de alta (o se actualiza) al
+    // aprobarlo. Falla abierto: si esto revienta, la aprobación ya está guardada.
+    private async Task EnsureCustomerAsync(StoreCustomer account)
+    {
+        try
+        {
+            var email = account.Email.Trim().ToLowerInvariant();
+            var name = string.IsNullOrWhiteSpace(account.BusinessName) ? account.Name : account.BusinessName!;
+            var existing = await _db.Customers.FirstOrDefaultAsync(c =>
+                c.AffiliateId == account.AffiliateId && c.Email != null && c.Email.ToLower() == email);
+
+            if (existing is null)
+            {
+                _db.Customers.Add(new Customer
+                {
+                    AffiliateId = account.AffiliateId,
+                    Name = Clip(name, 160) ?? account.Name,
+                    Email = email,
+                    Phone = account.Phone,
+                    Status = "Active",
+                });
+            }
+            else
+            {
+                // No se pisa lo que el dueño haya escrito a mano: solo se rellenan los huecos.
+                if (string.IsNullOrWhiteSpace(existing.Phone)) existing.Phone = account.Phone;
+                existing.Status = "Active";
+                existing.UpdatedAt = DateTime.UtcNow;
+            }
+            await _db.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            // Carrera entre dos aprobaciones: el cliente ya existe y no hay nada que hacer.
+        }
     }
 
     public async Task<StoreSettingsDto?> GetSettingsAsync(Guid affiliateId)

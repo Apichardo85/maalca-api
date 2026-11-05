@@ -1,4 +1,4 @@
-namespace Maalca.Application.Common.DTOs;
+﻿namespace Maalca.Application.Common.DTOs;
 
 // Resumen de Inventario — valor total y stock bajo, usado por la pantalla de Inventario y por
 // la alerta del Dashboard del negocio (antes el stock bajo solo se veía entrando a Inventario).
@@ -6,7 +6,10 @@ public record InventorySummaryDto(
     decimal TotalValue,
     int TotalItems,
     int LowStockCount,
-    IReadOnlyList<LowStockItemDto> LowStockItems
+    IReadOnlyList<LowStockItemDto> LowStockItems,
+    // Cuántos items llevan seguimiento de stock. 0 = el negocio no controla inventario, así que
+    // el valor total y las alertas de stock bajo no significan nada y la pantalla los oculta.
+    int TrackedCount = 0
 );
 
 public record LowStockItemDto(
