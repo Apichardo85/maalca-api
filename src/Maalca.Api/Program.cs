@@ -3248,6 +3248,25 @@ app.MapPost("/api/public/store/{slug}/orders", async (HttpContext ctx, IOrderSer
 }).AllowAnonymous();
 
 // Dueño: miembros de su tienda y cómo se registran.
+// Ficha del cliente (estadísticas, productos, cuenta mayorista), lista de precios para el POS y reporte por cliente.
+app.MapGet("/api/affiliates/{id:guid}/customers/{customerId:guid}/insights", async (HttpContext ctx, IStoreAccountService svc, Guid id, Guid customerId) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    var dto = await svc.GetCustomerInsightsAsync(id, customerId);
+    return dto is null ? Results.NotFound() : Results.Ok(dto);
+});
+app.MapGet("/api/affiliates/{id:guid}/customers/{customerId:guid}/price-list", async (HttpContext ctx, IStoreAccountService svc, Guid id, Guid customerId) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    var dto = await svc.GetCustomerPriceListAsync(id, customerId);
+    return dto is null ? Results.NoContent() : Results.Ok(dto);
+});
+app.MapGet("/api/affiliates/{id:guid}/customers-report", async (HttpContext ctx, IStoreAccountService svc, Guid id, DateTime? from, DateTime? to) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    return Results.Ok(await svc.GetSalesReportAsync(id, from, to));
+});
+
 app.MapGet("/api/affiliates/{id:guid}/store-customers", async (HttpContext ctx, IStoreAccountService svc, Guid id) =>
     !IsActiveAffiliate(ctx, id) ? Results.Forbid() : Results.Ok(await svc.ListAsync(id)));
 

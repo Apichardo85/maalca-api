@@ -136,3 +136,31 @@ public record StoreSettingsDto(string SignupMode, Guid? DefaultPriceListId, stri
 
 /// <summary>Impuesto de venta del negocio. Rate en % (null = sin configurar).</summary>
 public record TaxSettingsDto(decimal? Rate, bool TaxShipping, string? State = null);
+
+// ── Ficha del cliente (panel del dueño) ─────────────────────────────────────────────────────────
+/// <summary>Cuenta de tienda (mayorista) ligada al cliente por correo; null si no tiene.</summary>
+public record CustomerStoreAccountDto(Guid Id, string Status, string? BusinessName, string? TaxId, Guid? PriceListId, string? PriceListName);
+
+/// <summary>Compras = pedidos no cancelados; en pago en el local solo cuentan los ya cobrados.</summary>
+public record CustomerStatsDto(
+    int OrderCount, int PurchaseCount, decimal Spent, decimal AvgTicket,
+    DateTime? FirstOrderAt, DateTime? LastOrderAt, double? AvgDaysBetween);
+
+public record CustomerMonthDto(string Month, decimal Total, int Orders);
+public record CustomerTopProductDto(string Name, int Qty, decimal Amount, DateTime LastAt);
+public record CustomerOrderLineDto(string Name, int Qty, decimal Price);
+public record CustomerOrderDetailDto(Guid Id, DateTime CreatedAt, string Status, decimal Total, bool Counted, IReadOnlyList<CustomerOrderLineDto> Items);
+
+public record CustomerInsightsDto(
+    CustomerStoreAccountDto? Account,
+    CustomerStatsDto Stats,
+    IReadOnlyList<CustomerMonthDto> Monthly,
+    IReadOnlyList<CustomerTopProductDto> TopProducts,
+    IReadOnlyList<CustomerOrderDetailDto> Orders);
+
+/// <summary>Lista de precios de un cliente para el POS: precio por producto ya resuelto. Null si no tiene lista activa.</summary>
+public record CustomerPriceListDto(string Name, decimal? MinOrderAmount, bool TaxExempt, IReadOnlyList<MemberPriceDto> Prices);
+
+/// <summary>Reporte de ventas por cliente en un rango de fechas.</summary>
+public record CustomerSalesRowDto(Guid CustomerId, string Name, string? Email, string? Phone, string? BusinessName,
+    int Orders, decimal Spent, decimal AvgTicket, DateTime? LastOrderAt);
