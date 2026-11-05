@@ -30,11 +30,13 @@ public class StoreAccountService : IStoreAccountService
 {
     private readonly AppDbContext _db;
     private readonly IOwnerNotificationService _owner;
+    private readonly IStoreAccountNotificationService _notify;
 
-    public StoreAccountService(AppDbContext db, IOwnerNotificationService owner)
+    public StoreAccountService(AppDbContext db, IOwnerNotificationService owner, IStoreAccountNotificationService notify)
     {
         _db = db;
         _owner = owner;
+        _notify = notify;
     }
 
     /// <summary>Tienda publicada con el módulo de listas de precio activo; si no, no hay cuentas.</summary>
@@ -118,7 +120,11 @@ public class StoreAccountService : IStoreAccountService
             // Doble clic / dos pestañas: el índice único ya la creó. Se devuelve lo que hay.
             return await GetMeAsync(slug, supabaseUserId);
         }
-        if (open) await EnsureCustomerAsync(account);
+        if (open)
+        {
+            await EnsureCustomerAsync(account);
+            await _notify.NotifyApprovedAsync(account, affiliate, await PriceListNameAsync(account.PriceListId));
+        }
         if (!open) await NotifyOwnerAsync(affiliate, account);
         return await GetMeAsync(slug, supabaseUserId);
     }
@@ -191,15 +197,16 @@ public class StoreAccountService : IStoreAccountService
             .FirstOrDefaultAsync(c => c.Id == id && c.AffiliateId == affiliateId);
         if (account is null) return null;
 
+        var justApproved = false;
         if (r.Status is not null)
         {
             var status = r.Status.Trim().ToLowerInvariant();
             if (status is not (StoreAccounts.Pending or StoreAccounts.Approved or StoreAccounts.Rejected))
                 throw new ArgumentException("Estado inválido.");
-            var newlyApproved = status == StoreAccounts.Approved && account.Status != StoreAccounts.Approved;
-            if (newlyApproved) account.ApprovedAt = DateTime.UtcNow;
+            justApproved = status == StoreAccounts.Approved && account.Status != StoreAccounts.Approved;
+            if (justApproved) account.ApprovedAt = DateTime.UtcNow;
             account.Status = status;
-            if (newlyApproved) await EnsureCustomerAsync(account);
+            if (justApproved) await EnsureCustomerAsync(account);
         }
         if (r.ClearPriceList) account.PriceListId = null;
         else if (r.PriceListId is { } listId)
@@ -213,9 +220,20 @@ public class StoreAccountService : IStoreAccountService
         await _db.SaveChangesAsync();
         await _db.Entry(account).Reference(c => c.PriceList).LoadAsync();
 
+        // Después de guardar (y con la lista ya cargada), se le avisa al cliente: la tienda le
+        // prometió "te avisamos cuando te aprueben".
+        if (justApproved)
+        {
+            var affiliate = await _db.Affiliates.FirstOrDefaultAsync(a => a.Id == affiliateId);
+            if (affiliate is not null) await _notify.NotifyApprovedAsync(account, affiliate, account.PriceList?.Name);
+        }
+
         var orders = await _db.Orders.CountAsync(o => o.AffiliateId == affiliateId && o.StoreCustomerId == account.Id);
         return ToDto(account, orders);
     }
+
+    private async Task<string?> PriceListNameAsync(Guid? priceListId) =>
+        priceListId is null ? null : await _db.PriceLists.Where(l => l.Id == priceListId).Select(l => l.Name).FirstOrDefaultAsync();
 
     // Un mayorista aprobado es un cliente del negocio: hasta ahora vivía solo en "Miembros de
     // tienda" y la pantalla de Clientes salía vacía, así que no se le podía facturar ni cobrarle
