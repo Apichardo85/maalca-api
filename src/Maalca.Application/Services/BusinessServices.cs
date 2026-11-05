@@ -721,7 +721,7 @@ public class InventoryService : IInventoryService
                 EF.Functions.ILike(i.Name, $"%{search}%") ||
                 (i.Barcode != null && EF.Functions.ILike(i.Barcode, $"%{search}%")) ||
                 (i.InternalCode != null && EF.Functions.ILike(i.InternalCode, $"%{search}%")));
-        if (lowStock == true) query = query.Where(i => i.Quantity <= i.MinStock);
+        if (lowStock == true) query = query.Where(i => i.TrackStock && i.Quantity <= i.MinStock);
         var total = await query.CountAsync();
         var data = await query.OrderBy(i => i.Name).Skip((page - 1) * 20).Take(20).ToListAsync();
         return new PaginatedResponse<InventoryItem> { Data = data, Total = total, Page = page, TotalPages = (int)Math.Ceiling((double)total / 20) };
@@ -832,13 +832,18 @@ public class InventoryService : IInventoryService
     public async Task<InventorySummaryDto> GetSummaryAsync(Guid affiliateId)
     {
         var items = await _context.InventoryItems.Where(i => i.AffiliateId == affiliateId).ToListAsync();
-        var totalValue = items.Sum(i => i.Quantity * i.UnitPrice);
-        var low = items.Where(i => i.Quantity <= i.MinStock).OrderBy(i => i.Name).ToList();
+        // Un item con el seguimiento de stock apagado no tiene cantidad real: su Quantity es 0 porque
+        // nadie la lleva, no porque se haya agotado. Contarlo como "stock bajo" llena el panel de
+        // alertas falsas (un catálogo importado sin inventario salía 646 de 646 en bajo).
+        var tracked = items.Where(i => i.TrackStock).ToList();
+        var totalValue = tracked.Sum(i => i.Quantity * i.UnitPrice);
+        var low = tracked.Where(i => i.Quantity <= i.MinStock).OrderBy(i => i.Name).ToList();
         return new InventorySummaryDto(
             totalValue,
             items.Count,
             low.Count,
-            low.Select(i => new LowStockItemDto(i.Id, i.Name, i.Quantity, i.MinStock, i.Unit)).ToList());
+            low.Select(i => new LowStockItemDto(i.Id, i.Name, i.Quantity, i.MinStock, i.Unit)).ToList(),
+            tracked.Count);
     }
 
     public async Task<List<InventoryPhotoIndexDto>> GetPhotoIndexAsync(Guid affiliateId)
