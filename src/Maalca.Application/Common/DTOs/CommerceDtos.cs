@@ -100,7 +100,14 @@ public record StoreMeDto(
     string? PriceListName,
     decimal? DiscountPercent,
     decimal? MinOrderAmount,
-    bool TaxExempt = false);
+    bool TaxExempt = false,
+    // Datos que dio al pedir la cuenta ("Mi cuenta" los muestra y deja corregirlos).
+    string? Phone = null,
+    string? BusinessName = null,
+    string? TaxId = null);
+
+/// <summary>"Mi cuenta": el cliente corrige sus datos. Null = no se toca.</summary>
+public record UpdateMyStoreProfileRequest(string? Name, string? Phone, string? BusinessName, string? TaxId);
 
 public record JoinStoreRequest(string Name, string? Phone, string? BusinessName, string? TaxId, string? Message);
 
@@ -110,9 +117,12 @@ public record StoreOrderSummaryDto(
     Guid Id, DateTime CreatedAt, string Status, decimal Total, string Currency, int ItemCount,
     string? FulfillmentType, string? TrackingToken, string? PriceListName,
     // Líneas del pedido para "Comprar de nuevo": el carrito las vuelve a cargar y el API recalcula todo al pedir.
-    IReadOnlyList<StoreOrderLineDto>? Items = null);
+    IReadOnlyList<StoreOrderLineDto>? Items = null,
+    string? ShippingCarrier = null,
+    string? TrackingNumber = null);
 
-public record StoreOrderLineDto(string ItemId, string Name, int Qty, decimal UnitPrice);
+// ImageUrl: foto actual del producto en el catálogo (miniatura en "Mi cuenta"); null si ya no existe o no tiene.
+public record StoreOrderLineDto(string ItemId, string Name, int Qty, decimal UnitPrice, string? ImageUrl = null);
 
 public record StoreCustomerDto(
     Guid Id, string Name, string Email, string? Phone, string? BusinessName, string? TaxId, string? Message,

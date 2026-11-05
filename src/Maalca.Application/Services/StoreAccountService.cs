@@ -14,6 +14,7 @@ public interface IStoreAccountService
     Task<StoreMeDto?> JoinAsync(string slug, string supabaseUserId, string email, JoinStoreRequest request);
     Task<IReadOnlyList<MemberPriceDto>?> GetPricesAsync(string slug, string supabaseUserId);
     Task<IReadOnlyList<StoreOrderSummaryDto>?> GetMyOrdersAsync(string slug, string supabaseUserId);
+    Task<StoreMeDto?> UpdateMyProfileAsync(string slug, string supabaseUserId, UpdateMyStoreProfileRequest request);
 
     // Dueño
     Task<IReadOnlyList<StoreCustomerDto>> ListAsync(Guid affiliateId);
@@ -63,7 +64,29 @@ public class StoreAccountService : IStoreAccountService
         // La lista solo se informa si está activa: una lista pausada = precio público (igual que en el pedido).
         var list = account.Status == StoreAccounts.Approved && account.PriceList is { IsActive: true } pl ? pl : null;
         return new StoreMeDto(account.Status, mode, affiliate.StoreSignupNote, account.Name, account.Email,
-            list?.Name, list?.DiscountPercent, list?.MinOrderAmount, list?.TaxExempt ?? false);
+            list?.Name, list?.DiscountPercent, list?.MinOrderAmount, list?.TaxExempt ?? false,
+            account.Phone, account.BusinessName, account.TaxId);
+    }
+
+    public async Task<StoreMeDto?> UpdateMyProfileAsync(string slug, string supabaseUserId, UpdateMyStoreProfileRequest r)
+    {
+        var (affiliate, _) = await StoreAsync(slug);
+        if (affiliate is null) return null;
+        var account = await _db.StoreCustomers
+            .FirstOrDefaultAsync(c => c.AffiliateId == affiliate.Id && c.SupabaseUserId == supabaseUserId);
+        if (account is null) return null;
+        if (r.Name is not null)
+        {
+            var name = Clip(r.Name, 120);
+            if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Escribe tu nombre.");
+            account.Name = name;
+        }
+        if (r.Phone is not null) account.Phone = Clip(r.Phone, 30);
+        if (r.BusinessName is not null) account.BusinessName = Clip(r.BusinessName, 160);
+        if (r.TaxId is not null) account.TaxId = Clip(r.TaxId, 40);
+        account.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+        return await GetMeAsync(slug, supabaseUserId);
     }
 
     public async Task<StoreMeDto?> JoinAsync(string slug, string supabaseUserId, string email, JoinStoreRequest r)
@@ -173,30 +196,37 @@ public class StoreAccountService : IStoreAccountService
         var orders = await _db.Orders.AsNoTracking()
             .Where(o => o.AffiliateId == affiliate.Id && o.StoreCustomerId == accountId)
             .OrderByDescending(o => o.CreatedAt).Take(50)
-            .Select(o => new { o.Id, o.CreatedAt, o.Status, o.Total, o.Currency, o.ItemsJson, o.FulfillmentType, o.TrackingToken, o.PriceListName })
+            .Select(o => new { o.Id, o.CreatedAt, o.Status, o.Total, o.Currency, o.ItemsJson, o.FulfillmentType, o.TrackingToken, o.PriceListName, o.ShippingCarrier, o.TrackingNumber })
             .ToListAsync();
-        return orders.Select(o =>
+        var parsed = orders.Select(o => (Order: o, Lines: JsonArrayField.Parse<OrderItemDto>(o.ItemsJson))).ToList();
+
+        // Miniaturas: la foto actual de cada producto (inventario o producto), una sola consulta por tabla.
+        var ids = parsed.SelectMany(p => p.Lines).Select(l => Guid.TryParse(l.ItemId, out var g) ? g : Guid.Empty)
+            .Where(g => g != Guid.Empty).Distinct().ToList();
+        var images = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (ids.Count > 0)
         {
-            var lines = JsonArrayField.Parse<OrderItemDto>(o.ItemsJson);
+            var inv = await _db.InventoryItems.AsNoTracking()
+                .Where(i => i.AffiliateId == affiliate.Id && ids.Contains(i.Id) && i.ImageUrl != null)
+                .Select(i => new { i.Id, i.ImageUrl }).ToListAsync();
+            var prod = await _db.Products.AsNoTracking()
+                .Where(p => p.AffiliateId == affiliate.Id && ids.Contains(p.Id) && p.ImageUrl != null)
+                .Select(p => new { p.Id, p.ImageUrl }).ToListAsync();
+            foreach (var i in inv) images[i.Id.ToString()] = i.ImageUrl!;
+            foreach (var p in prod) images.TryAdd(p.Id.ToString(), p.ImageUrl!);
+        }
+
+        return parsed.Select(p =>
+        {
+            var o = p.Order;
             return new StoreOrderSummaryDto(
                 o.Id, o.CreatedAt, o.Status.ToString(), o.Total, o.Currency,
-                lines.Sum(i => i.Qty),
+                p.Lines.Sum(i => i.Qty),
                 o.FulfillmentType, o.TrackingToken, o.PriceListName,
-                lines.Select(i => new StoreOrderLineDto(i.ItemId, i.Name, i.Qty, i.Price)).ToList());
+                p.Lines.Select(i => new StoreOrderLineDto(i.ItemId, i.Name, i.Qty, i.Price,
+                    images.TryGetValue(i.ItemId ?? string.Empty, out var img) ? img : null)).ToList(),
+                o.ShippingCarrier, o.TrackingNumber);
         }).ToList();
-    }
-
-    /// <summary>Quita al miembro de la tienda. Sus pedidos se conservan (solo pierden el enlace a la cuenta); si vuelve, pide acceso de nuevo.</summary>
-    public async Task<bool> DeleteAsync(Guid affiliateId, Guid id)
-    {
-        var account = await _db.StoreCustomers.FirstOrDefaultAsync(c => c.AffiliateId == affiliateId && c.Id == id);
-        if (account is null) return false;
-        await _db.Orders
-            .Where(o => o.AffiliateId == affiliateId && o.StoreCustomerId == id)
-            .ExecuteUpdateAsync(set => set.SetProperty(o => o.StoreCustomerId, (Guid?)null));
-        _db.StoreCustomers.Remove(account);
-        await _db.SaveChangesAsync();
-        return true;
     }
 
     public async Task<IReadOnlyList<StoreCustomerDto>> ListAsync(Guid affiliateId)

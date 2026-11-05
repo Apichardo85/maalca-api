@@ -114,7 +114,9 @@ public class OrderService : IOrderService
         var tax = taxRate is decimal orderRate
             ? SalesTax.Compute(orderRate, priced.Subtotal, shippingCost, affiliate.SalesTaxOnShipping, taxExempt)
             : priced.Tax;
-        var customer = await LinkCustomerAsync(affiliate.Id, request.CustomerName, request.CustomerPhone, request.CustomerEmail);
+        // Con sesión de tienda, el cliente es el de la cuenta (correo verificado), aunque escriba otro teléfono.
+        var customer = (storeAccount is not null ? await LinkStoreAccountCustomerAsync(affiliate.Id, storeAccount.StoreCustomerId) : null)
+            ?? await LinkCustomerAsync(affiliate.Id, request.CustomerName, request.CustomerPhone, request.CustomerEmail);
 
         var order = new Order
         {
@@ -979,6 +981,37 @@ public class OrderService : IOrderService
     /// por teléfono; si no hay teléfono, por correo). Sin teléfono ni correo no se crea nada —
     /// no hay cómo reconocer al cliente la próxima vez.
     /// </summary>
+    /// <summary>Cliente (Customers) de una cuenta de tienda: se busca por el correo verificado de la cuenta y, si no
+    /// existe, se crea con el nombre de su empresa. Null si la cuenta no tiene correo (cae al enlace normal).</summary>
+    private async Task<Maalca.Domain.Entities.Customer?> LinkStoreAccountCustomerAsync(Guid affiliateId, Guid storeCustomerId)
+    {
+        var account = await _db.StoreCustomers.AsNoTracking()
+            .Where(c => c.Id == storeCustomerId && c.AffiliateId == affiliateId)
+            .Select(c => new { c.Email, c.Name, c.BusinessName, c.Phone })
+            .FirstOrDefaultAsync();
+        var email = Clean(account?.Email)?.ToLowerInvariant();
+        if (account is null || email is null) return null;
+
+        var customer = await _db.Customers.FirstOrDefaultAsync(c =>
+            c.AffiliateId == affiliateId && c.Email != null && c.Email.ToLower() == email);
+        if (customer is not null)
+        {
+            if (customer.Phone is null && Clean(account.Phone) is { } phone) customer.Phone = phone;
+            return customer;
+        }
+
+        customer = new Maalca.Domain.Entities.Customer
+        {
+            AffiliateId = affiliateId,
+            Name = Clean(account.BusinessName) ?? Clean(account.Name) ?? email,
+            Email = email,
+            Phone = Clean(account.Phone),
+        };
+        _db.Customers.Add(customer);
+        await _db.SaveChangesAsync();
+        return customer;
+    }
+
     private async Task<Maalca.Domain.Entities.Customer?> LinkCustomerAsync(Guid affiliateId, string? name, string? phone, string? email)
     {
         phone = Clean(phone);

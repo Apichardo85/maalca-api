@@ -3189,6 +3189,18 @@ app.MapGet("/api/public/store/{slug}/me", async (HttpContext ctx, IStoreAccountS
     return me is null ? Results.NotFound() : Results.Ok(me);
 }).AllowAnonymous();
 
+app.MapPatch("/api/public/store/{slug}/me", async (HttpContext ctx, IStoreAccountService svc, string slug, UpdateMyStoreProfileRequest request) =>
+{
+    var sub = StoreUser(ctx);
+    if (string.IsNullOrEmpty(sub)) return Results.Unauthorized();
+    try
+    {
+        var me = await svc.UpdateMyProfileAsync(slug, sub, request);
+        return me is null ? Results.NotFound() : Results.Ok(me);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+}).AllowAnonymous();
+
 app.MapPost("/api/public/store/{slug}/join", async (HttpContext ctx, IStoreAccountService svc, string slug, JoinStoreRequest request) =>
 {
     var sub = StoreUser(ctx);
