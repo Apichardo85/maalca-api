@@ -18,3 +18,5 @@ packages/
 # OS files
 .DS_Store
 Thumbs.db
+
+_to_delete/
