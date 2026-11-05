@@ -3251,6 +3251,12 @@ app.MapPatch("/api/affiliates/{id:guid}/store-customers/{customerId:guid}", asyn
     catch (ArgumentException ex) { return InvalidInput(ex); }
 });
 
+app.MapDelete("/api/affiliates/{id:guid}/store-customers/{customerId:guid}", async (HttpContext ctx, IStoreAccountService svc, Guid id, Guid customerId) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    return await svc.DeleteAsync(id, customerId) ? Results.NoContent() : Results.NotFound();
+});
+
 app.MapGet("/api/affiliates/{id:guid}/store-settings", async (HttpContext ctx, IStoreAccountService svc, Guid id) =>
 {
     if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
