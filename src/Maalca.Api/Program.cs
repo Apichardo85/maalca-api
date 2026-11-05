@@ -96,6 +96,7 @@ builder.Services.AddScoped<Maalca.Application.Common.Payments.IPaymentProvider, 
 builder.Services.AddScoped<Maalca.Application.Common.Payments.IPaymentProviderResolver, Maalca.Application.Services.Payments.PaymentProviderResolver>();
 builder.Services.AddScoped<IPriceListService, PriceListService>();
 builder.Services.AddScoped<IShippingService, ShippingService>();
+builder.Services.AddScoped<IStoreAccountNotificationService, StoreAccountNotificationService>();
 builder.Services.AddScoped<IStoreAccountService, StoreAccountService>();
 builder.Services.AddScoped<IDonationService, DonationService>();
 builder.Services.AddScoped<IScreenAdService, ScreenAdService>();
