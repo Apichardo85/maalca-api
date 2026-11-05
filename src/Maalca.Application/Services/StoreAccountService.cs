@@ -153,10 +153,21 @@ public class StoreAccountService : IStoreAccountService
     {
         var (affiliate, _) = await StoreAsync(slug);
         if (affiliate is null) return null;
-        var accountId = await _db.StoreCustomers.AsNoTracking()
+        var account = await _db.StoreCustomers.AsNoTracking()
             .Where(c => c.AffiliateId == affiliate.Id && c.SupabaseUserId == supabaseUserId)
-            .Select(c => (Guid?)c.Id).FirstOrDefaultAsync();
-        if (accountId is null) return Array.Empty<StoreOrderSummaryDto>();
+            .Select(c => new { c.Id, c.Email }).FirstOrDefaultAsync();
+        if (account is null) return Array.Empty<StoreOrderSummaryDto>();
+        var accountId = (Guid?)account.Id;
+
+        // Pedidos hechos antes de tener cuenta (como invitado): se enlazan por el correo ya verificado de la sesión.
+        var email = (account.Email ?? string.Empty).Trim().ToLower();
+        if (email.Length > 0)
+        {
+            await _db.Orders
+                .Where(o => o.AffiliateId == affiliate.Id && o.StoreCustomerId == null
+                            && o.CustomerEmail != null && o.CustomerEmail.ToLower() == email)
+                .ExecuteUpdateAsync(set => set.SetProperty(o => o.StoreCustomerId, accountId));
+        }
 
         var orders = await _db.Orders.AsNoTracking()
             .Where(o => o.AffiliateId == affiliate.Id && o.StoreCustomerId == accountId)
