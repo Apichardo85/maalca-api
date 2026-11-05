@@ -3255,6 +3255,12 @@ app.MapGet("/api/affiliates/{id:guid}/customers/{customerId:guid}/insights", asy
     var dto = await svc.GetCustomerInsightsAsync(id, customerId);
     return dto is null ? Results.NotFound() : Results.Ok(dto);
 });
+app.MapPost("/api/affiliates/{id:guid}/customers/{customerId:guid}/clear-no-shows", async (HttpContext ctx, IStoreAccountService svc, Guid id, Guid customerId) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    if (ctx.User.FindFirst("role")?.Value == "Staff") return Results.Forbid();
+    return await svc.ClearCustomerNoShowsAsync(id, customerId) ? Results.NoContent() : Results.NotFound();
+});
 app.MapGet("/api/affiliates/{id:guid}/customers/{customerId:guid}/price-list", async (HttpContext ctx, IStoreAccountService svc, Guid id, Guid customerId) =>
 {
     if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();

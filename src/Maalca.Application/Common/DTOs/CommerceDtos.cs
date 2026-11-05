@@ -119,7 +119,9 @@ public record StoreOrderSummaryDto(
     // Líneas del pedido para "Comprar de nuevo": el carrito las vuelve a cargar y el API recalcula todo al pedir.
     IReadOnlyList<StoreOrderLineDto>? Items = null,
     string? ShippingCarrier = null,
-    string? TrackingNumber = null);
+    string? TrackingNumber = null,
+    // Cuenta como compra (cobrada). Mismo criterio que "Gastado" en la ficha del dueño.
+    bool Counted = true);
 
 // ImageUrl: foto actual del producto en el catálogo (miniatura en "Mi cuenta"); null si ya no existe o no tiene.
 public record StoreOrderLineDto(string ItemId, string Name, int Qty, decimal UnitPrice, string? ImageUrl = null);
@@ -156,7 +158,9 @@ public record CustomerInsightsDto(
     CustomerStatsDto Stats,
     IReadOnlyList<CustomerMonthDto> Monthly,
     IReadOnlyList<CustomerTopProductDto> TopProducts,
-    IReadOnlyList<CustomerOrderDetailDto> Orders);
+    IReadOnlyList<CustomerOrderDetailDto> Orders,
+    // Marcas "No vino" del cliente: si el negocio las usa, bloquean pedir pagando al recoger.
+    int NoShows = 0);
 
 /// <summary>Lista de precios de un cliente para el POS: precio por producto ya resuelto. Null si no tiene lista activa.</summary>
 public record CustomerPriceListDto(string Name, decimal? MinOrderAmount, bool TaxExempt, IReadOnlyList<MemberPriceDto> Prices);

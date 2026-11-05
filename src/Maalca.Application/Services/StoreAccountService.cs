@@ -27,6 +27,7 @@ public interface IStoreAccountService
     // Ficha del cliente, POS y reportes
     Task<CustomerInsightsDto?> GetCustomerInsightsAsync(Guid affiliateId, Guid customerId);
     Task<CustomerPriceListDto?> GetCustomerPriceListAsync(Guid affiliateId, Guid customerId);
+    Task<bool> ClearCustomerNoShowsAsync(Guid affiliateId, Guid customerId);
     Task<IReadOnlyList<CustomerSalesRowDto>> GetSalesReportAsync(Guid affiliateId, DateTime? from, DateTime? to);
 }
 
@@ -202,7 +203,7 @@ public class StoreAccountService : IStoreAccountService
         var orders = await _db.Orders.AsNoTracking()
             .Where(o => o.AffiliateId == affiliate.Id && o.StoreCustomerId == accountId)
             .OrderByDescending(o => o.CreatedAt).Take(50)
-            .Select(o => new { o.Id, o.CreatedAt, o.Status, o.Total, o.Currency, o.ItemsJson, o.FulfillmentType, o.TrackingToken, o.PriceListName, o.ShippingCarrier, o.TrackingNumber })
+            .Select(o => new { o.Id, o.CreatedAt, o.Status, o.Total, o.Currency, o.ItemsJson, o.FulfillmentType, o.TrackingToken, o.PriceListName, o.ShippingCarrier, o.TrackingNumber, o.PaymentMethod, o.CollectedAt })
             .ToListAsync();
         var parsed = orders.Select(o => (Order: o, Lines: JsonArrayField.Parse<OrderItemDto>(o.ItemsJson))).ToList();
 
@@ -231,7 +232,8 @@ public class StoreAccountService : IStoreAccountService
                 o.FulfillmentType, o.TrackingToken, o.PriceListName,
                 p.Lines.Select(i => new StoreOrderLineDto(i.ItemId, i.Name, i.Qty, i.Price,
                     images.TryGetValue(i.ItemId ?? string.Empty, out var img) ? img : null)).ToList(),
-                o.ShippingCarrier, o.TrackingNumber);
+                o.ShippingCarrier, o.TrackingNumber,
+                IsPurchase(o.Status, o.PaymentMethod, o.CollectedAt));
         }).ToList();
     }
 
@@ -412,7 +414,7 @@ public class StoreAccountService : IStoreAccountService
     {
         var customer = await _db.Customers.AsNoTracking()
             .Where(c => c.Id == customerId && c.AffiliateId == affiliateId)
-            .Select(c => new { c.Email }).FirstOrDefaultAsync();
+            .Select(c => new { c.Email, c.NoShows }).FirstOrDefaultAsync();
         if (customer is null) return null;
 
         var account = await AccountForCustomerAsync(affiliateId, customer.Email);
@@ -440,7 +442,7 @@ public class StoreAccountService : IStoreAccountService
             orders.Count(o => o.Status != OrderStatus.Canceled), bought.Count, spent,
             bought.Count > 0 ? Math.Round(spent / bought.Count, 2) : 0,
             bought.FirstOrDefault()?.CreatedAt, bought.LastOrDefault()?.CreatedAt,
-            avgDays is null ? null : Math.Round(avgDays.Value, 1));
+            avgDays is null or < 1 ? null : Math.Round(avgDays.Value, 1));
 
         // Últimos 12 meses (incluye meses en cero para que la gráfica no salte).
         var now = DateTime.UtcNow;
@@ -461,7 +463,18 @@ public class StoreAccountService : IStoreAccountService
             o.Id, o.CreatedAt, o.Status.ToString(), o.Total, o.Counted,
             o.Lines.Select(l => new CustomerOrderLineDto(l.Name, l.Qty, l.Price)).ToList())).ToList();
 
-        return new CustomerInsightsDto(accountDto, stats, monthly, top, detail);
+        return new CustomerInsightsDto(accountDto, stats, monthly, top, detail, customer.NoShows);
+    }
+
+    /// <summary>Quita las marcas "No vino" del cliente para que pueda volver a pedir pagando al recoger.</summary>
+    public async Task<bool> ClearCustomerNoShowsAsync(Guid affiliateId, Guid customerId)
+    {
+        var customer = await _db.Customers.FirstOrDefaultAsync(c => c.Id == customerId && c.AffiliateId == affiliateId);
+        if (customer is null) return false;
+        customer.NoShows = 0;
+        customer.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+        return true;
     }
 
     public async Task<CustomerPriceListDto?> GetCustomerPriceListAsync(Guid affiliateId, Guid customerId)
