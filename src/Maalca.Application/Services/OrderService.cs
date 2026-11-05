@@ -702,7 +702,11 @@ public class OrderService : IOrderService
                 await _db.SaveChangesAsync();
             }
         }
-        if (firstTime) await _notifications.NotifyCustomerPushAsync(order, "shipped");
+        if (firstTime)
+        {
+            await _notifications.NotifyOrderShippedAsync(order);
+            await _notifications.NotifyCustomerPushAsync(order, "shipped");
+        }
 
         var dto = ToDto(order);
         await _realtime.NotifyOrderUpdatedAsync(affiliateId, dto);
