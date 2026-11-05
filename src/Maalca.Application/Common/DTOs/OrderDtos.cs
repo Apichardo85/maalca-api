@@ -155,7 +155,10 @@ public record CreatePosOrderRequest(
     string? Notes,
     string? Currency,
     string PaymentMethod,
-    decimal Tip = 0
+    decimal Tip = 0,
+    // Cliente elegido en el POS (Customers) y la lista de precios que el POS aplicó; opcionales.
+    Guid? CustomerId = null,
+    string? PriceListName = null
 );
 
 /// <summary>
@@ -177,5 +180,7 @@ public record CreatePosCheckoutRequest(
     string? Currency,
     string SuccessUrl,
     string CancelUrl,
-    decimal Tip = 0
+    decimal Tip = 0,
+    Guid? CustomerId = null,
+    string? PriceListName = null
 );

@@ -449,6 +449,7 @@ public class OrderService : IOrderService
             Channel = "POS",
             PaymentMethod = request.PaymentMethod,
         };
+        await AttachPosCustomerAsync(order, request.CustomerId, request.PriceListName);
         _db.Orders.Add(order);
         await DecrementStockAsync(order);
         await _db.SaveChangesAsync();
@@ -459,6 +460,22 @@ public class OrderService : IOrderService
         // en el Kitchen Display, sin que la cocina tenga que saber de dónde vino.
         await _realtime.NotifyOrderUpdatedAsync(affiliateId, dto);
         return dto;
+    }
+
+    /// <summary>Venta del POS a nombre de un cliente: queda en su ficha (CustomerId) con su contacto y, si el POS
+    /// aplicó una lista de precios, su nombre (el panel muestra la etiqueta igual que en la tienda).</summary>
+    private async Task AttachPosCustomerAsync(Order order, Guid? customerId, string? priceListName)
+    {
+        order.PriceListName = Clean(priceListName);
+        if (customerId is not { } id) return;
+        var c = await _db.Customers.AsNoTracking()
+            .Where(x => x.Id == id && x.AffiliateId == order.AffiliateId)
+            .Select(x => new { x.Id, x.Name, x.Phone }).FirstOrDefaultAsync();
+        if (c is null) return;
+        order.CustomerId = c.Id;
+        order.CustomerName ??= c.Name;
+        order.CustomerPhone ??= c.Phone;
+        // El correo no se copia: el pedido confirmado le mandaría al cliente un correo por una venta de mostrador.
     }
 
     public async Task<CreateOrderResponseDto?> CreatePosCheckoutAsync(Guid affiliateId, CreatePosCheckoutRequest request)
@@ -489,6 +506,7 @@ public class OrderService : IOrderService
             Channel = "POS",
             PaymentMethod = "Card",
         };
+        await AttachPosCustomerAsync(order, request.CustomerId, request.PriceListName);
         _db.Orders.Add(order);
         await _db.SaveChangesAsync();
 

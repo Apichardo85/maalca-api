@@ -2,6 +2,7 @@ using Maalca.Application.Common;
 using Maalca.Application.Common.DTOs;
 using Maalca.Application.Common.Interfaces;
 using Maalca.Domain.Entities;
+using Maalca.Domain.Enums;
 using Maalca.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -22,6 +23,11 @@ public interface IStoreAccountService
     Task<bool> DeleteAsync(Guid affiliateId, Guid id);
     Task<StoreSettingsDto?> GetSettingsAsync(Guid affiliateId);
     Task<StoreSettingsDto?> UpdateSettingsAsync(Guid affiliateId, StoreSettingsDto request);
+
+    // Ficha del cliente, POS y reportes
+    Task<CustomerInsightsDto?> GetCustomerInsightsAsync(Guid affiliateId, Guid customerId);
+    Task<CustomerPriceListDto?> GetCustomerPriceListAsync(Guid affiliateId, Guid customerId);
+    Task<IReadOnlyList<CustomerSalesRowDto>> GetSalesReportAsync(Guid affiliateId, DateTime? from, DateTime? to);
 }
 
 /// <summary>
@@ -371,5 +377,127 @@ public class StoreAccountService : IStoreAccountService
         var t = v?.Trim();
         if (string.IsNullOrEmpty(t)) return null;
         return t.Length > max ? t[..max] : t;
+    }
+
+    // ── Ficha del cliente / POS / reportes ─────────────────────────────────────────────────────
+
+    /// <summary>Un pedido cuenta como compra si no está cancelado ni pendiente y, si se paga en el local, ya se cobró
+    /// (mismo criterio que "Gastado" en la ficha).</summary>
+    private static bool IsPurchase(OrderStatus status, string? paymentMethod, DateTime? collectedAt) =>
+        (status is OrderStatus.Paid or OrderStatus.Preparing or OrderStatus.Ready or OrderStatus.Fulfilled)
+        && !((paymentMethod == "PayAtPickup" || paymentMethod == "PayAtTable") && collectedAt is null);
+
+    private async Task<StoreCustomer?> AccountForCustomerAsync(Guid affiliateId, string? email)
+    {
+        var e = email?.Trim().ToLower();
+        if (string.IsNullOrEmpty(e)) return null;
+        return await _db.StoreCustomers.AsNoTracking().Include(c => c.PriceList)
+            .FirstOrDefaultAsync(c => c.AffiliateId == affiliateId && c.Email.ToLower() == e);
+    }
+
+    public async Task<CustomerInsightsDto?> GetCustomerInsightsAsync(Guid affiliateId, Guid customerId)
+    {
+        var customer = await _db.Customers.AsNoTracking()
+            .Where(c => c.Id == customerId && c.AffiliateId == affiliateId)
+            .Select(c => new { c.Email }).FirstOrDefaultAsync();
+        if (customer is null) return null;
+
+        var account = await AccountForCustomerAsync(affiliateId, customer.Email);
+        var accountDto = account is null ? null : new CustomerStoreAccountDto(
+            account.Id, account.Status, account.BusinessName, account.TaxId, account.PriceListId, account.PriceList?.Name);
+
+        var raw = await _db.Orders.AsNoTracking()
+            .Where(o => o.AffiliateId == affiliateId && o.CustomerId == customerId)
+            .OrderByDescending(o => o.CreatedAt)
+            .Select(o => new { o.Id, o.CreatedAt, o.Status, o.Total, o.PaymentMethod, o.CollectedAt, o.ItemsJson })
+            .ToListAsync();
+
+        var orders = raw.Select(o => new
+        {
+            o.Id, o.CreatedAt, o.Status, o.Total,
+            Counted = IsPurchase(o.Status, o.PaymentMethod, o.CollectedAt),
+            Lines = JsonArrayField.Parse<OrderItemDto>(o.ItemsJson),
+        }).ToList();
+        var bought = orders.Where(o => o.Counted).OrderBy(o => o.CreatedAt).ToList();
+        var spent = bought.Sum(o => o.Total);
+        double? avgDays = bought.Count > 1
+            ? (bought[^1].CreatedAt - bought[0].CreatedAt).TotalDays / (bought.Count - 1)
+            : null;
+        var stats = new CustomerStatsDto(
+            orders.Count(o => o.Status != OrderStatus.Canceled), bought.Count, spent,
+            bought.Count > 0 ? Math.Round(spent / bought.Count, 2) : 0,
+            bought.FirstOrDefault()?.CreatedAt, bought.LastOrDefault()?.CreatedAt,
+            avgDays is null ? null : Math.Round(avgDays.Value, 1));
+
+        // Últimos 12 meses (incluye meses en cero para que la gráfica no salte).
+        var now = DateTime.UtcNow;
+        var monthly = Enumerable.Range(0, 12).Select(i => new DateTime(now.Year, now.Month, 1).AddMonths(i - 11))
+            .Select(m => new CustomerMonthDto(
+                m.ToString("yyyy-MM"),
+                bought.Where(o => o.CreatedAt.Year == m.Year && o.CreatedAt.Month == m.Month).Sum(o => o.Total),
+                bought.Count(o => o.CreatedAt.Year == m.Year && o.CreatedAt.Month == m.Month)))
+            .ToList();
+
+        var top = bought.SelectMany(o => o.Lines.Select(l => new { l.Name, l.Qty, Amount = l.Price * l.Qty, o.CreatedAt }))
+            .GroupBy(l => l.Name)
+            .Select(g => new CustomerTopProductDto(g.Key, g.Sum(x => x.Qty), g.Sum(x => x.Amount), g.Max(x => x.CreatedAt)))
+            .OrderByDescending(p => p.Qty).ThenByDescending(p => p.Amount)
+            .Take(10).ToList();
+
+        var detail = orders.Take(100).Select(o => new CustomerOrderDetailDto(
+            o.Id, o.CreatedAt, o.Status.ToString(), o.Total, o.Counted,
+            o.Lines.Select(l => new CustomerOrderLineDto(l.Name, l.Qty, l.Price)).ToList())).ToList();
+
+        return new CustomerInsightsDto(accountDto, stats, monthly, top, detail);
+    }
+
+    public async Task<CustomerPriceListDto?> GetCustomerPriceListAsync(Guid affiliateId, Guid customerId)
+    {
+        var email = await _db.Customers.AsNoTracking()
+            .Where(c => c.Id == customerId && c.AffiliateId == affiliateId)
+            .Select(c => c.Email).FirstOrDefaultAsync();
+        var account = await AccountForCustomerAsync(affiliateId, email);
+        if (account is null || account.Status != StoreAccounts.Approved || account.PriceListId is not { } listId) return null;
+        var list = await PriceListPricing.LoadAsync(_db, affiliateId, listId);
+        if (list is null) return null;
+
+        // Todo el catálogo (el POS vende también lo no publicado).
+        var inventory = await _db.InventoryItems.AsNoTracking()
+            .Where(i => i.AffiliateId == affiliateId && i.Status == "Active")
+            .Select(i => new { i.Id, Price = i.UnitPrice }).ToListAsync();
+        var products = await _db.Products.AsNoTracking()
+            .Where(p => p.AffiliateId == affiliateId && p.Status == "Active")
+            .Select(p => new { p.Id, p.Price }).ToListAsync();
+        var prices = inventory.Select(i => new MemberPriceDto(i.Id, PriceListPricing.Resolve(i.Id, i.Price, list)))
+            .Concat(products.Select(p => new MemberPriceDto(p.Id, PriceListPricing.Resolve(p.Id, p.Price, list))))
+            .ToList();
+        return new CustomerPriceListDto(list.Name, list.MinOrderAmount, list.TaxExempt, prices);
+    }
+
+    public async Task<IReadOnlyList<CustomerSalesRowDto>> GetSalesReportAsync(Guid affiliateId, DateTime? from, DateTime? to)
+    {
+        var q = _db.Orders.AsNoTracking().Where(o => o.AffiliateId == affiliateId && o.CustomerId != null);
+        if (from is { } f) q = q.Where(o => o.CreatedAt >= f);
+        if (to is { } t) q = q.Where(o => o.CreatedAt < t.Date.AddDays(1));
+        var raw = await q.Select(o => new { CustomerId = o.CustomerId!.Value, o.Status, o.Total, o.PaymentMethod, o.CollectedAt, o.CreatedAt })
+            .ToListAsync();
+        var bought = raw.Where(o => IsPurchase(o.Status, o.PaymentMethod, o.CollectedAt)).ToList();
+        var ids = bought.Select(o => o.CustomerId).Distinct().ToList();
+        var customers = await _db.Customers.AsNoTracking()
+            .Where(c => c.AffiliateId == affiliateId && ids.Contains(c.Id))
+            .Select(c => new { c.Id, c.Name, c.Email, c.Phone }).ToListAsync();
+        var emails = customers.Where(c => c.Email != null).Select(c => c.Email!.ToLower()).ToList();
+        var business = await _db.StoreCustomers.AsNoTracking()
+            .Where(s => s.AffiliateId == affiliateId && emails.Contains(s.Email.ToLower()))
+            .Select(s => new { Email = s.Email.ToLower(), s.BusinessName }).ToListAsync();
+
+        return bought.GroupBy(o => o.CustomerId).Select(g =>
+        {
+            var c = customers.FirstOrDefault(x => x.Id == g.Key);
+            var biz = c?.Email is { } e ? business.FirstOrDefault(b => b.Email == e.ToLower())?.BusinessName : null;
+            var spent = g.Sum(o => o.Total);
+            return new CustomerSalesRowDto(g.Key, c?.Name ?? "—", c?.Email, c?.Phone, biz,
+                g.Count(), spent, Math.Round(spent / g.Count(), 2), g.Max(o => o.CreatedAt));
+        }).OrderByDescending(r => r.Spent).ToList();
     }
 }
