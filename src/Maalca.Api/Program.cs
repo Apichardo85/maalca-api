@@ -3067,12 +3067,12 @@ app.MapPatch("/api/affiliates/{id}/orders/{orderId}/no-show", async (
 });
 
 app.MapDelete("/api/affiliates/{id}/orders/{orderId}/no-show", async (
-    HttpContext ctx, IOrderService orderService, Guid id, Guid orderId) =>
+    HttpContext ctx, IOrderService orderService, Guid id, Guid orderId, bool? reactivate) =>
 {
     var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
     if (activeAffiliate != id.ToString())
         return Results.Forbid();
-    var result = await orderService.UndoNoShowAsync(id, orderId);
+    var result = await orderService.UndoNoShowAsync(id, orderId, reactivate ?? true);
     return result is null
         ? Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Order not found" } })
         : Results.Ok(result);
