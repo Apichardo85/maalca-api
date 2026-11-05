@@ -162,6 +162,8 @@ public class OrderNotificationService : IOrderNotificationService
 
     public Task NotifyOrderFulfilledAsync(Order order) => SendAsync(order, "fulfilled");
 
+    public Task NotifyOrderShippedAsync(Order order) => SendAsync(order, "shipped");
+
     private async Task SendAsync(Order order, string kind)
     {
         // Aviso al dueño (badge + push): solo cuando entra un pedido (pagado / confirmado), no al cumplirlo.
@@ -177,6 +179,7 @@ public class OrderNotificationService : IOrderNotificationService
         // pagado online avisa al pagar ("confirmed"). Aceptar y entregar ya no mandan correo (el enlace muestra el estado).
         var payLater = order.PaymentMethod is "PayAtPickup" or "PayAtTable";
         if (kind == "fulfilled" && order.TrackingToken is not null) return;
+        if (kind == "shipped" && string.IsNullOrWhiteSpace(order.TrackingNumber)) return;
         if (kind == "confirmed" && payLater) return;
         if (kind == "received" && !payLater) return;
 
@@ -196,6 +199,8 @@ public class OrderNotificationService : IOrderNotificationService
                 kind,
                 trackUrl = order.TrackingToken is null ? null : $"{baseUrl.TrimEnd('/')}/t/{order.TrackingToken}",
                 orderId = order.Id.ToString(),
+                carrier = order.ShippingCarrier,
+                trackingNumber = order.TrackingNumber,
                 businessName = order.Affiliate?.Name ?? "",
                 slug = order.Affiliate?.Slug ?? "",
                 logoUrl = string.IsNullOrWhiteSpace(order.Affiliate?.LogoUrl) ? order.Affiliate?.Logo : order.Affiliate?.LogoUrl,
