@@ -219,7 +219,7 @@ public class PublicCatalogService : IPublicCatalogService
                 .Where(m => m.AffiliateId == affiliate.Id && m.IsActive)
                 .OrderBy(m => m.SortOrder).ThenBy(m => m.CreatedAt)
                 .ToListAsync())
-                .Select(m => new PublicShippingMethodDto(m.Id, m.Name, m.NameEn, m.Price, m.FreeOverAmount, m.MinDays, m.MaxDays, m.AllowsHazmat))
+                .Select(m => new PublicShippingMethodDto(m.Id, m.Name, m.NameEn, m.Price, m.FreeOverAmount, m.MinDays, m.MaxDays, m.AllowsHazmat, m.WeightRates, m.States))
                 .ToList()
             : new List<PublicShippingMethodDto>();
 

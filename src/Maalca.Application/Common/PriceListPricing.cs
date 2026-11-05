@@ -57,6 +57,50 @@ public static class ShippingPricing
     public static decimal Cost(decimal price, decimal? freeOverAmount, decimal subtotal) =>
         freeOverAmount is decimal free && free > 0 && subtotal >= free ? 0m : Math.Round(Math.Max(0m, price), 2);
 
+    /// <summary>Costo con tarifa por peso: el primer escalón cuyo tope (lb) cubre el peso; pasado el último, el último.
+    /// Sin escalones o sin peso conocido, el precio fijo del método.</summary>
+    public static decimal Cost(decimal price, decimal? freeOverAmount, decimal subtotal, string? weightRates, decimal weightOz)
+    {
+        if (freeOverAmount is decimal free && free > 0 && subtotal >= free) return 0m;
+        var tiers = ParseWeightRates(weightRates);
+        if (tiers.Count == 0 || weightOz <= 0) return Math.Round(Math.Max(0m, price), 2);
+        var lb = weightOz / 16m;
+        foreach (var t in tiers) if (lb <= t.UpToLb) return t.Price;
+        return tiers[^1].Price;
+    }
+
+    /// <summary>"1:6.50; 3:9.99; 10:18" → [(1, 6.50), (3, 9.99), (10, 18)] ordenado por peso. Ignora entradas inválidas.</summary>
+    public static List<(decimal UpToLb, decimal Price)> ParseWeightRates(string? raw)
+    {
+        var list = new List<(decimal, decimal)>();
+        if (string.IsNullOrWhiteSpace(raw)) return list;
+        foreach (var part in raw.Split(new[] { ';', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var kv = part.Split(':', 2, StringSplitOptions.TrimEntries);
+            if (kv.Length != 2) continue;
+            if (decimal.TryParse(kv[0], System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var lb) && lb > 0
+                && decimal.TryParse(kv[1].TrimStart('$'), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var pr) && pr >= 0)
+                list.Add((lb, Math.Round(pr, 2)));
+        }
+        return list.OrderBy(t => t.Item1).ToList();
+    }
+
+    /// <summary>Normaliza "nj, ny ,PA" → "NJ,NY,PA" (solo códigos de 2 letras, sin repetidos). Null si queda vacío.</summary>
+    public static string? NormalizeStates(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var states = raw.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(s => s.ToUpperInvariant()).Where(s => s.Length == 2 && s.All(char.IsLetter)).Distinct().ToList();
+        return states.Count == 0 ? null : string.Join(",", states);
+    }
+
+    /// <summary>¿Aplica el método al estado de destino? Sin estados configurados aplica a todos.</summary>
+    public static bool ServesState(string? methodStates, string? destState) =>
+        string.IsNullOrWhiteSpace(methodStates)
+        || (!string.IsNullOrWhiteSpace(destState)
+            && methodStates.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Contains(destState.Trim(), StringComparer.OrdinalIgnoreCase));
+
     /// <summary>Link público de rastreo de la paquetería (null si es "other" o no hay número).</summary>
     public static string? TrackingUrl(string? carrier, string? trackingNumber)
     {

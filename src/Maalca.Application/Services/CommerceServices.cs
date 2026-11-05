@@ -168,8 +168,15 @@ public class ShippingService : IShippingService
         m.AllowsHazmat = r.AllowsHazmat;
         m.IsActive = r.IsActive;
         m.SortOrder = r.SortOrder;
+        var rates = ShippingPricing.ParseWeightRates(r.WeightRates);
+        if (!string.IsNullOrWhiteSpace(r.WeightRates) && rates.Count == 0)
+            throw new ArgumentException("Tarifa por peso inválida. Usa el formato \"1:6.50; 3:9.99; 10:18\" (hasta N lb : precio).");
+        m.WeightRates = rates.Count == 0 ? null : string.Join("; ", rates.Select(t => $"{t.UpToLb.ToString(System.Globalization.CultureInfo.InvariantCulture)}:{t.Price.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}"));
+        m.States = ShippingPricing.NormalizeStates(r.States);
+        if (!string.IsNullOrWhiteSpace(r.States) && m.States is null)
+            throw new ArgumentException("Estados inválidos. Usa códigos de 2 letras separados por coma (NJ, NY, PA).");
     }
 
     internal static ShippingMethodDto ToDto(ShippingMethod m) => new(
-        m.Id, m.Name, m.NameEn, m.Price, m.FreeOverAmount, m.MinDays, m.MaxDays, m.AllowsHazmat, m.IsActive, m.SortOrder);
+        m.Id, m.Name, m.NameEn, m.Price, m.FreeOverAmount, m.MinDays, m.MaxDays, m.AllowsHazmat, m.IsActive, m.SortOrder, m.WeightRates, m.States);
 }

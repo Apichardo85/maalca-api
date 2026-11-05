@@ -53,6 +53,11 @@ public class ShippingMethod : AuditableEntity
     public bool AllowsHazmat { get; set; } = false;
     public bool IsActive { get; set; } = true;
     public int SortOrder { get; set; } = 0;
+    /// <summary>Tarifa por peso del pedido, en libras: "hasta N lb : precio" separados por ';' (ej. "1:6.50; 3:9.99; 10:18").
+    /// Null = costo fijo (Price). Sin peso conocido en los productos se usa Price.</summary>
+    public string? WeightRates { get; set; }
+    /// <summary>Estados (2 letras, separados por coma) a los que aplica el método. Null/vacío = todo el país.</summary>
+    public string? States { get; set; }
 
     public Affiliate? Affiliate { get; set; }
 }

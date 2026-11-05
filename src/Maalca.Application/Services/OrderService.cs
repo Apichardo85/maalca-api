@@ -103,9 +103,11 @@ public class OrderService : IOrderService
             if (priced.HasHazmat && !shippingMethod.AllowsHazmat)
                 throw new ArgumentException("Tu pedido incluye productos que solo pueden viajar por tierra (como perfumes). Elige un envío terrestre.");
             shipTo = ValidateShipTo(request.ShipTo, request.CustomerName);
+            if (!ShippingPricing.ServesState(shippingMethod.States, shipTo?.State))
+                throw new ArgumentException($"El envío \"{shippingMethod.Name}\" no llega a ese estado. Elige otro método.");
             if (string.IsNullOrWhiteSpace(request.CustomerEmail) && string.IsNullOrWhiteSpace(request.CustomerPhone))
                 throw new ArgumentException("Déjanos un correo o teléfono para avisarte del envío.");
-            shippingCost = ShippingPricing.Cost(shippingMethod.Price, shippingMethod.FreeOverAmount, priced.Subtotal);
+            shippingCost = ShippingPricing.Cost(shippingMethod.Price, shippingMethod.FreeOverAmount, priced.Subtotal, shippingMethod.WeightRates, priced.WeightOz);
         }
         // Envío a otro estado: sin impuesto (el negocio solo recauda en su estado, ver Affiliate.SalesTaxState).
         if (isShipping && taxRate is not null && !string.IsNullOrEmpty(affiliate.SalesTaxState)
@@ -269,7 +271,7 @@ public class OrderService : IOrderService
     private const decimal MaxTaxFractionOfSubtotal = 0.25m;
 
     private sealed record PricedOrder(
-        IReadOnlyList<OrderItemDto> Items, decimal Subtotal, decimal Tax, decimal Tip, decimal Total, bool HasHazmat = false);
+        IReadOnlyList<OrderItemDto> Items, decimal Subtotal, decimal Tax, decimal Tip, decimal Total, bool HasHazmat = false, decimal WeightOz = 0m);
 
     /// <summary>
     /// Reconstruye las líneas del pedido con nombre y precio del catálogo real del afiliado
@@ -356,7 +358,7 @@ public class OrderService : IOrderService
             .Select(i => new
             {
                 i.Id, i.Name, Price = i.UnitPrice, i.TrackStock, i.Quantity,
-                i.MinOrderQty, i.OrderQtyMultiple, i.MaxPerOrder, i.Hazmat, i.VolumeTiers,
+                i.MinOrderQty, i.OrderQtyMultiple, i.MaxPerOrder, i.Hazmat, i.VolumeTiers, i.WeightOz,
             })
             .ToListAsync();
         // Precio por cantidad: el escalón se decide con el TOTAL pedido de ese producto (sumando líneas).
@@ -378,6 +380,10 @@ public class OrderService : IOrderService
             RetailAttributes.ValidateQuantity(inv.Name, wanted, inv.MinOrderQty, inv.OrderQtyMultiple, inv.MaxPerOrder);
         }
         var hasHazmat = inventory.Any(i => !string.IsNullOrEmpty(i.Hazmat));
+        var weightByItem = inventory.Where(i => i.WeightOz is > 0).ToDictionary(i => i.Id, i => i.WeightOz!.Value);
+        decimal totalWeightOz = 0m;
+        for (var w = 0; w < requested.Count; w++)
+            if (weightByItem.TryGetValue(ids[w], out var oz)) totalWeightOz += oz * requested[w].Qty;
 
         // Control de stock opt-in (InventoryItem.TrackStock): el pedido no puede superar lo que queda.
         // El stock real se descuenta al pagar (Stripe / POS) o al cobrar un "pagar al recoger"; mientras
@@ -422,7 +428,7 @@ public class OrderService : IOrderService
         if (priceList?.MinOrderAmount is decimal minOrder && subtotal < minOrder)
             throw new ArgumentException($"Con tu lista de precios ({priceList.Name}) el pedido mínimo es de {minOrder:0.00}.");
 
-        return new PricedOrder(lines, subtotal, tax, tip, subtotal + tax + tip, hasHazmat);
+        return new PricedOrder(lines, subtotal, tax, tip, subtotal + tax + tip, hasHazmat, totalWeightOz);
     }
 
     public async Task<OrderDto?> CreatePosOrderAsync(Guid affiliateId, CreatePosOrderRequest request)

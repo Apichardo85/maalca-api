@@ -63,7 +63,9 @@ public record ShippingMethodDto(
     int? MaxDays,
     bool AllowsHazmat,
     bool IsActive,
-    int SortOrder);
+    int SortOrder,
+    string? WeightRates = null,
+    string? States = null);
 
 public record UpsertShippingMethodRequest(
     string Name,
@@ -74,11 +76,14 @@ public record UpsertShippingMethodRequest(
     int? MaxDays,
     bool AllowsHazmat,
     bool IsActive = true,
-    int SortOrder = 0);
+    int SortOrder = 0,
+    string? WeightRates = null,
+    string? States = null);
 
 /// <summary>Lo que ve el checkout público (solo métodos activos).</summary>
 public record PublicShippingMethodDto(
-    Guid Id, string Name, string? NameEn, decimal Price, decimal? FreeOverAmount, int? MinDays, int? MaxDays, bool AllowsHazmat);
+    Guid Id, string Name, string? NameEn, decimal Price, decimal? FreeOverAmount, int? MinDays, int? MaxDays, bool AllowsHazmat,
+    string? WeightRates = null, string? States = null);
 
 public record ShippingAddressDto(string? Name, string Line1, string? Line2, string City, string State, string Zip);
 
