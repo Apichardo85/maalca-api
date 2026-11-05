@@ -1153,9 +1153,9 @@ public class OrderService : IOrderService
         return dto;
     }
 
-    /// <summary>Deshacer un "No vino" marcado por error: el pedido vuelve a "Listo" y el cliente
-    /// recupera su historial.</summary>
-    public async Task<OrderDto?> UndoNoShowAsync(Guid affiliateId, Guid orderId)
+    /// <summary>Deshacer un "No vino": el cliente recupera su historial. Con reactivate (por defecto, error de
+    /// marcado) el pedido vuelve a "Listo"; sin él solo se quita la marca y el pedido sigue cancelado.</summary>
+    public async Task<OrderDto?> UndoNoShowAsync(Guid affiliateId, Guid orderId, bool reactivate = true)
     {
         var order = await _db.Orders.FirstOrDefaultAsync(o => o.Id == orderId && o.AffiliateId == affiliateId);
         if (order is null) return null;
@@ -1164,7 +1164,7 @@ public class OrderService : IOrderService
         if (order.NoShowAt is not null)
         {
             order.NoShowAt = null;
-            order.Status = OrderStatus.Ready;
+            order.Status = reactivate ? OrderStatus.Ready : OrderStatus.Canceled;
             order.UpdatedAt = DateTime.UtcNow;
             if (customer is not null && customer.NoShows > 0) { customer.NoShows -= 1; customer.UpdatedAt = DateTime.UtcNow; }
             await _db.SaveChangesAsync();

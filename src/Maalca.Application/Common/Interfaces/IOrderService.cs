@@ -45,7 +45,8 @@ public interface IOrderService
     /// <summary>Impuesto de venta del negocio (tasa % y si grava el envío).</summary>
     Task<TaxSettingsDto?> GetTaxSettingsAsync(Guid affiliateId);
     Task<TaxSettingsDto?> UpdateTaxSettingsAsync(Guid affiliateId, TaxSettingsDto request);
-    Task<OrderDto?> UndoNoShowAsync(Guid affiliateId, Guid orderId);
+    /// <param name="reactivate">true: el pedido vuelve a "Listo" (el cliente sí llegó). false: solo quita la marca y el pedido sigue cancelado.</param>
+    Task<OrderDto?> UndoNoShowAsync(Guid affiliateId, Guid orderId, bool reactivate = true);
     Task<PickupRulesDto?> GetPickupRulesAsync(Guid affiliateId);
     Task<PickupRulesDto?> UpdatePickupRulesAsync(Guid affiliateId, PickupRulesDto request);
 
