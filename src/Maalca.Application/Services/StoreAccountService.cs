@@ -235,6 +235,19 @@ public class StoreAccountService : IStoreAccountService
         }).ToList();
     }
 
+    /// <summary>Quita al miembro de la tienda. Sus pedidos se conservan (solo pierden el enlace a la cuenta); si vuelve, pide acceso de nuevo.</summary>
+    public async Task<bool> DeleteAsync(Guid affiliateId, Guid id)
+    {
+        var account = await _db.StoreCustomers.FirstOrDefaultAsync(c => c.AffiliateId == affiliateId && c.Id == id);
+        if (account is null) return false;
+        await _db.Orders
+            .Where(o => o.AffiliateId == affiliateId && o.StoreCustomerId == id)
+            .ExecuteUpdateAsync(set => set.SetProperty(o => o.StoreCustomerId, (Guid?)null));
+        _db.StoreCustomers.Remove(account);
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
     public async Task<IReadOnlyList<StoreCustomerDto>> ListAsync(Guid affiliateId)
     {
         var accounts = await _db.StoreCustomers.AsNoTracking().Include(c => c.PriceList)
