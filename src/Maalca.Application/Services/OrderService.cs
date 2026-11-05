@@ -1091,7 +1091,9 @@ public class OrderService : IOrderService
             ((cPhone != null && c.Phone == cPhone) || (cEmail != null && c.Email == cEmail)));
         var stripeReady = _payments.For(affiliate).IsReady(affiliate);
         var blocked = PickupTrustDecision(affiliate.PickupNoShowRequiresCard, affiliate.PickupNewCustomerLimit,
-            known?.TotalVisits ?? 0, known?.NoShows ?? 0, total, stripeReady);
+            known?.TotalVisits ?? 0, known?.NoShows ?? 0, total, stripeReady,
+            english: string.Equals(request.Language, "en", StringComparison.OrdinalIgnoreCase),
+            contact: string.IsNullOrWhiteSpace(affiliate.WhatsApp) ? null : affiliate.WhatsApp.Trim());
         if (blocked is not null) throw new ArgumentException(blocked);
     }
 
@@ -1102,15 +1104,25 @@ public class OrderService : IOrderService
     /// El mensaje NO revela si ese teléfono tiene un "No vino" (se dice igual para cualquier caso).
     /// </summary>
     internal static string? PickupTrustDecision(bool noShowRequiresCard, decimal? newCustomerLimit,
-        int visits, int noShows, decimal total, bool stripeReady)
+        int visits, int noShows, decimal total, bool stripeReady, bool english = false, string? contact = null)
     {
-        var payOnline = stripeReady
-            ? "Puedes completarlo pagando con tarjeta."
-            : "Comunícate directamente con el negocio para hacerlo.";
+        var payOnline = (stripeReady, english, contact) switch
+        {
+            (true, false, _) => "Puedes completarlo pagando con tarjeta.",
+            (true, true, _) => "You can complete it by paying by card.",
+            (false, false, { } c) => $"Escríbele al negocio por WhatsApp al {c} para coordinarlo.",
+            (false, true, { } c) => $"Message the business on WhatsApp at {c} to arrange it.",
+            (false, false, null) => "Comunícate directamente con el negocio para hacerlo.",
+            (false, true, null) => "Please contact the business directly to arrange it.",
+        };
         if (noShowRequiresCard && noShows > 0)
-            return $"Para este pedido el negocio requiere pago por adelantado. {payOnline}";
+            return english
+                ? $"This business requires prepayment for this order. {payOnline}"
+                : $"Para este pedido el negocio requiere pago por adelantado. {payOnline}";
         if (newCustomerLimit is decimal limit && visits == 0 && total > limit)
-            return $"En tu primer pedido, pagar al recoger está disponible hasta ${limit:0.00}. {payOnline}";
+            return english
+                ? $"For your first order, pay-at-pickup is available up to ${limit:0.00}. {payOnline}"
+                : $"En tu primer pedido, pagar al recoger está disponible hasta ${limit:0.00}. {payOnline}";
         return null;
     }
 

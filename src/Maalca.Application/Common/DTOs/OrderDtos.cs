@@ -33,7 +33,9 @@ public record CreateOrderRequest(
     // Envío a domicilio: FulfillmentType = "shipping" + método elegido + dirección. Null = recoger/mesa como siempre.
     string? FulfillmentType = null,
     Guid? ShippingMethodId = null,
-    ShippingAddressDto? ShipTo = null
+    ShippingAddressDto? ShipTo = null,
+    // Idioma de la tienda ("es"/"en") para los mensajes de rechazo; null = español.
+    string? Language = null
 );
 
 /// <param name="CheckoutUrl">
