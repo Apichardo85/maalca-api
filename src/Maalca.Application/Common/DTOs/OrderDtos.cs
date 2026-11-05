@@ -125,7 +125,8 @@ public record OrderTrackingDto(
     string? ShippingCarrier = null,
     string? TrackingNumber = null,
     string? TrackingUrl = null,
-    DateTime? ShippedAt = null);
+    DateTime? ShippedAt = null,
+    string? OrderCode = null);
 
 public record TrackingPayRequest(string SuccessUrl, string CancelUrl);
 

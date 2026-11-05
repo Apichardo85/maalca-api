@@ -639,7 +639,8 @@ public class OrderService : IOrderService
             ShippingCarrier: order.ShippingCarrier,
             TrackingNumber: order.TrackingNumber,
             TrackingUrl: ShippingPricing.TrackingUrl(order.ShippingCarrier, order.TrackingNumber),
-            ShippedAt: order.ShippedAt);
+            ShippedAt: order.ShippedAt,
+            OrderCode: order.Id.ToString("N")[..8].ToUpperInvariant());
     }
 
     /// <summary>
