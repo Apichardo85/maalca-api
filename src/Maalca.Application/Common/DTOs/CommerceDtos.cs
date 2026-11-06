@@ -90,6 +90,29 @@ public record ShippingAddressDto(string? Name, string Line1, string? Line2, stri
 /// <summary>Despacho manual: paquetería (usps | ups | fedex | dhl | other) + número de rastreo.</summary>
 public record MarkShippedRequest(string Carrier, string TrackingNumber);
 
+// ── Etiquetas con el agregador del negocio (United Bridge) ───────────────────
+
+/// <summary>Cuenta de etiquetas. La API key nunca sale del servidor: solo HasKey + últimos 4.</summary>
+public record CarrierAccountDto(
+    bool HasKey, string? KeyLast4, string Service, string Package,
+    decimal LengthIn, decimal WidthIn, decimal HeightIn, decimal BoxWeightOz,
+    string? FromName, string? FromPhone, string? FromAddress1, string? FromAddress2,
+    string? FromCity, string? FromState, string? FromZip, bool IsActive);
+
+/// <summary>ApiKey null o vacía = conservar la que ya está guardada.</summary>
+public record UpsertCarrierAccountRequest(
+    string? ApiKey, string Service, string Package,
+    decimal LengthIn, decimal WidthIn, decimal HeightIn, decimal BoxWeightOz,
+    string? FromName, string? FromPhone, string? FromAddress1, string? FromAddress2,
+    string? FromCity, string? FromState, string? FromZip, bool IsActive = true);
+
+/// <summary>WeightOz opcional: peso real del paquete en onzas (sin la caja). Null = suma de los productos del pedido.</summary>
+public record LabelRequest(decimal? WeightOz = null);
+
+public record LabelQuoteDto(string Service, decimal Total, decimal ShipmentRate, string Currency, decimal? AccountBalance, decimal WeightOz, decimal Charged);
+
+public record BuyLabelResultDto(OrderDto Order, string LabelUrl, decimal Cost, decimal? AccountBalance);
+
 // ── Cuentas de clientes de la tienda (miembros/mayoristas) ───────────────────
 
 /// <summary>

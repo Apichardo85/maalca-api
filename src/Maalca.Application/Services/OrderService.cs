@@ -1309,7 +1309,9 @@ public class OrderService : IOrderService
         o.TrackingNumber,
         ShippingPricing.TrackingUrl(o.ShippingCarrier, o.TrackingNumber),
         o.ShippedAt,
-        o.TaxRate
+        o.TaxRate,
+        o.LabelUrl,
+        o.LabelCost
     );
 
     private static ShippingAddressDto? ShipToOf(Order o) =>

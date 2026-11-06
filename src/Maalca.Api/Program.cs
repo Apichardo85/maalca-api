@@ -96,6 +96,7 @@ builder.Services.AddScoped<Maalca.Application.Common.Payments.IPaymentProvider, 
 builder.Services.AddScoped<Maalca.Application.Common.Payments.IPaymentProviderResolver, Maalca.Application.Services.Payments.PaymentProviderResolver>();
 builder.Services.AddScoped<IPriceListService, PriceListService>();
 builder.Services.AddScoped<IShippingService, ShippingService>();
+builder.Services.AddScoped<ICarrierService, CarrierService>();
 builder.Services.AddScoped<IStoreAccountNotificationService, StoreAccountNotificationService>();
 builder.Services.AddScoped<IStoreAccountService, StoreAccountService>();
 builder.Services.AddScoped<IDonationService, DonationService>();
@@ -3154,6 +3155,43 @@ app.MapPatch("/api/affiliates/{id:guid}/orders/{orderId:guid}/ship", async (Http
         return result is null
             ? Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Order not found" } })
             : Results.Ok(result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
+
+// Etiquetas con United Bridge (dashboard → Envíos → Etiquetas, y botón "Comprar etiqueta" en Pedidos).
+// La API key nunca se devuelve. Comprar y guardar la cuenta quedan fuera del acceso de soporte.
+app.MapGet("/api/affiliates/{id:guid}/carrier-account", async (HttpContext ctx, ICarrierService svc, Guid id) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    return Results.Ok(await svc.GetAccountAsync(id));
+});
+
+app.MapPut("/api/affiliates/{id:guid}/carrier-account", async (HttpContext ctx, ICarrierService svc, Guid id, UpsertCarrierAccountRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try { return Results.Ok(await svc.UpsertAccountAsync(id, request)); }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
+
+app.MapPost("/api/affiliates/{id:guid}/orders/{orderId:guid}/label-quote", async (HttpContext ctx, ICarrierService svc, Guid id, Guid orderId, LabelRequest? request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await svc.QuoteAsync(id, orderId, request?.WeightOz);
+        return result is null ? Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Order not found" } }) : Results.Ok(result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
+
+app.MapPost("/api/affiliates/{id:guid}/orders/{orderId:guid}/label", async (HttpContext ctx, ICarrierService svc, Guid id, Guid orderId, LabelRequest? request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await svc.BuyLabelAsync(id, orderId, request?.WeightOz);
+        return result is null ? Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Order not found" } }) : Results.Ok(result);
     }
     catch (ArgumentException ex) { return InvalidInput(ex); }
 });

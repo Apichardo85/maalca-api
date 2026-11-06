@@ -115,4 +115,8 @@ public class Order : BaseEntity
     public string? ShippingCarrier { get; set; }
     public string? TrackingNumber { get; set; }
     public DateTime? ShippedAt { get; set; }
+    // Etiqueta comprada desde MaalCa con el agregador del negocio: URL de la etiqueta y lo que costó (para comparar
+    // contra ShippingCost, lo que se le cobró al cliente). Null = despacho manual.
+    public string? LabelUrl { get; set; }
+    public decimal? LabelCost { get; set; }
 }

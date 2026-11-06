@@ -65,6 +65,7 @@ public class AppDbContext : DbContext
     public DbSet<PriceList> PriceLists => Set<PriceList>();
     public DbSet<PriceListItem> PriceListItems => Set<PriceListItem>();
     public DbSet<ShippingMethod> ShippingMethods => Set<ShippingMethod>();
+    public DbSet<CarrierAccount> CarrierAccounts => Set<CarrierAccount>();
     public DbSet<StoreCustomer> StoreCustomers => Set<StoreCustomer>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -216,6 +217,21 @@ public class AppDbContext : DbContext
             entity.Property(e => e.FreeOverAmount).HasPrecision(18, 2);
             entity.HasOne(e => e.Affiliate).WithMany().HasForeignKey(e => e.AffiliateId).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => e.AffiliateId);
+        });
+
+        modelBuilder.Entity<CarrierAccount>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Provider).HasMaxLength(30).IsRequired();
+            entity.Property(e => e.Service).HasMaxLength(40).IsRequired();
+            entity.Property(e => e.Package).HasMaxLength(40).IsRequired();
+            entity.Property(e => e.ApiKeyLast4).HasMaxLength(8);
+            entity.Property(e => e.LengthIn).HasPrecision(10, 2);
+            entity.Property(e => e.WidthIn).HasPrecision(10, 2);
+            entity.Property(e => e.HeightIn).HasPrecision(10, 2);
+            entity.Property(e => e.BoxWeightOz).HasPrecision(10, 2);
+            entity.HasOne<Affiliate>().WithMany().HasForeignKey(e => e.AffiliateId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.AffiliateId, e.Provider }).IsUnique();
         });
 
         // ModulePlanRule — plan mínimo por módulo, editable desde /ops/modulos

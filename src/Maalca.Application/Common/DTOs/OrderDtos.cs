@@ -84,7 +84,9 @@ public record OrderDto(
     string? TrackingNumber = null,
     string? TrackingUrl = null,
     DateTime? ShippedAt = null,
-    decimal? TaxRate = null
+    decimal? TaxRate = null,
+    string? LabelUrl = null,
+    decimal? LabelCost = null
 );
 
 /// <summary>Reglas de confianza para pagar al recoger (dashboard → Pedidos).</summary>
