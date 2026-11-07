@@ -91,6 +91,11 @@ public static class ModuleCatalog
         new ModuleDefinition("contracts", "Contratos y cobros", "Contracts & collections",
             "Contratos por cliente, abonos, estado de cuenta y antigüedad de saldos.", "Customer contracts, payments, statements and aging.",
             new[] { "retail" }, null, PlanTier.Professional),
+
+        // Reparto: rutas del día, entregas con envases y cobro en ruta (PWA del conductor). Mismo criterio que contracts.
+        new ModuleDefinition("routes", "Rutas y reparto", "Routes & delivery",
+            "Rutas del día, entregas con envases, cobro en ruta y cuadre de cierre.", "Daily routes, deliveries with containers, on-route collection and closing reconciliation.",
+            new[] { "retail" }, null, PlanTier.Professional),
     };
 
     private static readonly Dictionary<string, ModuleDefinition> ByToken =
