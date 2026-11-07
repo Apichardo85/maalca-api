@@ -72,6 +72,11 @@ public class AppDbContext : DbContext
     public DbSet<ContainerType> ContainerTypes => Set<ContainerType>();
     public DbSet<Anaquel> Anaqueles => Set<Anaquel>();
     public DbSet<ContainerMovement> ContainerMovements => Set<ContainerMovement>();
+    public DbSet<Vehicle> Vehicles => Set<Vehicle>();
+    public DbSet<DeliveryRoute> DeliveryRoutes => Set<DeliveryRoute>();
+    public DbSet<RouteStop> RouteStops => Set<RouteStop>();
+    public DbSet<Delivery> Deliveries => Set<Delivery>();
+    public DbSet<DeliveryItem> DeliveryItems => Set<DeliveryItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -975,6 +980,84 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => new { e.AffiliateId, e.IdempotencyKey })
                   .IsUnique()
                   .HasFilter("\"IdempotencyKey\" IS NOT NULL");
+        });
+
+        modelBuilder.Entity<Vehicle>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Plate).HasMaxLength(20).IsRequired();
+            entity.Property(e => e.Name).HasMaxLength(100);
+            entity.Property(e => e.Status).HasMaxLength(20);
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.AffiliateId, e.Plate });
+        });
+
+        modelBuilder.Entity<DeliveryRoute>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Status).HasMaxLength(20);
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Vehicle)
+                  .WithMany()
+                  .HasForeignKey(e => e.VehicleId)
+                  .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => new { e.AffiliateId, e.RouteDate });
+        });
+
+        modelBuilder.Entity<RouteStop>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Status).HasMaxLength(20);
+            entity.HasOne(e => e.Route)
+                  .WithMany(r => r.Stops)
+                  .HasForeignKey(e => e.RouteId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Customer)
+                  .WithMany()
+                  .HasForeignKey(e => e.CustomerId)
+                  .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => new { e.RouteId, e.SortOrder });
+            entity.HasIndex(e => new { e.AffiliateId, e.CustomerId });
+        });
+
+        modelBuilder.Entity<Delivery>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ReceivedBy).HasMaxLength(100);
+            entity.Property(e => e.RegisteredBy).HasMaxLength(100);
+            entity.Property(e => e.IdempotencyKey).HasMaxLength(100);
+            entity.HasOne(e => e.RouteStop)
+                  .WithMany()
+                  .HasForeignKey(e => e.RouteStopId)
+                  .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.Customer)
+                  .WithMany()
+                  .HasForeignKey(e => e.CustomerId)
+                  .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => new { e.AffiliateId, e.CustomerId });
+            entity.HasIndex(e => e.RouteStopId);
+            entity.HasIndex(e => new { e.AffiliateId, e.IdempotencyKey })
+                  .IsUnique()
+                  .HasFilter("\"IdempotencyKey\" IS NOT NULL");
+        });
+
+        modelBuilder.Entity<DeliveryItem>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Description).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Quantity).HasPrecision(18, 2);
+            entity.Property(e => e.UnitPrice).HasPrecision(18, 2);
+            entity.HasOne(e => e.Delivery)
+                  .WithMany(d => d.Items)
+                  .HasForeignKey(e => e.DeliveryId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         // InvoiceItem
