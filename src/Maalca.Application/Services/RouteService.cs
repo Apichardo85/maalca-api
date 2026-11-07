@@ -57,22 +57,23 @@ public class RouteService : IRouteService
 
     // ── Rutas ────────────────────────────────────────────────────────────────
 
-    public async Task<IReadOnlyList<RouteDto>> GetRoutesAsync(Guid affiliateId, DateOnly? from, DateOnly? to, string? status)
+    public async Task<IReadOnlyList<RouteDto>> GetRoutesAsync(Guid affiliateId, DateOnly? from, DateOnly? to, string? status, Guid? restrictDriverId = null)
     {
         var q = _db.DeliveryRoutes.AsNoTracking().Include(r => r.Vehicle).Include(r => r.Stops)
             .Where(r => r.AffiliateId == affiliateId);
         if (from.HasValue) q = q.Where(r => r.RouteDate >= from.Value);
         if (to.HasValue) q = q.Where(r => r.RouteDate <= to.Value);
         if (!string.IsNullOrWhiteSpace(status)) q = q.Where(r => r.Status == status);
+        if (restrictDriverId.HasValue) q = q.Where(r => r.DriverId == restrictDriverId.Value);
         var list = await q.OrderByDescending(r => r.RouteDate).ThenBy(r => r.Name).Take(300).ToListAsync();
         var names = await DriverNamesAsync(affiliateId, list.Select(r => r.DriverId));
         // Listado: solo conteos de paradas, sin el detalle (el detalle se pide por ruta).
         return list.Select(r => ToDto(r, names, includeStops: false, customers: null)).ToList();
     }
 
-    public async Task<RouteDto?> GetRouteAsync(Guid affiliateId, Guid routeId)
+    public async Task<RouteDto?> GetRouteAsync(Guid affiliateId, Guid routeId, Guid? restrictDriverId = null)
     {
-        var route = await LoadRouteAsync(affiliateId, routeId, track: false);
+        var route = await LoadRouteAsync(affiliateId, routeId, track: false, restrictDriverId);
         return route is null ? null : await ToFullDtoAsync(affiliateId, route);
     }
 
@@ -103,9 +104,9 @@ public class RouteService : IRouteService
         return await GetRouteAsync(affiliateId, routeId);
     }
 
-    public async Task<RouteDto?> StartRouteAsync(Guid affiliateId, Guid routeId, StartRouteRequest request, string? actorId)
+    public async Task<RouteDto?> StartRouteAsync(Guid affiliateId, Guid routeId, StartRouteRequest request, string? actorId, Guid? restrictDriverId = null)
     {
-        var route = await LoadRouteAsync(affiliateId, routeId, track: true);
+        var route = await LoadRouteAsync(affiliateId, routeId, track: true, restrictDriverId);
         if (route is null) return null;
         if (route.Status is not ("planned" or "loading"))
             throw new InvalidOperationException("Solo una ruta planificada puede salir.");
@@ -146,9 +147,9 @@ public class RouteService : IRouteService
         return await GetRouteAsync(affiliateId, routeId);
     }
 
-    public async Task<RouteReconciliationDto?> CloseRouteAsync(Guid affiliateId, Guid routeId, CloseRouteRequest request, string? actorId)
+    public async Task<RouteReconciliationDto?> CloseRouteAsync(Guid affiliateId, Guid routeId, CloseRouteRequest request, string? actorId, Guid? restrictDriverId = null)
     {
-        var route = await LoadRouteAsync(affiliateId, routeId, track: true);
+        var route = await LoadRouteAsync(affiliateId, routeId, track: true, restrictDriverId);
         if (route is null) return null;
         if (route.Status != "in_progress")
             throw new InvalidOperationException("Solo se puede cerrar una ruta en curso.");
@@ -173,9 +174,9 @@ public class RouteService : IRouteService
         return await GetReconciliationAsync(affiliateId, routeId);
     }
 
-    public async Task<RouteReconciliationDto?> GetReconciliationAsync(Guid affiliateId, Guid routeId)
+    public async Task<RouteReconciliationDto?> GetReconciliationAsync(Guid affiliateId, Guid routeId, Guid? restrictDriverId = null)
     {
-        var route = await LoadRouteAsync(affiliateId, routeId, track: false);
+        var route = await LoadRouteAsync(affiliateId, routeId, track: false, restrictDriverId);
         if (route is null) return null;
 
         var stopIds = route.Stops.Select(s => s.Id).ToList();
@@ -211,9 +212,9 @@ public class RouteService : IRouteService
     // ── Entregas ─────────────────────────────────────────────────────────────
 
     public async Task<RegisterDeliveryResultDto?> RegisterDeliveryAsync(
-        Guid affiliateId, Guid routeId, Guid stopId, RegisterDeliveryRequest r, string? actorId, string? actorName)
+        Guid affiliateId, Guid routeId, Guid stopId, RegisterDeliveryRequest r, string? actorId, string? actorName, Guid? restrictDriverId = null)
     {
-        var route = await LoadRouteAsync(affiliateId, routeId, track: true);
+        var route = await LoadRouteAsync(affiliateId, routeId, track: true, restrictDriverId);
         var stop = route?.Stops.FirstOrDefault(s => s.Id == stopId);
         if (route is null || stop is null) return null;
 
@@ -410,11 +411,11 @@ public class RouteService : IRouteService
         return new RegisterDeliveryResultDto(ToDto(delivery, payment?.Amount, invoice?.InvoiceNumber), false, balance);
     }
 
-    public async Task<RouteDto?> SkipStopAsync(Guid affiliateId, Guid routeId, Guid stopId, SkipStopRequest request, string? actorId)
+    public async Task<RouteDto?> SkipStopAsync(Guid affiliateId, Guid routeId, Guid stopId, SkipStopRequest request, string? actorId, Guid? restrictDriverId = null)
     {
         if (request.Status is not ("skipped" or "failed"))
             throw new ArgumentException("Estado inválido (skipped o failed).");
-        var route = await LoadRouteAsync(affiliateId, routeId, track: true);
+        var route = await LoadRouteAsync(affiliateId, routeId, track: true, restrictDriverId);
         var stop = route?.Stops.FirstOrDefault(s => s.Id == stopId);
         if (route is null || stop is null) return null;
         if (route.Status != "in_progress")
@@ -431,11 +432,117 @@ public class RouteService : IRouteService
         return await GetRouteAsync(affiliateId, routeId);
     }
 
+    // ── Conductor (PWA) ──────────────────────────────────────────────────────
+
+    public async Task<Guid?> FindDriverIdByEmailAsync(Guid affiliateId, string? email)
+    {
+        if (string.IsNullOrWhiteSpace(email)) return null;
+        var e = email.Trim().ToLowerInvariant();
+        var id = await _db.TeamMembers.AsNoTracking()
+            .Where(t => t.AffiliateId == affiliateId && t.IsActive && t.Email != null && t.Email.ToLower() == e)
+            .Select(t => (Guid?)t.Id).FirstOrDefaultAsync();
+        return id;
+    }
+
+    public async Task<IReadOnlyList<RouteDto>> GetMyRoutesAsync(Guid affiliateId, Guid driverId, DateOnly? date)
+    {
+        var day = date ?? DeliveryInvoicing.Today();
+        var list = await _db.DeliveryRoutes.AsNoTracking().Include(r => r.Vehicle).Include(r => r.Stops)
+            .Where(r => r.AffiliateId == affiliateId && r.DriverId == driverId && r.RouteDate == day
+                && (r.Status == "planned" || r.Status == "loading" || r.Status == "in_progress"))
+            .OrderBy(r => r.Name).ToListAsync();
+        var names = await DriverNamesAsync(affiliateId, list.Select(r => r.DriverId));
+        return list.Select(r => ToDto(r, names, includeStops: false, customers: null)).ToList();
+    }
+
+    public async Task<DriverSheetDto?> GetDriverSheetAsync(Guid affiliateId, Guid routeId, Guid? restrictDriverId = null)
+    {
+        var route = await LoadRouteAsync(affiliateId, routeId, track: false, restrictDriverId);
+        if (route is null) return null;
+
+        var customerIds = route.Stops.Select(s => s.CustomerId).Distinct().ToList();
+        var customers = await _db.Customers.AsNoTracking()
+            .Where(c => c.AffiliateId == affiliateId && customerIds.Contains(c.Id)).ToDictionaryAsync(c => c.Id);
+
+        // Envases en poder de cada cliente.
+        var typeNames = await _db.ContainerTypes.AsNoTracking().Where(t => t.AffiliateId == affiliateId)
+            .ToDictionaryAsync(t => t.Id, t => t.Name);
+        var moves = await _db.ContainerMovements.AsNoTracking()
+            .Where(m => m.AffiliateId == affiliateId && customerIds.Contains(m.CustomerId))
+            .GroupBy(m => new { m.CustomerId, m.ContainerTypeId })
+            .Select(g => new
+            {
+                g.Key.CustomerId,
+                g.Key.ContainerTypeId,
+                Delivered = g.Where(m => m.Type == "delivery").Sum(m => m.Quantity),
+                Returned = g.Where(m => m.Type == "return").Sum(m => m.Quantity),
+                Damaged = g.Where(m => m.Type == "damaged").Sum(m => m.Quantity),
+                Adjustments = g.Where(m => m.Type == "adjustment").Sum(m => m.Quantity),
+            }).ToListAsync();
+        var balanceByCustomer = moves.GroupBy(m => m.CustomerId).ToDictionary(
+            g => g.Key,
+            g => (IReadOnlyList<ContainerBalanceItemDto>)g.Select(m => new ContainerBalanceItemDto(
+                m.ContainerTypeId, typeNames.TryGetValue(m.ContainerTypeId, out var n) ? n : "—",
+                m.Delivered, m.Returned, m.Damaged, m.Adjustments,
+                m.Delivered - m.Returned - m.Damaged + m.Adjustments)).OrderBy(x => x.ContainerTypeName).ToList());
+
+        var anaquelesByCustomer = (await _db.Anaqueles.AsNoTracking()
+                .Where(a => a.AffiliateId == affiliateId && a.CustomerId != null && customerIds.Contains(a.CustomerId.Value)
+                    && a.Status != "fuera_servicio")
+                .ToListAsync())
+            .GroupBy(a => a.CustomerId!.Value)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<DriverAnaquelDto>)g.Select(a => new DriverAnaquelDto(a.Id, a.QrCode, a.Label, a.Location)).ToList());
+
+        // Saldo y facturas abiertas: la misma matemática que el estado de cuenta (BillingCalculator).
+        var invoices = await _db.Invoices.AsNoTracking()
+            .Where(i => i.AffiliateId == affiliateId && customerIds.Contains(i.CustomerId)).ToListAsync();
+        var payments = await _db.Payments.AsNoTracking()
+            .Where(p => p.AffiliateId == affiliateId && customerIds.Contains(p.CustomerId)).ToListAsync();
+        var invByCustomer = invoices.GroupBy(i => i.CustomerId).ToDictionary(g => g.Key, g => g.ToList());
+        var payByCustomer = payments.GroupBy(p => p.CustomerId).ToDictionary(g => g.Key, g => g.ToList());
+        var asOf = DateTime.UtcNow;
+
+        var contractByCustomer = (await _db.Contracts.AsNoTracking()
+                .Where(c => c.AffiliateId == affiliateId && c.IsActive && customerIds.Contains(c.CustomerId))
+                .ToListAsync())
+            .GroupBy(c => c.CustomerId).ToDictionary(g => g.Key, g => g.OrderByDescending(c => c.StartDate).First());
+
+        var stops = new List<DriverStopDto>();
+        foreach (var s in route.Stops.OrderBy(s => s.SortOrder))
+        {
+            customers.TryGetValue(s.CustomerId, out var c);
+            invByCustomer.TryGetValue(s.CustomerId, out var invs);
+            payByCustomer.TryGetValue(s.CustomerId, out var pays);
+            var billing = BillingCalculator.Compute(
+                (invs ?? new()).Select(i => new BillingInvoice(i.Id, i.InvoiceNumber, i.Total, i.Status, i.IssueDate, i.DueDate, i.PaidDate, i.CreatedAt)),
+                (pays ?? new()).Select(p => new BillingPayment(p.Id, p.InvoiceId, p.Amount, p.PaidAt, p.Method, p.Notes)),
+                asOf);
+            contractByCustomer.TryGetValue(s.CustomerId, out var contract);
+
+            stops.Add(new DriverStopDto(
+                new RouteStopDto(s.Id, s.CustomerId, c?.Name ?? "—", c?.Phone, c?.Address, s.SortOrder, s.Status, s.VisitedAt, s.Notes),
+                balanceByCustomer.TryGetValue(s.CustomerId, out var bal) ? bal : Array.Empty<ContainerBalanceItemDto>(),
+                anaquelesByCustomer.TryGetValue(s.CustomerId, out var an) ? an : Array.Empty<DriverAnaquelDto>(),
+                billing.Balance, billing.CreditOnAccount, billing.OpenInvoices.Any(o => o.IsOverdue), billing.OpenInvoices,
+                contract?.ContractNumber, contract?.RacksLoaned ?? 0, contract?.BottlesLoaned ?? 0,
+                contract?.CreditDays ?? c?.CreditDays,
+                string.IsNullOrWhiteSpace(contract?.AgreedPrices) ? null : System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(contract!.AgreedPrices!)));
+        }
+
+        var types = await GetContainerTypesForSheetAsync(affiliateId);
+        return new DriverSheetDto(route.Id, route.Name, route.RouteDate, route.Status, route.Vehicle?.Plate, route.LoadedFull,
+            stops, types, DateTime.UtcNow);
+    }
+
+    private async Task<IReadOnlyList<ContainerTypeDto>> GetContainerTypesForSheetAsync(Guid affiliateId) =>
+        await _containers.GetTypesAsync(affiliateId, includeInactive: false);
+
     // ── helpers ──────────────────────────────────────────────────────────────
 
-    private Task<DeliveryRoute?> LoadRouteAsync(Guid affiliateId, Guid routeId, bool track)
+    private Task<DeliveryRoute?> LoadRouteAsync(Guid affiliateId, Guid routeId, bool track, Guid? restrictDriverId = null)
     {
         var q = _db.DeliveryRoutes.Include(r => r.Vehicle).Include(r => r.Stops).AsQueryable();
+        if (restrictDriverId.HasValue) q = q.Where(r => r.DriverId == restrictDriverId.Value);
         if (!track) q = q.AsNoTracking();
         return q.FirstOrDefaultAsync(r => r.Id == routeId && r.AffiliateId == affiliateId);
     }

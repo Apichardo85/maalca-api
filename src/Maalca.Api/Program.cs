@@ -2839,12 +2839,36 @@ app.MapPut("/api/affiliates/{id:guid}/vehicles/{vehicleId:guid}", async (HttpCon
 });
 
 app.MapGet("/api/affiliates/{id:guid}/routes", async (HttpContext ctx, IRouteService svc, Guid id, DateOnly? from = null, DateOnly? to = null, string? status = null) =>
-    !IsActiveAffiliate(ctx, id) ? Results.Forbid() : Results.Ok(await svc.GetRoutesAsync(id, from, to, status)));
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    var (allowed, driverId) = await DriverScopeAsync(ctx, svc, id);
+    return allowed ? Results.Ok(await svc.GetRoutesAsync(id, from, to, status, driverId)) : Results.Ok(Array.Empty<RouteDto>());
+});
+
+// Las rutas de hoy (o de la fecha dada) del conductor que consulta, que aún no cerraron. Para la pantalla inicial de la PWA.
+app.MapGet("/api/affiliates/{id:guid}/routes/mine", async (HttpContext ctx, IRouteService svc, Guid id, DateOnly? date = null) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    var driverId = await svc.FindDriverIdByEmailAsync(id, ctx.User.FindFirst("email")?.Value);
+    return driverId.HasValue ? Results.Ok(await svc.GetMyRoutesAsync(id, driverId.Value, date)) : Results.Ok(Array.Empty<RouteDto>());
+});
 
 app.MapGet("/api/affiliates/{id:guid}/routes/{routeId:guid}", async (HttpContext ctx, IRouteService svc, Guid id, Guid routeId) =>
 {
     if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
-    var result = await svc.GetRouteAsync(id, routeId);
+    var (allowed, driverId) = await DriverScopeAsync(ctx, svc, id);
+    if (!allowed) return Results.NotFound();
+    var result = await svc.GetRouteAsync(id, routeId, driverId);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+
+// Paquete completo de la ruta para trabajarla desde el celular (paradas, saldos, envases, anaqueles, precios).
+app.MapGet("/api/affiliates/{id:guid}/routes/{routeId:guid}/driver-sheet", async (HttpContext ctx, IRouteService svc, Guid id, Guid routeId) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    var (allowed, driverId) = await DriverScopeAsync(ctx, svc, id);
+    if (!allowed) return Results.NotFound();
+    var result = await svc.GetDriverSheetAsync(id, routeId, driverId);
     return result is null ? Results.NotFound() : Results.Ok(result);
 });
 
@@ -2885,9 +2909,11 @@ app.MapPost("/api/affiliates/{id:guid}/routes/{routeId:guid}/cancel", async (Htt
 app.MapPost("/api/affiliates/{id:guid}/routes/{routeId:guid}/start", async (HttpContext ctx, IRouteService svc, Guid id, Guid routeId, StartRouteRequest request) =>
 {
     if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    var (allowed, driverId) = await DriverScopeAsync(ctx, svc, id);
+    if (!allowed) return Results.NotFound();
     try
     {
-        var result = await svc.StartRouteAsync(id, routeId, request, ctx.User.FindFirst("sub")?.Value);
+        var result = await svc.StartRouteAsync(id, routeId, request, ctx.User.FindFirst("sub")?.Value, driverId);
         return result is null ? Results.NotFound() : Results.Ok(result);
     }
     catch (ArgumentException ex) { return InvalidInput(ex); }
@@ -2897,9 +2923,11 @@ app.MapPost("/api/affiliates/{id:guid}/routes/{routeId:guid}/start", async (Http
 app.MapPost("/api/affiliates/{id:guid}/routes/{routeId:guid}/close", async (HttpContext ctx, IRouteService svc, Guid id, Guid routeId, CloseRouteRequest request) =>
 {
     if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    var (allowed, driverId) = await DriverScopeAsync(ctx, svc, id);
+    if (!allowed) return Results.NotFound();
     try
     {
-        var result = await svc.CloseRouteAsync(id, routeId, request, ctx.User.FindFirst("sub")?.Value);
+        var result = await svc.CloseRouteAsync(id, routeId, request, ctx.User.FindFirst("sub")?.Value, driverId);
         return result is null ? Results.NotFound() : Results.Ok(result);
     }
     catch (InvalidOperationException ex) { return BillingConflict(ex); }
@@ -2908,7 +2936,9 @@ app.MapPost("/api/affiliates/{id:guid}/routes/{routeId:guid}/close", async (Http
 app.MapGet("/api/affiliates/{id:guid}/routes/{routeId:guid}/reconciliation", async (HttpContext ctx, IRouteService svc, Guid id, Guid routeId) =>
 {
     if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
-    var result = await svc.GetReconciliationAsync(id, routeId);
+    var (allowed, driverId) = await DriverScopeAsync(ctx, svc, id);
+    if (!allowed) return Results.NotFound();
+    var result = await svc.GetReconciliationAsync(id, routeId, driverId);
     return result is null ? Results.NotFound() : Results.Ok(result);
 });
 
@@ -2916,9 +2946,11 @@ app.MapGet("/api/affiliates/{id:guid}/routes/{routeId:guid}/reconciliation", asy
 app.MapPost("/api/affiliates/{id:guid}/routes/{routeId:guid}/stops/{stopId:guid}/delivery", async (HttpContext ctx, IRouteService svc, Guid id, Guid routeId, Guid stopId, RegisterDeliveryRequest request) =>
 {
     if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    var (allowed, driverId) = await DriverScopeAsync(ctx, svc, id);
+    if (!allowed) return Results.NotFound();
     try
     {
-        var result = await svc.RegisterDeliveryAsync(id, routeId, stopId, request, ctx.User.FindFirst("sub")?.Value, ctx.User.FindFirst("email")?.Value);
+        var result = await svc.RegisterDeliveryAsync(id, routeId, stopId, request, ctx.User.FindFirst("sub")?.Value, ctx.User.FindFirst("email")?.Value, driverId);
         if (result is null) return Results.NotFound();
         return result.Duplicate
             ? Results.Ok(result)
@@ -2931,9 +2963,11 @@ app.MapPost("/api/affiliates/{id:guid}/routes/{routeId:guid}/stops/{stopId:guid}
 app.MapPost("/api/affiliates/{id:guid}/routes/{routeId:guid}/stops/{stopId:guid}/skip", async (HttpContext ctx, IRouteService svc, Guid id, Guid routeId, Guid stopId, SkipStopRequest request) =>
 {
     if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    var (allowed, driverId) = await DriverScopeAsync(ctx, svc, id);
+    if (!allowed) return Results.NotFound();
     try
     {
-        var result = await svc.SkipStopAsync(id, routeId, stopId, request, ctx.User.FindFirst("sub")?.Value);
+        var result = await svc.SkipStopAsync(id, routeId, stopId, request, ctx.User.FindFirst("sub")?.Value, driverId);
         return result is null ? Results.NotFound() : Results.Ok(result);
     }
     catch (ArgumentException ex) { return InvalidInput(ex); }
@@ -3428,6 +3462,14 @@ app.MapDelete("/api/affiliates/{id}/orders/{orderId}/no-show", async (
 // Mismo gating que /inventory: ser el afiliado activo; escribir además exige no ser Staff
 // (el despacho sí lo puede hacer Staff: es operación diaria, como avanzar un pedido).
 static bool IsActiveAffiliate(HttpContext ctx, Guid id) => ctx.User.FindFirst("active_affiliate_id")?.Value == id.ToString();
+// Un usuario Staff solo opera las rutas donde él es el conductor (su ficha de Equipo se busca por correo).
+// Dueño y gerente no tienen restricción. Allowed=false → Staff sin ficha de conductor.
+static async Task<(bool Allowed, Guid? DriverId)> DriverScopeAsync(HttpContext ctx, IRouteService svc, Guid id)
+{
+    if (!IsStaff(ctx)) return (true, null);
+    var driverId = await svc.FindDriverIdByEmailAsync(id, ctx.User.FindFirst("email")?.Value);
+    return (driverId.HasValue, driverId);
+}
 static IResult InvalidInput(ArgumentException ex) => Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
 
 app.MapGet("/api/affiliates/{id:guid}/price-lists", async (HttpContext ctx, IPriceListService svc, Guid id) =>

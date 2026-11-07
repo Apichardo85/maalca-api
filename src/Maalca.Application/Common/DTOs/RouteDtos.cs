@@ -65,3 +65,25 @@ public record RouteReconciliationDto(
     int? FullRemaining,
     int StopsTotal, int StopsVisited, int StopsSkipped, int StopsFailed, int StopsPending,
     decimal SalesTotal, decimal CollectedCash, decimal CollectedTransfer);
+
+// ── Hoja de reparto del conductor (PWA) ──────────────────────────────────────
+
+public record DriverAnaquelDto(Guid Id, string QrCode, string? Label, string? Location);
+
+/// <summary>Todo lo que el conductor necesita saber de una parada sin hacer más llamadas: qué envases tiene el cliente,
+/// qué anaqueles, cuánto debe y qué precios/cupo tiene pactados.</summary>
+public record DriverStopDto(
+    RouteStopDto Stop,
+    IReadOnlyList<ContainerBalanceItemDto> Containers,
+    IReadOnlyList<DriverAnaquelDto> Anaqueles,
+    decimal AmountOwed, decimal CreditOnAccount, bool HasOverdue,
+    IReadOnlyList<OpenInvoiceDto> OpenInvoices,
+    string? ContractNumber, int RacksLoaned, int BottlesLoaned, int? CreditDays,
+    System.Text.Json.JsonElement? AgreedPrices);
+
+public record DriverSheetDto(
+    Guid RouteId, string Name, DateOnly RouteDate, string Status,
+    string? VehiclePlate, int? LoadedFull,
+    IReadOnlyList<DriverStopDto> Stops,
+    IReadOnlyList<ContainerTypeDto> ContainerTypes,
+    DateTime GeneratedAt);
