@@ -350,8 +350,8 @@ public class RouteService : IRouteService
                 .Where(c => c.Id == stop.CustomerId).Select(c => c.CreditDays).FirstOrDefaultAsync();
             if (creditDays == 0)
             {
-                var lines = DeliveryInvoicing.BuildLines(delivery.Items);
-                var subtotal = lines.Sum(l => l.Total);
+                var invoiceLines = DeliveryInvoicing.BuildLines(delivery.Items);
+                var subtotal = invoiceLines.Sum(l => l.Total);
                 if (subtotal > 0)
                 {
                     invoice = new Invoice
@@ -369,7 +369,7 @@ public class RouteService : IRouteService
                         Notes = $"Entrega en ruta: {route.Name}",
                         CreatedAt = now,
                         CreatedBy = actorId,
-                        Items = lines,
+                        Items = invoiceLines,
                     };
                     _db.Invoices.Add(invoice);
                     delivery.InvoiceId = invoice.Id;
