@@ -67,6 +67,8 @@ public class AppDbContext : DbContext
     public DbSet<ShippingMethod> ShippingMethods => Set<ShippingMethod>();
     public DbSet<CarrierAccount> CarrierAccounts => Set<CarrierAccount>();
     public DbSet<StoreCustomer> StoreCustomers => Set<StoreCustomer>();
+    public DbSet<Contract> Contracts => Set<Contract>();
+    public DbSet<Payment> Payments => Set<Payment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -864,6 +866,48 @@ public class AppDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(e => e.CustomerId)
                   .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Contract -- contrato recurrente de un cliente (Nueva Era, Fase 1)
+        modelBuilder.Entity<Contract>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.DeliveryFrequency).HasMaxLength(20);
+            entity.Property(e => e.BillingCycle).HasMaxLength(20);
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Customer)
+                  .WithMany()
+                  .HasForeignKey(e => e.CustomerId)
+                  .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => new { e.AffiliateId, e.CustomerId });
+        });
+
+        // Payment -- libro de pagos/abonos (saldo vivo = facturas - pagos)
+        modelBuilder.Entity<Payment>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Amount).HasPrecision(18, 2);
+            entity.Property(e => e.Method).HasMaxLength(20);
+            entity.Property(e => e.IdempotencyKey).HasMaxLength(100);
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Customer)
+                  .WithMany()
+                  .HasForeignKey(e => e.CustomerId)
+                  .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.Invoice)
+                  .WithMany()
+                  .HasForeignKey(e => e.InvoiceId)
+                  .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => new { e.AffiliateId, e.CustomerId });
+            entity.HasIndex(e => new { e.AffiliateId, e.IdempotencyKey })
+                  .IsUnique()
+                  .HasFilter("\"IdempotencyKey\" IS NOT NULL");
         });
 
         // InvoiceItem
