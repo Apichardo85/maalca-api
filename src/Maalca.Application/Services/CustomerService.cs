@@ -74,6 +74,17 @@ public class CustomerService : ICustomerService
         existing.Phone = customer.Phone;
         existing.Notes = customer.Notes;
         existing.Status = customer.Status;
+
+        // Campos de cliente por contrato (Fase 1). Solo se tocan si llegan con valor: el formulario de edición
+        // anterior no los manda y no debe borrarlos al guardar. Para vaciar un texto se manda "" (cadena vacía).
+        // BillingCycle / DeliveryFrequency / CreditDays NO se editan acá: los fija el contrato activo (ContractService).
+        if (customer.Rnc is not null) existing.Rnc = string.IsNullOrWhiteSpace(customer.Rnc) ? null : customer.Rnc.Trim();
+        if (customer.Address is not null) existing.Address = string.IsNullOrWhiteSpace(customer.Address) ? null : customer.Address.Trim();
+        if (customer.GpsLat.HasValue) existing.GpsLat = customer.GpsLat;
+        if (customer.GpsLng.HasValue) existing.GpsLng = customer.GpsLng;
+        if (customer.RouteId.HasValue) existing.RouteId = customer.RouteId;
+        if (customer.PriceListId.HasValue) existing.PriceListId = customer.PriceListId;
+
         existing.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
