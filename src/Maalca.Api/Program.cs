@@ -106,6 +106,7 @@ builder.Services.AddScoped<IPlatformContentService, PlatformContentService>();
 builder.Services.AddScoped<IProspectIntakeService, ProspectIntakeService>();
 builder.Services.AddScoped<IContractService, ContractService>();
 builder.Services.AddScoped<IBillingService, BillingService>();
+builder.Services.AddScoped<ICustomerImportService, CustomerImportService>();
 builder.Services.AddScoped<IScreenService, ScreenService>();
 builder.Services.AddScoped<IScreenDeviceService, ScreenDeviceService>();
 // Vigila las TVs y avisa a MaalCa cuando una se cae en horario de atención (ver Workers/ScreenMonitorWorker).
@@ -2697,6 +2698,17 @@ app.MapGet("/api/affiliates/{id:guid}/customers/{customerId:guid}/statement", as
 
 app.MapGet("/api/affiliates/{id:guid}/receivables/aging", async (HttpContext ctx, IBillingService svc, Guid id, DateTime? asOf = null) =>
     !IsActiveAffiliate(ctx, id) ? Results.Forbid() : Results.Ok(await svc.GetAgingAsync(id, asOf)));
+
+// Importación masiva de clientes: la web manda las filas ya mapeadas. dryRun=true (por defecto) solo valida.
+app.MapPost("/api/affiliates/{id:guid}/customers/import", async (HttpContext ctx, ICustomerImportService svc, Guid id, ImportCustomersRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        return Results.Ok(await svc.ImportAsync(id, request, ctx.User.FindFirst("sub")?.Value, ctx.User.FindFirst("email")?.Value));
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
 
 // ============ AUDIT LOG ENDPOINTS ============
 // Arranca instrumentado en Facturación (crear/cobrar/anular una factura); cualquier otro
