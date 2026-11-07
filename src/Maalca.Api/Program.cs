@@ -104,6 +104,8 @@ builder.Services.AddScoped<IScreenAdService, ScreenAdService>();
 builder.Services.AddScoped<IPlatformAddOnService, PlatformAddOnService>();
 builder.Services.AddScoped<IPlatformContentService, PlatformContentService>();
 builder.Services.AddScoped<IProspectIntakeService, ProspectIntakeService>();
+builder.Services.AddScoped<IContractService, ContractService>();
+builder.Services.AddScoped<IBillingService, BillingService>();
 builder.Services.AddScoped<IScreenService, ScreenService>();
 builder.Services.AddScoped<IScreenDeviceService, ScreenDeviceService>();
 // Vigila las TVs y avisa a MaalCa cuando una se cae en horario de atención (ver Workers/ScreenMonitorWorker).
@@ -2620,6 +2622,81 @@ app.MapPost("/api/affiliates/{affiliateId:guid}/invoices/{id:guid}/checkout", as
         return Results.Conflict(new { error = new { code = "CONFLICT", message = ex.Message } });
     }
 });
+
+// ============ CONTRATOS Y COBROS (clientes por contrato: crédito, abonos, estado de cuenta, antigüedad) ============
+// Lectura: cualquier miembro del negocio activo (igual que /invoices). Escritura: no Staff.
+static IResult BillingConflict(InvalidOperationException ex) =>
+    Results.Conflict(new { error = new { code = "CONFLICT", message = ex.Message } });
+
+app.MapGet("/api/affiliates/{id:guid}/contracts", async (HttpContext ctx, IContractService svc, Guid id, Guid? customerId = null, bool? active = null) =>
+    !IsActiveAffiliate(ctx, id) ? Results.Forbid() : Results.Ok(await svc.GetAllAsync(id, customerId, active)));
+
+app.MapGet("/api/affiliates/{id:guid}/contracts/{contractId:guid}", async (HttpContext ctx, IContractService svc, Guid id, Guid contractId) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    var result = await svc.GetAsync(id, contractId);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+
+app.MapPost("/api/affiliates/{id:guid}/contracts", async (HttpContext ctx, IContractService svc, Guid id, UpsertContractRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await svc.CreateAsync(id, request, ctx.User.FindFirst("sub")?.Value);
+        return Results.Created($"/api/affiliates/{id}/contracts/{result.Id}", result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+    catch (InvalidOperationException ex) { return BillingConflict(ex); }
+});
+
+app.MapPut("/api/affiliates/{id:guid}/contracts/{contractId:guid}", async (HttpContext ctx, IContractService svc, Guid id, Guid contractId, UpsertContractRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await svc.UpdateAsync(id, contractId, request, ctx.User.FindFirst("sub")?.Value);
+        return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+    catch (InvalidOperationException ex) { return BillingConflict(ex); }
+});
+
+// "Borrar" = desactivar (soft-delete): el contrato queda en el historial con su fecha de fin.
+app.MapDelete("/api/affiliates/{id:guid}/contracts/{contractId:guid}", async (HttpContext ctx, IContractService svc, Guid id, Guid contractId) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    var result = await svc.DeactivateAsync(id, contractId, ctx.User.FindFirst("sub")?.Value);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+
+// Idempotente por idempotencyKey: 201 si crea, 200 si la clave ya existía (reintento con mala señal).
+app.MapPost("/api/affiliates/{id:guid}/payments", async (HttpContext ctx, IBillingService svc, Guid id, RegisterPaymentRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await svc.RegisterPaymentAsync(id, request, ctx.User.FindFirst("sub")?.Value, ctx.User.FindFirst("email")?.Value);
+        return result.Duplicate
+            ? Results.Ok(result)
+            : Results.Created($"/api/affiliates/{id}/customers/{request.CustomerId}/payments", result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+    catch (InvalidOperationException ex) { return BillingConflict(ex); }
+});
+
+app.MapGet("/api/affiliates/{id:guid}/customers/{customerId:guid}/payments", async (HttpContext ctx, IBillingService svc, Guid id, Guid customerId, int take = 100) =>
+    !IsActiveAffiliate(ctx, id) ? Results.Forbid() : Results.Ok(await svc.GetPaymentsAsync(id, customerId, take)));
+
+app.MapGet("/api/affiliates/{id:guid}/customers/{customerId:guid}/statement", async (HttpContext ctx, IBillingService svc, Guid id, Guid customerId, DateTime? asOf = null) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    var result = await svc.GetStatementAsync(id, customerId, asOf);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+
+app.MapGet("/api/affiliates/{id:guid}/receivables/aging", async (HttpContext ctx, IBillingService svc, Guid id, DateTime? asOf = null) =>
+    !IsActiveAffiliate(ctx, id) ? Results.Forbid() : Results.Ok(await svc.GetAgingAsync(id, asOf)));
 
 // ============ AUDIT LOG ENDPOINTS ============
 // Arranca instrumentado en Facturación (crear/cobrar/anular una factura); cualquier otro
