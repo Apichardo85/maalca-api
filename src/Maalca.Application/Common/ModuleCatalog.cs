@@ -85,6 +85,12 @@ public static class ModuleCatalog
         new ModuleDefinition("proposals", "Propuestas", "Proposals",
             "Envía cotizaciones y deja que el cliente firme y acepte en línea.", "Send quotes and let clients sign and accept online.",
             null, new[] { "community" }, PlanTier.Professional),
+        // Clientes por contrato (Nueva Era / agua y hielo, Fase 1): contratos, abonos, estado de cuenta y antigüedad
+        // de saldos. Solo retail y plan Professional a propósito: FilterActive prende por defecto todo módulo relevante
+        // para negocios nunca configurados, y este no debe aparecer de golpe en tiendas existentes.
+        new ModuleDefinition("contracts", "Contratos y cobros", "Contracts & collections",
+            "Contratos por cliente, abonos, estado de cuenta y antigüedad de saldos.", "Customer contracts, payments, statements and aging.",
+            new[] { "retail" }, null, PlanTier.Professional),
     };
 
     private static readonly Dictionary<string, ModuleDefinition> ByToken =
