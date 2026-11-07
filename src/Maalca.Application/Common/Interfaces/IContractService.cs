@@ -11,4 +11,12 @@ public interface IContractService
     Task<ContractDto> CreateAsync(Guid affiliateId, UpsertContractRequest request, string? actorId);
     Task<ContractDto?> UpdateAsync(Guid affiliateId, Guid contractId, UpsertContractRequest request, string? actorId);
     Task<ContractDto?> DeactivateAsync(Guid affiliateId, Guid contractId, string? actorId);
+
+    /// <summary>Plantilla del negocio (o la base si no guardó una). Guardar valida que solo use etiquetas conocidas.</summary>
+    Task<ContractTemplateDto> GetTemplateAsync(Guid affiliateId);
+    Task<ContractTemplateDto> SaveTemplateAsync(Guid affiliateId, SaveContractTemplateRequest request, string? actorId);
+    /// <summary>Vuelve a la plantilla base (borra la personalizada).</summary>
+    Task<ContractTemplateDto> ResetTemplateAsync(Guid affiliateId);
+    /// <summary>Contrato con la plantilla ya llenada, listo para imprimir. Null si el contrato no existe.</summary>
+    Task<ContractDocumentDto?> RenderDocumentAsync(Guid affiliateId, Guid contractId);
 }

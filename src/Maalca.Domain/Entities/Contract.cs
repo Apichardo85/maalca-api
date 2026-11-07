@@ -23,6 +23,13 @@ public class Contract : AuditableEntity
     public DateOnly? EndDate { get; set; }
     public bool IsActive { get; set; } = true;
     public string? Notes { get; set; }
+    /// <summary>Folio del contrato (el que lleva el papel, ej. "0133"). Único por negocio. Se puede escribir a mano para
+    /// continuar la numeración del cuaderno; si se omite al crear, el servidor asigna el siguiente.</summary>
+    public string? ContractNumber { get; set; }
+    /// <summary>Anaqueles prestados al cliente según el contrato.</summary>
+    public int RacksLoaned { get; set; } = 0;
+    /// <summary>Botellones prestados al cliente según el contrato (cupo: sirve para avisar si tiene de más).</summary>
+    public int BottlesLoaned { get; set; } = 0;
 
     public Affiliate? Affiliate { get; set; }
     public Customer? Customer { get; set; }

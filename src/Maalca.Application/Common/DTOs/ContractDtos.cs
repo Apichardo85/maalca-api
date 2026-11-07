@@ -6,13 +6,15 @@ namespace Maalca.Application.Common.DTOs;
 public record ContractDto(
     Guid Id, Guid CustomerId, string? CustomerName, string DeliveryFrequency, string BillingCycle,
     int CreditDays, JsonElement? AgreedPrices, DateOnly StartDate, DateOnly? EndDate,
-    bool IsActive, string? Notes, DateTime CreatedAt);
+    bool IsActive, string? Notes, DateTime CreatedAt,
+    string? ContractNumber = null, int RacksLoaned = 0, int BottlesLoaned = 0);
 
 /// <summary>Alta y edición (PUT reemplaza todos los campos editables; el cliente de un contrato no se cambia).
 /// DeliveryFrequency: daily | weekly | on_demand. BillingCycle: weekly | biweekly | monthly.</summary>
 public record UpsertContractRequest(
     Guid CustomerId, string DeliveryFrequency, string BillingCycle, int CreditDays,
-    JsonElement? AgreedPrices, DateOnly StartDate, DateOnly? EndDate, bool IsActive = true, string? Notes = null);
+    JsonElement? AgreedPrices, DateOnly StartDate, DateOnly? EndDate, bool IsActive = true, string? Notes = null,
+    string? ContractNumber = null, int RacksLoaned = 0, int BottlesLoaned = 0);
 
 /// <summary>Pago o abono. InvoiceId null = abono a cuenta.</summary>
 public record PaymentDto(

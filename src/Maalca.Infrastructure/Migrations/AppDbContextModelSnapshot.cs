@@ -1263,6 +1263,13 @@ namespace Maalca.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<int>("BottlesLoaned")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ContractNumber")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1289,6 +1296,9 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<string>("Notes")
                         .HasColumnType("text");
 
+                    b.Property<int>("RacksLoaned")
+                        .HasColumnType("integer");
+
                     b.Property<DateOnly>("StartDate")
                         .HasColumnType("date");
 
@@ -1302,9 +1312,51 @@ namespace Maalca.Infrastructure.Migrations
 
                     b.HasIndex("CustomerId");
 
+                    b.HasIndex("AffiliateId", "ContractNumber")
+                        .IsUnique()
+                        .HasFilter("\"ContractNumber\" IS NOT NULL");
+
                     b.HasIndex("AffiliateId", "CustomerId");
 
                     b.ToTable("Contracts");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.ContractTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AffiliateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AffiliateId")
+                        .IsUnique();
+
+                    b.ToTable("ContractTemplates");
                 });
 
             modelBuilder.Entity("Maalca.Domain.Entities.Customer", b =>
@@ -4465,6 +4517,17 @@ namespace Maalca.Infrastructure.Migrations
                     b.Navigation("Affiliate");
 
                     b.Navigation("Customer");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.ContractTemplate", b =>
+                {
+                    b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
+                        .WithMany()
+                        .HasForeignKey("AffiliateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Affiliate");
                 });
 
             modelBuilder.Entity("Maalca.Domain.Entities.Customer", b =>

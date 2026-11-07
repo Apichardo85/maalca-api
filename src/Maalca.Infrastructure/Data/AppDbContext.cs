@@ -69,6 +69,7 @@ public class AppDbContext : DbContext
     public DbSet<StoreCustomer> StoreCustomers => Set<StoreCustomer>();
     public DbSet<Contract> Contracts => Set<Contract>();
     public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<ContractTemplate> ContractTemplates => Set<ContractTemplate>();
     public DbSet<ContainerType> ContainerTypes => Set<ContainerType>();
     public DbSet<Anaquel> Anaqueles => Set<Anaquel>();
     public DbSet<ContainerMovement> ContainerMovements => Set<ContainerMovement>();
@@ -886,6 +887,7 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.DeliveryFrequency).HasMaxLength(20);
             entity.Property(e => e.BillingCycle).HasMaxLength(20);
+            entity.Property(e => e.ContractNumber).HasMaxLength(20);
             entity.HasOne(e => e.Affiliate)
                   .WithMany()
                   .HasForeignKey(e => e.AffiliateId)
@@ -895,6 +897,21 @@ public class AppDbContext : DbContext
                   .HasForeignKey(e => e.CustomerId)
                   .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(e => new { e.AffiliateId, e.CustomerId });
+            entity.HasIndex(e => new { e.AffiliateId, e.ContractNumber })
+                  .IsUnique()
+                  .HasFilter("\"ContractNumber\" IS NOT NULL");
+        });
+
+        modelBuilder.Entity<ContractTemplate>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Title).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Body).IsRequired();
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => e.AffiliateId).IsUnique();
         });
 
         // Payment -- libro de pagos/abonos (saldo vivo = facturas - pagos)

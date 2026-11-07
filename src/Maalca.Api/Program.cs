@@ -2673,6 +2673,27 @@ app.MapDelete("/api/affiliates/{id:guid}/contracts/{contractId:guid}", async (Ht
     return result is null ? Results.NotFound() : Results.Ok(result);
 });
 
+// Plantilla del documento de contrato (texto con etiquetas {{cliente}}…) y el documento ya llenado para imprimir.
+app.MapGet("/api/affiliates/{id:guid}/contract-template", async (HttpContext ctx, IContractService svc, Guid id) =>
+    !IsActiveAffiliate(ctx, id) ? Results.Forbid() : Results.Ok(await svc.GetTemplateAsync(id)));
+
+app.MapPut("/api/affiliates/{id:guid}/contract-template", async (HttpContext ctx, IContractService svc, Guid id, SaveContractTemplateRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try { return Results.Ok(await svc.SaveTemplateAsync(id, request, ctx.User.FindFirst("sub")?.Value)); }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
+
+app.MapDelete("/api/affiliates/{id:guid}/contract-template", async (HttpContext ctx, IContractService svc, Guid id) =>
+    !IsActiveAffiliate(ctx, id) || IsStaff(ctx) ? Results.Forbid() : Results.Ok(await svc.ResetTemplateAsync(id)));
+
+app.MapGet("/api/affiliates/{id:guid}/contracts/{contractId:guid}/document", async (HttpContext ctx, IContractService svc, Guid id, Guid contractId) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    var result = await svc.RenderDocumentAsync(id, contractId);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+
 // Idempotente por idempotencyKey: 201 si crea, 200 si la clave ya existía (reintento con mala señal).
 app.MapPost("/api/affiliates/{id:guid}/payments", async (HttpContext ctx, IBillingService svc, Guid id, RegisterPaymentRequest request) =>
 {
