@@ -106,6 +106,7 @@ builder.Services.AddScoped<IPlatformContentService, PlatformContentService>();
 builder.Services.AddScoped<IProspectIntakeService, ProspectIntakeService>();
 builder.Services.AddScoped<IContractService, ContractService>();
 builder.Services.AddScoped<IContainerService, ContainerService>();
+builder.Services.AddScoped<IRouteService, RouteService>();
 builder.Services.AddScoped<IBillingService, BillingService>();
 builder.Services.AddScoped<ICustomerImportService, CustomerImportService>();
 builder.Services.AddScoped<IScreenService, ScreenService>();
@@ -2786,6 +2787,136 @@ app.MapGet("/api/affiliates/{id:guid}/customers/{customerId:guid}/container-bala
 
 app.MapGet("/api/affiliates/{id:guid}/customers/{customerId:guid}/container-movements", async (HttpContext ctx, IContainerService svc, Guid id, Guid customerId, int take = 100) =>
     !IsActiveAffiliate(ctx, id) ? Results.Forbid() : Results.Ok(await svc.GetMovementsAsync(id, customerId, take)));
+
+// ============ VEHÍCULOS, RUTAS Y ENTREGAS (reparto con la PWA del conductor) ============
+// Lectura: cualquier miembro del negocio activo. Vehículos y planificación (crear/editar/cancelar ruta): no Staff.
+// Lo que hace el conductor en ruta — salir, registrar entrega/cobro, saltar parada, cerrar — también lo puede Staff.
+app.MapGet("/api/affiliates/{id:guid}/vehicles", async (HttpContext ctx, IRouteService svc, Guid id, bool includeInactive = false) =>
+    !IsActiveAffiliate(ctx, id) ? Results.Forbid() : Results.Ok(await svc.GetVehiclesAsync(id, includeInactive)));
+
+app.MapPost("/api/affiliates/{id:guid}/vehicles", async (HttpContext ctx, IRouteService svc, Guid id, UpsertVehicleRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await svc.CreateVehicleAsync(id, request, ctx.User.FindFirst("sub")?.Value);
+        return Results.Created($"/api/affiliates/{id}/vehicles/{result.Id}", result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
+
+app.MapPut("/api/affiliates/{id:guid}/vehicles/{vehicleId:guid}", async (HttpContext ctx, IRouteService svc, Guid id, Guid vehicleId, UpsertVehicleRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await svc.UpdateVehicleAsync(id, vehicleId, request, ctx.User.FindFirst("sub")?.Value);
+        return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
+
+app.MapGet("/api/affiliates/{id:guid}/routes", async (HttpContext ctx, IRouteService svc, Guid id, DateOnly? from = null, DateOnly? to = null, string? status = null) =>
+    !IsActiveAffiliate(ctx, id) ? Results.Forbid() : Results.Ok(await svc.GetRoutesAsync(id, from, to, status)));
+
+app.MapGet("/api/affiliates/{id:guid}/routes/{routeId:guid}", async (HttpContext ctx, IRouteService svc, Guid id, Guid routeId) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    var result = await svc.GetRouteAsync(id, routeId);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+
+app.MapPost("/api/affiliates/{id:guid}/routes", async (HttpContext ctx, IRouteService svc, Guid id, UpsertRouteRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await svc.CreateRouteAsync(id, request, ctx.User.FindFirst("sub")?.Value);
+        return Results.Created($"/api/affiliates/{id}/routes/{result.Id}", result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
+
+app.MapPut("/api/affiliates/{id:guid}/routes/{routeId:guid}", async (HttpContext ctx, IRouteService svc, Guid id, Guid routeId, UpsertRouteRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await svc.UpdateRouteAsync(id, routeId, request, ctx.User.FindFirst("sub")?.Value);
+        return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+    catch (InvalidOperationException ex) { return BillingConflict(ex); }
+});
+
+app.MapPost("/api/affiliates/{id:guid}/routes/{routeId:guid}/cancel", async (HttpContext ctx, IRouteService svc, Guid id, Guid routeId) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await svc.CancelRouteAsync(id, routeId, ctx.User.FindFirst("sub")?.Value);
+        return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+    catch (InvalidOperationException ex) { return BillingConflict(ex); }
+});
+
+app.MapPost("/api/affiliates/{id:guid}/routes/{routeId:guid}/start", async (HttpContext ctx, IRouteService svc, Guid id, Guid routeId, StartRouteRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    try
+    {
+        var result = await svc.StartRouteAsync(id, routeId, request, ctx.User.FindFirst("sub")?.Value);
+        return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+    catch (InvalidOperationException ex) { return BillingConflict(ex); }
+});
+
+app.MapPost("/api/affiliates/{id:guid}/routes/{routeId:guid}/close", async (HttpContext ctx, IRouteService svc, Guid id, Guid routeId, CloseRouteRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    try
+    {
+        var result = await svc.CloseRouteAsync(id, routeId, request, ctx.User.FindFirst("sub")?.Value);
+        return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+    catch (InvalidOperationException ex) { return BillingConflict(ex); }
+});
+
+app.MapGet("/api/affiliates/{id:guid}/routes/{routeId:guid}/reconciliation", async (HttpContext ctx, IRouteService svc, Guid id, Guid routeId) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    var result = await svc.GetReconciliationAsync(id, routeId);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+
+// Idempotente por idempotencyKey: 201 si crea, 200 si la clave ya existía (reintento con mala señal en ruta).
+app.MapPost("/api/affiliates/{id:guid}/routes/{routeId:guid}/stops/{stopId:guid}/delivery", async (HttpContext ctx, IRouteService svc, Guid id, Guid routeId, Guid stopId, RegisterDeliveryRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    try
+    {
+        var result = await svc.RegisterDeliveryAsync(id, routeId, stopId, request, ctx.User.FindFirst("sub")?.Value, ctx.User.FindFirst("email")?.Value);
+        if (result is null) return Results.NotFound();
+        return result.Duplicate
+            ? Results.Ok(result)
+            : Results.Created($"/api/affiliates/{id}/routes/{routeId}", result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+    catch (InvalidOperationException ex) { return BillingConflict(ex); }
+});
+
+app.MapPost("/api/affiliates/{id:guid}/routes/{routeId:guid}/stops/{stopId:guid}/skip", async (HttpContext ctx, IRouteService svc, Guid id, Guid routeId, Guid stopId, SkipStopRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    try
+    {
+        var result = await svc.SkipStopAsync(id, routeId, stopId, request, ctx.User.FindFirst("sub")?.Value);
+        return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+    catch (InvalidOperationException ex) { return BillingConflict(ex); }
+});
 
 // Importación masiva de clientes: la web manda las filas ya mapeadas. dryRun=true (por defecto) solo valida.
 app.MapPost("/api/affiliates/{id:guid}/customers/import", async (HttpContext ctx, ICustomerImportService svc, Guid id, ImportCustomersRequest request) =>
