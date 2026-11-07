@@ -359,6 +359,10 @@ public class AppDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired();
+            entity.Property(e => e.GpsLat).HasPrecision(9, 6);
+            entity.Property(e => e.GpsLng).HasPrecision(9, 6);
+            entity.Property(e => e.BillingCycle).HasMaxLength(20);
+            entity.Property(e => e.DeliveryFrequency).HasMaxLength(20);
             entity.HasOne(e => e.Affiliate)
                   .WithMany(a => a.Customers)
                   .HasForeignKey(e => e.AffiliateId)

@@ -139,6 +139,19 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<string>("Address")
                         .HasColumnType("text");
 
+                    b.Property<string>("BillingInterval")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<int>("BoardLayout")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("BoardOrientation")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("BoardPanels")
+                        .HasColumnType("text");
+
                     b.Property<int>("BoardTheme")
                         .HasColumnType("integer");
 
@@ -168,12 +181,18 @@ namespace Maalca.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("DailyMenu")
+                        .HasColumnType("text");
+
                     b.Property<string>("Description")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
                     b.Property<string>("DescriptionEn")
                         .HasColumnType("text");
+
+                    b.Property<int>("ExtraScreens")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Faq")
                         .HasColumnType("text");
@@ -230,6 +249,13 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<int>("OperatorType")
                         .HasColumnType("integer");
 
+                    b.Property<decimal?>("PickupNewCustomerLimit")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<bool>("PickupNoShowRequiresCard")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("Plan")
                         .HasColumnType("integer");
 
@@ -249,6 +275,20 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<bool>("Published")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("SalesTaxOnShipping")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal?>("SalesTaxRate")
+                        .HasPrecision(6, 3)
+                        .HasColumnType("numeric(6,3)");
+
+                    b.Property<string>("SalesTaxState")
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)");
+
+                    b.Property<bool>("ScreensOnly")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("SecondaryColor")
                         .HasColumnType("text");
 
@@ -259,9 +299,31 @@ namespace Maalca.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("SetupFeePaidAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Slug")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<Guid?>("StoreDefaultPriceListId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("StoreLayout")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("boutique");
+
+                    b.Property<string>("StoreSignupMode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("StoreSignupNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<string>("StripeConnectAccountId")
                         .HasMaxLength(255)
@@ -290,18 +352,6 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<string>("Timezone")
                         .HasColumnType("text");
 
-                    b.Property<int>("BoardLayout")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("BoardOrientation")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("BoardPanels")
-                        .HasColumnType("text");
-
-                    b.Property<string>("DailyMenu")
-                        .HasColumnType("text");
-
                     b.Property<int>("TransitionEffect")
                         .HasColumnType("integer");
 
@@ -319,26 +369,6 @@ namespace Maalca.Infrastructure.Migrations
 
                     b.Property<string>("ZoomLink")
                         .HasColumnType("text");
-
-                    b.Property<decimal?>("PickupNewCustomerLimit")
-                        .HasPrecision(10, 2)
-                        .HasColumnType("numeric(10,2)");
-
-                    b.Property<bool>("PickupNoShowRequiresCard")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("ExtraScreens")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("BillingInterval")
-                        .HasMaxLength(8)
-                        .HasColumnType("character varying(8)");
-
-                    b.Property<DateTime?>("SetupFeePaidAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("ScreensOnly")
-                        .HasColumnType("boolean");
 
                     b.HasKey("Id");
 
@@ -662,6 +692,97 @@ namespace Maalca.Infrastructure.Migrations
                     b.ToTable("Canales");
                 });
 
+            modelBuilder.Entity("Maalca.Domain.Entities.CarrierAccount", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AffiliateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ApiKeyEnc")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ApiKeyLast4")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<decimal>("BoxWeightOz")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FromAddress1")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FromAddress2")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FromCity")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FromName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FromPhone")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FromState")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FromZip")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("HeightIn")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("LengthIn")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<string>("Package")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("Service")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("WidthIn")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AffiliateId", "Provider")
+                        .IsUnique();
+
+                    b.ToTable("CarrierAccounts");
+                });
+
             modelBuilder.Entity("Maalca.Domain.Entities.Causa", b =>
                 {
                     b.Property<Guid>("Id")
@@ -952,7 +1073,7 @@ namespace Maalca.Infrastructure.Migrations
                     b.ToTable("CommunitySignups");
                 });
 
-            modelBuilder.Entity("Maalca.Domain.Entities.Customer", b =>
+            modelBuilder.Entity("Maalca.Domain.Entities.Contract", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -961,14 +1082,97 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<Guid>("AffiliateId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AgreedPrices")
+                        .HasColumnType("text");
+
+                    b.Property<string>("BillingCycle")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("CreatedBy")
                         .HasColumnType("text");
 
+                    b.Property<int>("CreditDays")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DeliveryFrequency")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateOnly?>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("AffiliateId", "CustomerId");
+
+                    b.ToTable("Contracts");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.Customer", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Address")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("AffiliateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BillingCycle")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("CreditDays")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DeliveryFrequency")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<string>("Email")
                         .HasColumnType("text");
+
+                    b.Property<decimal?>("GpsLat")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)");
+
+                    b.Property<decimal?>("GpsLng")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)");
 
                     b.Property<DateTime?>("LastVisit")
                         .HasColumnType("timestamp with time zone");
@@ -977,11 +1181,23 @@ namespace Maalca.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int>("NoShows")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Notes")
                         .HasColumnType("text");
 
                     b.Property<string>("Phone")
                         .HasColumnType("text");
+
+                    b.Property<Guid?>("PriceListId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Rnc")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("RouteId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -995,9 +1211,6 @@ namespace Maalca.Infrastructure.Migrations
 
                     b.Property<string>("UpdatedBy")
                         .HasColumnType("text");
-
-                    b.Property<int>("NoShows")
-                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 
@@ -1158,8 +1371,16 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<string>("Barcode")
                         .HasColumnType("text");
 
+                    b.Property<string>("Brand")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
                     b.Property<string>("Category")
                         .HasColumnType("text");
+
+                    b.Property<string>("ChokingWarning")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
 
                     b.Property<decimal?>("CompareAtPrice")
                         .HasPrecision(18, 2)
@@ -1184,6 +1405,14 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<bool>("Featured")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("Hazmat")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<decimal?>("HeightIn")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
                     b.Property<string>("ImageUrl")
                         .HasColumnType("text");
 
@@ -1199,6 +1428,16 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<bool>("IsPubliclyVisible")
                         .HasColumnType("boolean");
 
+                    b.Property<decimal?>("LengthIn")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<int?>("MaxPerOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MinOrderQty")
+                        .HasColumnType("integer");
+
                     b.Property<decimal>("MinStock")
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)");
@@ -1209,6 +1448,9 @@ namespace Maalca.Infrastructure.Migrations
 
                     b.Property<string>("NameEn")
                         .HasColumnType("text");
+
+                    b.Property<int?>("OrderQtyMultiple")
+                        .HasColumnType("integer");
 
                     b.Property<bool>("Popular")
                         .HasColumnType("boolean");
@@ -1248,6 +1490,25 @@ namespace Maalca.Infrastructure.Migrations
 
                     b.Property<string>("UpdatedBy")
                         .HasColumnType("text");
+
+                    b.Property<string>("VariantGroup")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("VariantLabel")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<string>("VolumeTiers")
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("WeightOz")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<decimal?>("WidthIn")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
 
                     b.HasKey("Id");
 
@@ -1543,6 +1804,27 @@ namespace Maalca.Infrastructure.Migrations
                     b.ToTable("ModifierOptions");
                 });
 
+            modelBuilder.Entity("Maalca.Domain.Entities.ModulePlanRule", b =>
+                {
+                    b.Property<string>("Token")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<int>("MinTier")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.HasKey("Token");
+
+                    b.ToTable("ModulePlanRules");
+                });
+
             modelBuilder.Entity("Maalca.Domain.Entities.Order", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1591,9 +1873,22 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<DateTime?>("EstimatedReadyAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("FulfillmentType")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<string>("ItemsJson")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<decimal?>("LabelCost")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("LabelUrl")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("NoShowAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Notes")
                         .HasColumnType("text");
@@ -1601,11 +1896,63 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<string>("PaymentMethod")
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("PriceListId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PriceListName")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
                     b.Property<DateOnly?>("ScheduledFor")
                         .HasColumnType("date");
 
+                    b.Property<string>("ShipToCity")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ShipToLine1")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ShipToLine2")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ShipToName")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("ShipToState")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("ShipToZip")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime?>("ShippedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ShippingCarrier")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<decimal>("ShippingCost")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid?>("ShippingMethodId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ShippingMethodName")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer");
+
+                    b.Property<Guid?>("StoreCustomerId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("StripeCheckoutSessionId")
                         .HasMaxLength(255)
@@ -1627,6 +1974,10 @@ namespace Maalca.Infrastructure.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<decimal?>("TaxRate")
+                        .HasPrecision(6, 3)
+                        .HasColumnType("numeric(6,3)");
+
                     b.Property<decimal>("Tip")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
@@ -1635,6 +1986,10 @@ namespace Maalca.Infrastructure.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<string>("TrackingNumber")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
                     b.Property<string>("TrackingToken")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
@@ -1642,12 +1997,11 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<DateTime?>("NoShowAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.HasKey("Id");
 
                     b.HasIndex("CustomerId");
+
+                    b.HasIndex("StoreCustomerId");
 
                     b.HasIndex("TrackingToken")
                         .IsUnique();
@@ -1769,6 +2123,133 @@ namespace Maalca.Infrastructure.Migrations
                     b.ToTable("OwnerNotifications");
                 });
 
+            modelBuilder.Entity("Maalca.Domain.Entities.Payment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AffiliateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid?>("InvoiceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("PaidAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RegisteredBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("InvoiceId");
+
+                    b.HasIndex("AffiliateId", "CustomerId");
+
+                    b.HasIndex("AffiliateId", "IdempotencyKey")
+                        .IsUnique()
+                        .HasFilter("\"IdempotencyKey\" IS NOT NULL");
+
+                    b.ToTable("Payments");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.PlatformAddOn", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DescEn")
+                        .IsRequired()
+                        .HasMaxLength(600)
+                        .HasColumnType("character varying(600)");
+
+                    b.Property<string>("DescEs")
+                        .IsRequired()
+                        .HasMaxLength(600)
+                        .HasColumnType("character varying(600)");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<string>("NameEn")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("NameEs")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<decimal>("Price")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Unit")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<int?>("VolumeFromQty")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("VolumePrice")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Key")
+                        .IsUnique();
+
+                    b.ToTable("PlatformAddOns");
+                });
+
             modelBuilder.Entity("Maalca.Domain.Entities.PlatformAdmin", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1802,6 +2283,127 @@ namespace Maalca.Infrastructure.Migrations
                     b.HasIndex("SupabaseUserId");
 
                     b.ToTable("PlatformAdmins");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.PlatformContent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("En")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<string>("Es")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Key")
+                        .IsUnique();
+
+                    b.ToTable("PlatformContents");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.PriceList", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AffiliateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<decimal>("DiscountPercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal?>("MinOrderAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("TaxExempt")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AffiliateId");
+
+                    b.ToTable("PriceLists");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.PriceListItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Price")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("PriceListId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PriceListId", "ItemId")
+                        .IsUnique();
+
+                    b.ToTable("PriceListItems");
                 });
 
             modelBuilder.Entity("Maalca.Domain.Entities.Product", b =>
@@ -2063,6 +2665,104 @@ namespace Maalca.Infrastructure.Migrations
                     b.ToTable("Proposals");
                 });
 
+            modelBuilder.Entity("Maalca.Domain.Entities.ProspectIntake", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AdvisorContact")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("AdvisorName")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("AnswersJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("BusinessName")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<string>("ContactEmail")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ContactName")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("ContactPhone")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByEmail")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("IntroMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Language")
+                        .IsRequired()
+                        .HasMaxLength(5)
+                        .HasColumnType("character varying(5)");
+
+                    b.Property<DateTime?>("LastSavedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<string>("QuestionsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime?>("SubmittedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SubmittedIp")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("Token")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.ToTable("ProspectIntakes");
+                });
+
             modelBuilder.Entity("Maalca.Domain.Entities.PushSubscription", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2259,12 +2959,6 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<Guid>("AffiliateId")
                         .HasColumnType("uuid");
 
-                    b.Property<int?>("Orientation")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Panels")
-                        .HasColumnType("text");
-
                     b.Property<int?>("BoardTheme")
                         .HasColumnType("integer");
 
@@ -2282,15 +2976,21 @@ namespace Maalca.Infrastructure.Migrations
                         .HasMaxLength(2)
                         .HasColumnType("character varying(2)");
 
+                    b.Property<int?>("Layout")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)");
 
-                    b.Property<int>("SortOrder")
+                    b.Property<int?>("Orientation")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("Layout")
+                    b.Property<string>("Panels")
+                        .HasColumnType("text");
+
+                    b.Property<int>("SortOrder")
                         .HasColumnType("integer");
 
                     b.Property<int?>("TransitionEffect")
@@ -2317,28 +3017,7 @@ namespace Maalca.Infrastructure.Migrations
                     b.ToTable("Screens");
                 });
 
-            modelBuilder.Entity("Maalca.Domain.Entities.ModulePlanRule", b =>
-                {
-                    b.Property<string>("Token")
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<int>("MinTier")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.HasKey("Token");
-
-                    b.ToTable("ModulePlanRules");
-                });
-
-            modelBuilder.Entity("Maalca.Domain.Entities.PlatformAddOn", b =>
+            modelBuilder.Entity("Maalca.Domain.Entities.ScreenAd", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -2347,101 +3026,43 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<bool>("Active")
                         .HasColumnType("boolean");
 
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("DescEn")
-                        .IsRequired()
-                        .HasMaxLength(600)
-                        .HasColumnType("character varying(600)");
-
-                    b.Property<string>("DescEs")
-                        .IsRequired()
-                        .HasMaxLength(600)
-                        .HasColumnType("character varying(600)");
-
-                    b.Property<string>("Key")
-                        .IsRequired()
-                        .HasMaxLength(60)
-                        .HasColumnType("character varying(60)");
-
-                    b.Property<string>("NameEn")
-                        .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)");
-
-                    b.Property<string>("NameEs")
-                        .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)");
-
-                    b.Property<decimal>("Price")
-                        .HasPrecision(10, 2)
-                        .HasColumnType("numeric(10,2)");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Unit")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.Property<int?>("VolumeFromQty")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal?>("VolumePrice")
-                        .HasPrecision(10, 2)
-                        .HasColumnType("numeric(10,2)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Key")
-                        .IsUnique();
-
-                    b.ToTable("PlatformAddOns");
-                });
-
-            modelBuilder.Entity("Maalca.Domain.Entities.PlatformContent", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
+                    b.Property<Guid>("AffiliateId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("En")
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
+                    b.Property<int>("DurationSeconds")
+                        .HasColumnType("integer");
 
-                    b.Property<string>("Es")
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
+                    b.Property<DateTime?>("EndsAt")
+                        .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("Key")
+                    b.Property<int>("Fit")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MediaType")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MediaUrl")
                         .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)");
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("StartsAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("UpdatedBy")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
                     b.HasKey("Id");
 
-                    b.HasIndex("Key")
-                        .IsUnique();
+                    b.HasIndex("AffiliateId", "SortOrder");
 
-                    b.ToTable("PlatformContents");
+                    b.ToTable("ScreenAds");
                 });
 
             modelBuilder.Entity("Maalca.Domain.Entities.ScreenDevice", b =>
@@ -2560,54 +3181,6 @@ namespace Maalca.Infrastructure.Migrations
                     b.ToTable("ScreenWalls");
                 });
 
-            modelBuilder.Entity("Maalca.Domain.Entities.ScreenAd", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<bool>("Active")
-                        .HasColumnType("boolean");
-
-                    b.Property<Guid>("AffiliateId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("DurationSeconds")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("EndsAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Fit")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("MediaType")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("MediaUrl")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("StartsAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AffiliateId", "SortOrder");
-
-                    b.ToTable("ScreenAds");
-                });
-
             modelBuilder.Entity("Maalca.Domain.Entities.Service", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2685,6 +3258,72 @@ namespace Maalca.Infrastructure.Migrations
                     b.ToTable("Services");
                 });
 
+            modelBuilder.Entity("Maalca.Domain.Entities.ShippingMethod", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AffiliateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("AllowsHazmat")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("FreeOverAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("MaxDays")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MinDays")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("NameEn")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<decimal>("Price")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("States")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("WeightRates")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AffiliateId");
+
+                    b.ToTable("ShippingMethods");
+                });
+
             modelBuilder.Entity("Maalca.Domain.Entities.StaffTask", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2733,6 +3372,79 @@ namespace Maalca.Infrastructure.Migrations
                     b.HasIndex("TeamMemberId");
 
                     b.ToTable("StaffTasks");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.StoreCustomer", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AffiliateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("BusinessName")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Message")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<Guid?>("PriceListId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("SupabaseUserId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("TaxId")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PriceListId");
+
+                    b.HasIndex("AffiliateId", "Status");
+
+                    b.HasIndex("AffiliateId", "SupabaseUserId")
+                        .IsUnique();
+
+                    b.ToTable("StoreCustomers");
                 });
 
             modelBuilder.Entity("Maalca.Domain.Entities.StripeProcessedEvent", b =>
@@ -3151,6 +3863,15 @@ namespace Maalca.Infrastructure.Migrations
                     b.Navigation("Affiliate");
                 });
 
+            modelBuilder.Entity("Maalca.Domain.Entities.CarrierAccount", b =>
+                {
+                    b.HasOne("Maalca.Domain.Entities.Affiliate", null)
+                        .WithMany()
+                        .HasForeignKey("AffiliateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Maalca.Domain.Entities.Causa", b =>
                 {
                     b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
@@ -3230,6 +3951,25 @@ namespace Maalca.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Affiliate");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.Contract", b =>
+                {
+                    b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
+                        .WithMany()
+                        .HasForeignKey("AffiliateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Maalca.Domain.Entities.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Affiliate");
+
+                    b.Navigation("Customer");
                 });
 
             modelBuilder.Entity("Maalca.Domain.Entities.Customer", b =>
@@ -3377,6 +4117,54 @@ namespace Maalca.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Affiliate");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.Payment", b =>
+                {
+                    b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
+                        .WithMany()
+                        .HasForeignKey("AffiliateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Maalca.Domain.Entities.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Maalca.Domain.Entities.Invoice", "Invoice")
+                        .WithMany()
+                        .HasForeignKey("InvoiceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Affiliate");
+
+                    b.Navigation("Customer");
+
+                    b.Navigation("Invoice");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.PriceList", b =>
+                {
+                    b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
+                        .WithMany()
+                        .HasForeignKey("AffiliateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Affiliate");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.PriceListItem", b =>
+                {
+                    b.HasOne("Maalca.Domain.Entities.PriceList", "PriceList")
+                        .WithMany("Items")
+                        .HasForeignKey("PriceListId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PriceList");
                 });
 
             modelBuilder.Entity("Maalca.Domain.Entities.Product", b =>
@@ -3537,6 +4325,17 @@ namespace Maalca.Infrastructure.Migrations
                     b.Navigation("Wall");
                 });
 
+            modelBuilder.Entity("Maalca.Domain.Entities.ScreenAd", b =>
+                {
+                    b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
+                        .WithMany()
+                        .HasForeignKey("AffiliateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Affiliate");
+                });
+
             modelBuilder.Entity("Maalca.Domain.Entities.ScreenDevice", b =>
                 {
                     b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
@@ -3559,10 +4358,10 @@ namespace Maalca.Infrastructure.Migrations
                     b.Navigation("Affiliate");
                 });
 
-            modelBuilder.Entity("Maalca.Domain.Entities.ScreenAd", b =>
+            modelBuilder.Entity("Maalca.Domain.Entities.Service", b =>
                 {
                     b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
-                        .WithMany()
+                        .WithMany("Services")
                         .HasForeignKey("AffiliateId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -3570,10 +4369,10 @@ namespace Maalca.Infrastructure.Migrations
                     b.Navigation("Affiliate");
                 });
 
-            modelBuilder.Entity("Maalca.Domain.Entities.Service", b =>
+            modelBuilder.Entity("Maalca.Domain.Entities.ShippingMethod", b =>
                 {
                     b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
-                        .WithMany("Services")
+                        .WithMany()
                         .HasForeignKey("AffiliateId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -3597,6 +4396,24 @@ namespace Maalca.Infrastructure.Migrations
                     b.Navigation("Affiliate");
 
                     b.Navigation("TeamMember");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.StoreCustomer", b =>
+                {
+                    b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
+                        .WithMany()
+                        .HasForeignKey("AffiliateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Maalca.Domain.Entities.PriceList", "PriceList")
+                        .WithMany()
+                        .HasForeignKey("PriceListId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Affiliate");
+
+                    b.Navigation("PriceList");
                 });
 
             modelBuilder.Entity("Maalca.Domain.Entities.TableReservation", b =>
@@ -3738,6 +4555,11 @@ namespace Maalca.Infrastructure.Migrations
             modelBuilder.Entity("Maalca.Domain.Entities.ModifierGroup", b =>
                 {
                     b.Navigation("Options");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.PriceList", b =>
+                {
+                    b.Navigation("Items");
                 });
 
             modelBuilder.Entity("Maalca.Domain.Entities.Recipe", b =>
