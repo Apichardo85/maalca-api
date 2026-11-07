@@ -52,7 +52,8 @@ public record DeliveryItemDto(Guid? ItemId, string Description, decimal Quantity
 public record DeliveryDto(
     Guid Id, Guid RouteStopId, Guid CustomerId, DateTime DeliveredAt,
     IReadOnlyList<DeliveryItemDto> Items, decimal Total,
-    Guid? PaymentId, decimal? PaymentAmount, string? ReceivedBy, string? Notes);
+    Guid? PaymentId, decimal? PaymentAmount, string? ReceivedBy, string? Notes,
+    Guid? InvoiceId = null, string? InvoiceNumber = null);
 
 public record RegisterDeliveryResultDto(DeliveryDto Delivery, bool Duplicate, CustomerContainerBalanceDto? Balance);
 

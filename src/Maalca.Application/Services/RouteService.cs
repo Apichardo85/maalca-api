@@ -1,3 +1,4 @@
+using Maalca.Application.Common;
 using Maalca.Application.Common.DTOs;
 using Maalca.Application.Common.Interfaces;
 using Maalca.Domain.Entities;
@@ -12,11 +13,13 @@ public class RouteService : IRouteService
 
     private readonly AppDbContext _db;
     private readonly IContainerService _containers;
+    private readonly IAuditLogService _audit;
 
-    public RouteService(AppDbContext db, IContainerService containers)
+    public RouteService(AppDbContext db, IContainerService containers, IAuditLogService audit)
     {
         _db = db;
         _containers = containers;
+        _audit = audit;
     }
 
     // ── Vehículos ────────────────────────────────────────────────────────────
@@ -338,6 +341,51 @@ public class RouteService : IRouteService
             delivery.PaymentId = payment.Id;
         }
 
+        // Cliente de contado (0 días de crédito explícitos en su contrato): la entrega se factura en el momento y el cobro
+        // se liga a esa factura. Con crédito (o sin dato) las entregas se acumulan y se facturan por ciclo.
+        Invoice? invoice = null;
+        if (delivery.Items.Count > 0)
+        {
+            var creditDays = await _db.Customers.AsNoTracking()
+                .Where(c => c.Id == stop.CustomerId).Select(c => c.CreditDays).FirstOrDefaultAsync();
+            if (creditDays == 0)
+            {
+                var lines = DeliveryInvoicing.BuildLines(delivery.Items);
+                var subtotal = lines.Sum(l => l.Total);
+                if (subtotal > 0)
+                {
+                    invoice = new Invoice
+                    {
+                        Id = Guid.NewGuid(),
+                        AffiliateId = affiliateId,
+                        CustomerId = stop.CustomerId,
+                        InvoiceNumber = DeliveryInvoicing.NewInvoiceNumber(),
+                        Subtotal = subtotal,
+                        Tax = 0m,
+                        Total = subtotal,
+                        Status = "Pending",
+                        IssueDate = at,
+                        DueDate = at,
+                        Notes = $"Entrega en ruta: {route.Name}",
+                        CreatedAt = now,
+                        CreatedBy = actorId,
+                        Items = lines,
+                    };
+                    _db.Invoices.Add(invoice);
+                    delivery.InvoiceId = invoice.Id;
+                    if (payment is not null)
+                    {
+                        payment.InvoiceId = invoice.Id;
+                        if (payment.Amount >= invoice.Total)
+                        {
+                            invoice.Status = "Paid";
+                            invoice.PaidDate = at;
+                        }
+                    }
+                }
+            }
+        }
+
         stop.Status = "visited";
         stop.VisitedAt = at;
 
@@ -354,8 +402,12 @@ public class RouteService : IRouteService
             return await DuplicateResultAsync(affiliateId, winner);
         }
 
+        if (invoice is not null)
+            await _audit.LogAsync(affiliateId, "invoice.created", "Invoice", invoice.Id,
+                $"Factura {invoice.InvoiceNumber} por {invoice.Total:N2}: entrega de contado en ruta {route.Name}", actorId, actorName);
+
         var balance = await _containers.GetBalanceAsync(affiliateId, stop.CustomerId);
-        return new RegisterDeliveryResultDto(ToDto(delivery, payment?.Amount), false, balance);
+        return new RegisterDeliveryResultDto(ToDto(delivery, payment?.Amount, invoice?.InvoiceNumber), false, balance);
     }
 
     public async Task<RouteDto?> SkipStopAsync(Guid affiliateId, Guid routeId, Guid stopId, SkipStopRequest request, string? actorId)
@@ -397,8 +449,11 @@ public class RouteService : IRouteService
         decimal? paid = null;
         if (existing.PaymentId.HasValue)
             paid = await _db.Payments.AsNoTracking().Where(p => p.Id == existing.PaymentId.Value).Select(p => (decimal?)p.Amount).FirstOrDefaultAsync();
+        string? invoiceNumber = null;
+        if (existing.InvoiceId.HasValue)
+            invoiceNumber = await _db.Invoices.AsNoTracking().Where(i => i.Id == existing.InvoiceId.Value).Select(i => i.InvoiceNumber).FirstOrDefaultAsync();
         var balance = await _containers.GetBalanceAsync(affiliateId, existing.CustomerId);
-        return new RegisterDeliveryResultDto(ToDto(existing, paid), true, balance);
+        return new RegisterDeliveryResultDto(ToDto(existing, paid, invoiceNumber), true, balance);
     }
 
     private async Task<Dictionary<Guid, string>> DriverNamesAsync(Guid affiliateId, IEnumerable<Guid?> ids)
@@ -528,10 +583,10 @@ public class RouteService : IRouteService
             v.DriverId.HasValue && driverNames.TryGetValue(v.DriverId.Value, out var dn) ? dn : null,
             v.Status, v.IsActive, v.Notes);
 
-    private static DeliveryDto ToDto(Delivery d, decimal? paymentAmount)
+    private static DeliveryDto ToDto(Delivery d, decimal? paymentAmount, string? invoiceNumber = null)
     {
         var items = d.Items.Select(i => new DeliveryItemDto(i.ItemId, i.Description, i.Quantity, i.UnitPrice, Math.Round(i.Quantity * i.UnitPrice, 2))).ToList();
         return new DeliveryDto(d.Id, d.RouteStopId, d.CustomerId, d.DeliveredAt, items, items.Sum(i => i.LineTotal),
-            d.PaymentId, paymentAmount, d.ReceivedBy, d.Notes);
+            d.PaymentId, paymentAmount, d.ReceivedBy, d.Notes, d.InvoiceId, invoiceNumber);
     }
 }

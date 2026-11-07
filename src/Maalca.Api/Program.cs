@@ -107,6 +107,7 @@ builder.Services.AddScoped<IProspectIntakeService, ProspectIntakeService>();
 builder.Services.AddScoped<IContractService, ContractService>();
 builder.Services.AddScoped<IContainerService, ContainerService>();
 builder.Services.AddScoped<IRouteService, RouteService>();
+builder.Services.AddScoped<IDeliveryBillingService, DeliveryBillingService>();
 builder.Services.AddScoped<IBillingService, BillingService>();
 builder.Services.AddScoped<ICustomerImportService, CustomerImportService>();
 builder.Services.AddScoped<IScreenService, ScreenService>();
@@ -2937,6 +2938,21 @@ app.MapPost("/api/affiliates/{id:guid}/routes/{routeId:guid}/stops/{stopId:guid}
     }
     catch (ArgumentException ex) { return InvalidInput(ex); }
     catch (InvalidOperationException ex) { return BillingConflict(ex); }
+});
+
+// Facturación de entregas por ciclo de cobro (clientes a crédito). Solo dueño/gerente (no Staff).
+// GET: qué hay por facturar. POST: dryRun=true (por defecto) simula; dryRun=false crea una factura por cliente.
+app.MapGet("/api/affiliates/{id:guid}/billing/unbilled-deliveries", async (HttpContext ctx, IDeliveryBillingService svc, Guid id) =>
+    !IsActiveAffiliate(ctx, id) || IsStaff(ctx) ? Results.Forbid() : Results.Ok(await svc.GetUnbilledAsync(id)));
+
+app.MapPost("/api/affiliates/{id:guid}/billing/bill-deliveries", async (HttpContext ctx, IDeliveryBillingService svc, Guid id, BillDeliveriesRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        return Results.Ok(await svc.BillAsync(id, request, ctx.User.FindFirst("sub")?.Value, ctx.User.FindFirst("email")?.Value));
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
 });
 
 // Importación masiva de clientes: la web manda las filas ya mapeadas. dryRun=true (por defecto) solo valida.
