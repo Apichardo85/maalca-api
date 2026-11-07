@@ -520,6 +520,66 @@ namespace Maalca.Infrastructure.Migrations
                     b.ToTable("AgentExecutions");
                 });
 
+            modelBuilder.Entity("Maalca.Domain.Entities.Anaquel", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AffiliateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Capacity")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("CustomerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Label")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Location")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<string>("QrCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("QrCode")
+                        .IsUnique();
+
+                    b.HasIndex("AffiliateId", "CustomerId");
+
+                    b.ToTable("Anaqueles");
+                });
+
             modelBuilder.Entity("Maalca.Domain.Entities.Appointment", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1071,6 +1131,119 @@ namespace Maalca.Infrastructure.Migrations
                     b.HasIndex("AffiliateId", "Status", "CreatedAt");
 
                     b.ToTable("CommunitySignups");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.ContainerMovement", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AffiliateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AnaquelId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("BottleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ContainerTypeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("DeliveryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RegisteredBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AnaquelId");
+
+                    b.HasIndex("ContainerTypeId");
+
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("AffiliateId", "IdempotencyKey")
+                        .IsUnique()
+                        .HasFilter("\"IdempotencyKey\" IS NOT NULL");
+
+                    b.HasIndex("AffiliateId", "CustomerId", "ContainerTypeId");
+
+                    b.ToTable("ContainerMovements");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.ContainerType", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AffiliateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("CapacityLiters")
+                        .HasPrecision(8, 2)
+                        .HasColumnType("numeric(8,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("Deposit")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AffiliateId", "Name");
+
+                    b.ToTable("ContainerTypes");
                 });
 
             modelBuilder.Entity("Maalca.Domain.Entities.Contract", b =>
@@ -3809,6 +3982,24 @@ namespace Maalca.Infrastructure.Migrations
                     b.Navigation("Affiliate");
                 });
 
+            modelBuilder.Entity("Maalca.Domain.Entities.Anaquel", b =>
+                {
+                    b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
+                        .WithMany()
+                        .HasForeignKey("AffiliateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Maalca.Domain.Entities.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Affiliate");
+
+                    b.Navigation("Customer");
+                });
+
             modelBuilder.Entity("Maalca.Domain.Entities.Appointment", b =>
                 {
                     b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
@@ -3943,6 +4134,51 @@ namespace Maalca.Infrastructure.Migrations
                 });
 
             modelBuilder.Entity("Maalca.Domain.Entities.CommunitySignup", b =>
+                {
+                    b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
+                        .WithMany()
+                        .HasForeignKey("AffiliateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Affiliate");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.ContainerMovement", b =>
+                {
+                    b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
+                        .WithMany()
+                        .HasForeignKey("AffiliateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Maalca.Domain.Entities.Anaquel", "Anaquel")
+                        .WithMany()
+                        .HasForeignKey("AnaquelId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Maalca.Domain.Entities.ContainerType", "ContainerType")
+                        .WithMany()
+                        .HasForeignKey("ContainerTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Maalca.Domain.Entities.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Affiliate");
+
+                    b.Navigation("Anaquel");
+
+                    b.Navigation("ContainerType");
+
+                    b.Navigation("Customer");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.ContainerType", b =>
                 {
                     b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
                         .WithMany()

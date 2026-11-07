@@ -69,6 +69,9 @@ public class AppDbContext : DbContext
     public DbSet<StoreCustomer> StoreCustomers => Set<StoreCustomer>();
     public DbSet<Contract> Contracts => Set<Contract>();
     public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<ContainerType> ContainerTypes => Set<ContainerType>();
+    public DbSet<Anaquel> Anaqueles => Set<Anaquel>();
+    public DbSet<ContainerMovement> ContainerMovements => Set<ContainerMovement>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -909,6 +912,66 @@ public class AppDbContext : DbContext
                   .HasForeignKey(e => e.InvoiceId)
                   .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(e => new { e.AffiliateId, e.CustomerId });
+            entity.HasIndex(e => new { e.AffiliateId, e.IdempotencyKey })
+                  .IsUnique()
+                  .HasFilter("\"IdempotencyKey\" IS NOT NULL");
+        });
+
+        modelBuilder.Entity<ContainerType>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.CapacityLiters).HasPrecision(8, 2);
+            entity.Property(e => e.Deposit).HasPrecision(18, 2);
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.AffiliateId, e.Name });
+        });
+
+        modelBuilder.Entity<Anaquel>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.QrCode).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.Label).HasMaxLength(50);
+            entity.Property(e => e.Location).HasMaxLength(200);
+            entity.Property(e => e.Status).HasMaxLength(30);
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Customer)
+                  .WithMany()
+                  .HasForeignKey(e => e.CustomerId)
+                  .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => e.QrCode).IsUnique();
+            entity.HasIndex(e => new { e.AffiliateId, e.CustomerId });
+        });
+
+        modelBuilder.Entity<ContainerMovement>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Type).HasMaxLength(20);
+            entity.Property(e => e.RegisteredBy).HasMaxLength(100);
+            entity.Property(e => e.IdempotencyKey).HasMaxLength(100);
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Customer)
+                  .WithMany()
+                  .HasForeignKey(e => e.CustomerId)
+                  .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.ContainerType)
+                  .WithMany()
+                  .HasForeignKey(e => e.ContainerTypeId)
+                  .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.Anaquel)
+                  .WithMany()
+                  .HasForeignKey(e => e.AnaquelId)
+                  .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => new { e.AffiliateId, e.CustomerId, e.ContainerTypeId });
             entity.HasIndex(e => new { e.AffiliateId, e.IdempotencyKey })
                   .IsUnique()
                   .HasFilter("\"IdempotencyKey\" IS NOT NULL");
