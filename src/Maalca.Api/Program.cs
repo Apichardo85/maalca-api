@@ -105,6 +105,7 @@ builder.Services.AddScoped<IPlatformAddOnService, PlatformAddOnService>();
 builder.Services.AddScoped<IPlatformContentService, PlatformContentService>();
 builder.Services.AddScoped<IProspectIntakeService, ProspectIntakeService>();
 builder.Services.AddScoped<IContractService, ContractService>();
+builder.Services.AddScoped<IContainerService, ContainerService>();
 builder.Services.AddScoped<IBillingService, BillingService>();
 builder.Services.AddScoped<ICustomerImportService, CustomerImportService>();
 builder.Services.AddScoped<IScreenService, ScreenService>();
@@ -2698,6 +2699,93 @@ app.MapGet("/api/affiliates/{id:guid}/customers/{customerId:guid}/statement", as
 
 app.MapGet("/api/affiliates/{id:guid}/receivables/aging", async (HttpContext ctx, IBillingService svc, Guid id, DateTime? asOf = null) =>
     !IsActiveAffiliate(ctx, id) ? Results.Forbid() : Results.Ok(await svc.GetAgingAsync(id, asOf)));
+
+// ============ ENVASES RETORNABLES (tipos, anaqueles con QR, movimientos y saldo por cliente) ============
+// Lectura: cualquier miembro del negocio activo. Catálogo (tipos/anaqueles): no Staff.
+// Movimientos y resolver QR: también Staff, porque es lo que hace el conductor en ruta con la PWA.
+app.MapGet("/api/affiliates/{id:guid}/container-types", async (HttpContext ctx, IContainerService svc, Guid id, bool includeInactive = false) =>
+    !IsActiveAffiliate(ctx, id) ? Results.Forbid() : Results.Ok(await svc.GetTypesAsync(id, includeInactive)));
+
+app.MapPost("/api/affiliates/{id:guid}/container-types", async (HttpContext ctx, IContainerService svc, Guid id, UpsertContainerTypeRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await svc.CreateTypeAsync(id, request, ctx.User.FindFirst("sub")?.Value);
+        return Results.Created($"/api/affiliates/{id}/container-types/{result.Id}", result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
+
+app.MapPut("/api/affiliates/{id:guid}/container-types/{typeId:guid}", async (HttpContext ctx, IContainerService svc, Guid id, Guid typeId, UpsertContainerTypeRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await svc.UpdateTypeAsync(id, typeId, request, ctx.User.FindFirst("sub")?.Value);
+        return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
+
+app.MapGet("/api/affiliates/{id:guid}/anaqueles", async (HttpContext ctx, IContainerService svc, Guid id, Guid? customerId = null, string? status = null) =>
+    !IsActiveAffiliate(ctx, id) ? Results.Forbid() : Results.Ok(await svc.GetAnaquelesAsync(id, customerId, status)));
+
+// El conductor escanea el QR → anaquel + cliente + envases que tiene en su poder.
+app.MapGet("/api/affiliates/{id:guid}/anaqueles/by-qr/{code}", async (HttpContext ctx, IContainerService svc, Guid id, string code) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    var result = await svc.ResolveQrAsync(id, code);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+
+app.MapPost("/api/affiliates/{id:guid}/anaqueles", async (HttpContext ctx, IContainerService svc, Guid id, UpsertAnaquelRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await svc.CreateAnaquelAsync(id, request, ctx.User.FindFirst("sub")?.Value);
+        return Results.Created($"/api/affiliates/{id}/anaqueles/{result.Id}", result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+    catch (InvalidOperationException ex) { return BillingConflict(ex); }
+});
+
+app.MapPut("/api/affiliates/{id:guid}/anaqueles/{anaquelId:guid}", async (HttpContext ctx, IContainerService svc, Guid id, Guid anaquelId, UpsertAnaquelRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await svc.UpdateAnaquelAsync(id, anaquelId, request, ctx.User.FindFirst("sub")?.Value);
+        return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
+
+// Idempotente por idempotencyKey: 201 si crea, 200 si la clave ya existía (reintento con mala señal en ruta).
+app.MapPost("/api/affiliates/{id:guid}/container-movements", async (HttpContext ctx, IContainerService svc, Guid id, RegisterContainerMovementRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    try
+    {
+        var result = await svc.RegisterMovementAsync(id, request, ctx.User.FindFirst("sub")?.Value, ctx.User.FindFirst("email")?.Value);
+        return result.Duplicate
+            ? Results.Ok(result)
+            : Results.Created($"/api/affiliates/{id}/customers/{result.Movement.CustomerId}/container-movements", result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+    catch (InvalidOperationException ex) { return BillingConflict(ex); }
+});
+
+app.MapGet("/api/affiliates/{id:guid}/customers/{customerId:guid}/container-balance", async (HttpContext ctx, IContainerService svc, Guid id, Guid customerId) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    var result = await svc.GetBalanceAsync(id, customerId);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+
+app.MapGet("/api/affiliates/{id:guid}/customers/{customerId:guid}/container-movements", async (HttpContext ctx, IContainerService svc, Guid id, Guid customerId, int take = 100) =>
+    !IsActiveAffiliate(ctx, id) ? Results.Forbid() : Results.Ok(await svc.GetMovementsAsync(id, customerId, take)));
 
 // Importación masiva de clientes: la web manda las filas ya mapeadas. dryRun=true (por defecto) solo valida.
 app.MapPost("/api/affiliates/{id:guid}/customers/import", async (HttpContext ctx, ICustomerImportService svc, Guid id, ImportCustomersRequest request) =>
