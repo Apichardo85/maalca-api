@@ -31,6 +31,15 @@ public class Contract : AuditableEntity
     /// <summary>Botellones prestados al cliente según el contrato (cupo: sirve para avisar si tiene de más).</summary>
     public int BottlesLoaned { get; set; } = 0;
 
+    // ── Aceptación en línea (portal del cliente) ──────────────────────────────────────────────
+    // El cliente lee el contrato en su cuenta y lo acepta escribiendo su nombre. Se guarda quién, cuándo y QUÉ texto vio
+    // (huella SHA-256 del documento ya lleno): si el contrato cambia después, la huella ya no coincide y debe aceptarlo de nuevo.
+    public DateTime? AcceptedAt { get; set; }
+    public string? AcceptedByName { get; set; }
+    public string? AcceptedByEmail { get; set; }
+    public Guid? AcceptedByStoreCustomerId { get; set; }
+    public string? AcceptedDocumentHash { get; set; }
+
     public Affiliate? Affiliate { get; set; }
     public Customer? Customer { get; set; }
 }

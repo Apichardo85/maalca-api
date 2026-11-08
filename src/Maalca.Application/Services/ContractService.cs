@@ -332,5 +332,5 @@ public class ContractService : IContractService
         c.Id, c.CustomerId, c.Customer?.Name, c.DeliveryFrequency, c.BillingCycle, c.CreditDays,
         string.IsNullOrWhiteSpace(c.AgreedPrices) ? null : JsonSerializer.Deserialize<JsonElement>(c.AgreedPrices),
         c.StartDate, c.EndDate, c.IsActive, c.Notes, c.CreatedAt,
-        c.ContractNumber, c.RacksLoaned, c.BottlesLoaned);
+        c.ContractNumber, c.RacksLoaned, c.BottlesLoaned, c.AcceptedAt, c.AcceptedByName);
 }

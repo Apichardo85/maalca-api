@@ -959,6 +959,9 @@ public class AppDbContext : DbContext
             entity.Property(e => e.DeliveryFrequency).HasMaxLength(20);
             entity.Property(e => e.BillingCycle).HasMaxLength(20);
             entity.Property(e => e.ContractNumber).HasMaxLength(20);
+            entity.Property(e => e.AcceptedByName).HasMaxLength(160);
+            entity.Property(e => e.AcceptedByEmail).HasMaxLength(256);
+            entity.Property(e => e.AcceptedDocumentHash).HasMaxLength(64);
             entity.HasOne(e => e.Affiliate)
                   .WithMany()
                   .HasForeignKey(e => e.AffiliateId)

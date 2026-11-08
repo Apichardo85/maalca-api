@@ -99,6 +99,7 @@ builder.Services.AddScoped<IShippingService, ShippingService>();
 builder.Services.AddScoped<ICarrierService, CarrierService>();
 builder.Services.AddScoped<IStoreAccountNotificationService, StoreAccountNotificationService>();
 builder.Services.AddScoped<IStoreAccountService, StoreAccountService>();
+builder.Services.AddScoped<ICustomerPortalService, CustomerPortalService>();
 builder.Services.AddScoped<IDonationService, DonationService>();
 builder.Services.AddScoped<IScreenAdService, ScreenAdService>();
 builder.Services.AddScoped<IPlatformAddOnService, PlatformAddOnService>();
@@ -2742,7 +2743,9 @@ app.MapGet("/api/affiliates/{id:guid}/contracts/{contractId:guid}/document", asy
 // Idempotente por idempotencyKey: 201 si crea, 200 si la clave ya existía (reintento con mala señal).
 app.MapPost("/api/affiliates/{id:guid}/payments", async (HttpContext ctx, IBillingService svc, Guid id, RegisterPaymentRequest request) =>
 {
-    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    // Registrar un abono: dueño, gerente y el cajero (perfil "cashier"); el resto de Empleados no.
+    var isCashier = ctx.User.FindFirst("profile")?.Value == AccessProfiles.Cashier;
+    if (!IsActiveAffiliate(ctx, id) || (IsStaff(ctx) && !isCashier)) return Results.Forbid();
     try
     {
         var result = await svc.RegisterPaymentAsync(id, request, ctx.User.FindFirst("sub")?.Value, ctx.User.FindFirst("email")?.Value);
@@ -3869,6 +3872,35 @@ app.MapGet("/api/public/store/{slug}/prices", async (HttpContext ctx, IStoreAcco
     if (string.IsNullOrEmpty(sub)) return Results.Unauthorized();
     var prices = await svc.GetPricesAsync(slug, sub);
     return prices is null ? Results.NotFound() : Results.Ok(prices);
+}).AllowAnonymous();
+
+// ── Portal del cliente: su contrato, envases, saldo, facturas, pagos, entregas y próxima visita ──
+app.MapGet("/api/public/store/{slug}/portal", async (HttpContext ctx, ICustomerPortalService svc, string slug) =>
+{
+    var sub = StoreUser(ctx);
+    if (string.IsNullOrEmpty(sub)) return Results.Unauthorized();
+    var portal = await svc.GetAsync(slug, sub);
+    return portal is null ? Results.NotFound() : Results.Ok(portal);
+}).AllowAnonymous();
+
+app.MapGet("/api/public/store/{slug}/portal/contract", async (HttpContext ctx, ICustomerPortalService svc, string slug) =>
+{
+    var sub = StoreUser(ctx);
+    if (string.IsNullOrEmpty(sub)) return Results.Unauthorized();
+    var doc = await svc.GetContractDocumentAsync(slug, sub);
+    return doc is null ? Results.NotFound() : Results.Ok(doc);
+}).AllowAnonymous();
+
+app.MapPost("/api/public/store/{slug}/portal/contract/accept", async (HttpContext ctx, ICustomerPortalService svc, string slug, AcceptContractRequest request) =>
+{
+    var sub = StoreUser(ctx);
+    if (string.IsNullOrEmpty(sub)) return Results.Unauthorized();
+    try
+    {
+        var result = await svc.AcceptContractAsync(slug, sub, request);
+        return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
 }).AllowAnonymous();
 
 app.MapGet("/api/public/store/{slug}/orders", async (HttpContext ctx, IStoreAccountService svc, string slug) =>

@@ -36,10 +36,16 @@ public static class AccessProfiles
             ["anaqueles"] = Level.Full,
             ["catalog-items"] = Level.Read,
         },
-        // Cajero: punto de venta y pedidos, clientes (ver/crear) y catálogo para cobrar.
+        // Cajero: punto de venta y pedidos, clientes (ver/crear), facturas y cobros (registrar abonos; contratos solo lectura).
         [Cashier] = new(StringComparer.OrdinalIgnoreCase)
         {
             ["orders"] = Level.Full,
+            ["invoices"] = Level.Full,
+            ["payments"] = Level.ReadCreate,
+            ["receivables"] = Level.Read,
+            ["receivables-settings"] = Level.Read,
+            ["contracts"] = Level.Read,
+            ["contract-template"] = Level.Read,
             ["customers"] = Level.ReadCreate,
             ["catalog-items"] = Level.Read,
             ["products"] = Level.Read,
