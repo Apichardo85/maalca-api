@@ -73,6 +73,12 @@ public record DriverAnaquelDto(Guid Id, string QrCode, string? Label, string? Lo
 
 /// <summary>Todo lo que el conductor necesita saber de una parada sin hacer más llamadas: qué envases tiene el cliente,
 /// qué anaqueles, cuánto debe y qué precios/cupo tiene pactados.</summary>
+/// <summary>Lo que ya se registró en una parada (entrega, envases y cobro): sirve para que la hoja impresa salga llena.</summary>
+public record StopResultDto(
+    IReadOnlyList<DeliveryItemDto> Items, decimal Total,
+    int ContainersDelivered, int ContainersReturned, int ContainersDamaged,
+    decimal PaymentAmount, string? PaymentMethod);
+
 public record DriverStopDto(
     RouteStopDto Stop,
     IReadOnlyList<ContainerBalanceItemDto> Containers,
@@ -80,7 +86,8 @@ public record DriverStopDto(
     decimal AmountOwed, decimal CreditOnAccount, bool HasOverdue,
     IReadOnlyList<OpenInvoiceDto> OpenInvoices,
     string? ContractNumber, int RacksLoaned, int BottlesLoaned, int? CreditDays,
-    System.Text.Json.JsonElement? AgreedPrices);
+    System.Text.Json.JsonElement? AgreedPrices,
+    StopResultDto? Result = null);
 
 public record DriverSheetDto(
     Guid RouteId, string Name, DateOnly RouteDate, string Status,

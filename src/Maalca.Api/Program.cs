@@ -179,6 +179,7 @@ app.MapGet("/", () => Results.Redirect("/swagger"));
 
 app.UseCors("MaalCaWeb");
 app.UseMiddleware<SupabaseAuthMiddleware>();
+app.UseMiddleware<ProfileAccessMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -700,7 +701,7 @@ app.MapGet("/api/affiliates/{id:guid}/collaborators", async (
 
     var team = await mapService.GetTeamAsync(id);
     var result = team.Select(m => new TeamMemberDto(
-        m.Id, m.Email, m.Role.ToString(), string.IsNullOrEmpty(m.SupabaseUserId), m.CreatedAt, m.TeamMemberId));
+        m.Id, m.Email, m.Role.ToString(), string.IsNullOrEmpty(m.SupabaseUserId), m.CreatedAt, m.TeamMemberId, m.Profile));
     return Results.Ok(result);
 });
 
@@ -721,11 +722,16 @@ app.MapPost("/api/affiliates/{id:guid}/collaborators", async (
     if (string.IsNullOrWhiteSpace(request.Email) || !Enum.TryParse<AffiliateRole>(request.Role, ignoreCase: true, out var role))
         return Results.BadRequest(new { error = new { code = "INVALID_REQUEST", message = "Correo o rol inválido." } });
 
+    var profile = AccessProfiles.Normalize(request.Profile);
+    if (profile is not null && !AccessProfiles.IsKnown(profile))
+        return Results.BadRequest(new { error = new { code = "INVALID_REQUEST", message = "Perfil de acceso inválido." } });
+    if (role == AffiliateRole.Owner) profile = null;
+
     try
     {
-        var map = await mapService.InviteAsync(id, request.Email, role, request.TeamMemberId);
+        var map = await mapService.InviteAsync(id, request.Email, role, request.TeamMemberId, profile);
         return Results.Created($"/api/affiliates/{id}/collaborators/{map.Id}",
-            new TeamMemberDto(map.Id, map.Email, map.Role.ToString(), Pending: true, map.CreatedAt, map.TeamMemberId));
+            new TeamMemberDto(map.Id, map.Email, map.Role.ToString(), Pending: true, map.CreatedAt, map.TeamMemberId, map.Profile));
     }
     catch (InvalidOperationException ex)
     {
@@ -745,11 +751,15 @@ app.MapPatch("/api/affiliates/{id:guid}/collaborators/{mapId:guid}", async (
     if (!Enum.TryParse<AffiliateRole>(request.Role, ignoreCase: true, out var role))
         return Results.BadRequest(new { error = new { code = "INVALID_REQUEST", message = "Rol inválido." } });
 
+    var patchProfile = request.Profile is null ? null : AccessProfiles.Normalize(request.Profile) ?? string.Empty;
+    if (patchProfile is { Length: > 0 } && !AccessProfiles.IsKnown(patchProfile))
+        return Results.BadRequest(new { error = new { code = "INVALID_REQUEST", message = "Perfil de acceso inválido." } });
+
     try
     {
-        var map = await mapService.UpdateRoleAsync(id, mapId, role);
+        var map = await mapService.UpdateRoleAsync(id, mapId, role, patchProfile);
         if (map is null) return Results.NotFound();
-        return Results.Ok(new TeamMemberDto(map.Id, map.Email, map.Role.ToString(), string.IsNullOrEmpty(map.SupabaseUserId), map.CreatedAt, map.TeamMemberId));
+        return Results.Ok(new TeamMemberDto(map.Id, map.Email, map.Role.ToString(), string.IsNullOrEmpty(map.SupabaseUserId), map.CreatedAt, map.TeamMemberId, map.Profile));
     }
     catch (InvalidOperationException ex)
     {
@@ -5008,7 +5018,8 @@ app.MapGet("/api/space/{slug}", async (
         kpis,
         userMap.Role.ToString(),
         userMap.IsImpersonation,
-        userMap.ImpersonationExpiresAt));
+        userMap.ImpersonationExpiresAt,
+        userMap.Profile));
 });
 
 // ============ AFFILIATE SLUG RESOLVER ============

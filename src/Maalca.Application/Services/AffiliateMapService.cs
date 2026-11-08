@@ -1,3 +1,4 @@
+using Maalca.Application.Common;
 using Maalca.Application.Common.Interfaces;
 using Maalca.Domain.Entities;
 using Maalca.Domain.Enums;
@@ -84,7 +85,7 @@ public class AffiliateMapService : IAffiliateMapService
             .OrderBy(m => m.CreatedAt)
             .ToListAsync();
 
-    public async Task<UserAffiliateMap> InviteAsync(Guid affiliateId, string email, AffiliateRole role, Guid? teamMemberId = null)
+    public async Task<UserAffiliateMap> InviteAsync(Guid affiliateId, string email, AffiliateRole role, Guid? teamMemberId = null, string? profile = null)
     {
         var normalizedEmail = email.Trim().ToLowerInvariant();
         var exists = await _context.UserAffiliateMaps
@@ -129,6 +130,7 @@ public class AffiliateMapService : IAffiliateMapService
             Email = normalizedEmail,
             AffiliateId = affiliateId,
             Role = role,
+            Profile = role == AffiliateRole.Owner ? null : AccessProfiles.Normalize(profile),
             TeamMemberId = teamMemberId,
             CreatedAt = DateTime.UtcNow,
         };
@@ -137,7 +139,7 @@ public class AffiliateMapService : IAffiliateMapService
         return map;
     }
 
-    public async Task<UserAffiliateMap?> UpdateRoleAsync(Guid affiliateId, Guid mapId, AffiliateRole role)
+    public async Task<UserAffiliateMap?> UpdateRoleAsync(Guid affiliateId, Guid mapId, AffiliateRole role, string? profile = null)
     {
         var map = await _context.UserAffiliateMaps
             .FirstOrDefaultAsync(m => m.Id == mapId && m.AffiliateId == affiliateId);
@@ -147,6 +149,9 @@ public class AffiliateMapService : IAffiliateMapService
             await EnsureNotLastOwnerAsync(affiliateId, excludingMapId: mapId);
 
         map.Role = role;
+        // Profile null = no tocar; "" = quitar. Un Dueño nunca lleva perfil.
+        if (role == AffiliateRole.Owner) map.Profile = null;
+        else if (profile is not null) map.Profile = AccessProfiles.Normalize(profile);
         map.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
         return map;

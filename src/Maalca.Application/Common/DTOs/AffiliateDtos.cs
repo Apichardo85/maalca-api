@@ -17,12 +17,14 @@ public record TeamMemberDto(
     string Role,
     bool Pending,
     DateTime CreatedAt,
-    Guid? TeamMemberId = null
+    Guid? TeamMemberId = null,
+    string? Profile = null
 );
 
-public record InviteTeamMemberRequest(string Email, string Role, Guid? TeamMemberId = null);
+public record InviteTeamMemberRequest(string Email, string Role, Guid? TeamMemberId = null, string? Profile = null);
 
-public record UpdateTeamMemberRoleRequest(string Role);
+/// <summary>Profile: null = sin cambios; "" = quitar el perfil; "driver"|"cashier"|"warehouse"|"accounting" = asignarlo.</summary>
+public record UpdateTeamMemberRoleRequest(string Role, string? Profile = null);
 
 public record UpdateAffiliateProfileRequest(
     string? Name,

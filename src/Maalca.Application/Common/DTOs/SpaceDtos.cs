@@ -11,7 +11,9 @@ public record SpaceResponse(
     // el frontend usa esto para mostrar el banner "modo soporte" y el botón de salida real
     // dentro de /space, en vez de obligar a volver a /ops escribiendo la URL a mano.
     bool IsImpersonation = false,
-    DateTime? ImpersonationExpiresAt = null
+    DateTime? ImpersonationExpiresAt = null,
+    // Perfil de acceso del usuario en este negocio (ver AccessProfiles); null = sin perfil.
+    string? Profile = null
 );
 
 public record BusinessDto(

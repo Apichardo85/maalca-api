@@ -509,6 +509,40 @@ public class RouteService : IRouteService
                 .ToListAsync())
             .GroupBy(c => c.CustomerId).ToDictionary(g => g.Key, g => g.OrderByDescending(c => c.StartDate).First());
 
+        // Lo ya registrado en cada parada (entregas, envases y cobros), para la hoja impresa.
+        var stopIds = route.Stops.Select(s => s.Id).ToList();
+        var deliveries = await _db.Deliveries.AsNoTracking().Include(d => d.Items)
+            .Where(d => d.AffiliateId == affiliateId && stopIds.Contains(d.RouteStopId)).ToListAsync();
+        var deliveryIds = deliveries.Select(d => d.Id).ToList();
+        var paymentIds = deliveries.Where(d => d.PaymentId != null).Select(d => d.PaymentId!.Value).ToList();
+        var deliveryMoves = new List<(Guid DeliveryId, string Type, int Quantity)>();
+        if (deliveryIds.Count > 0)
+        {
+            var moveRows = await _db.ContainerMovements.AsNoTracking()
+                .Where(m => m.AffiliateId == affiliateId && m.DeliveryId != null && deliveryIds.Contains(m.DeliveryId.Value))
+                .Select(m => new { DeliveryId = m.DeliveryId!.Value, m.Type, m.Quantity }).ToListAsync();
+            deliveryMoves = moveRows.Select(m => (m.DeliveryId, m.Type, m.Quantity)).ToList();
+        }
+        var paymentsById = paymentIds.Count == 0
+            ? new Dictionary<Guid, Payment>()
+            : await _db.Payments.AsNoTracking().Where(p => p.AffiliateId == affiliateId && paymentIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id);
+        var resultByStop = deliveries.GroupBy(d => d.RouteStopId).ToDictionary(g => g.Key, g =>
+        {
+            var dIds = g.Select(d => d.Id).ToHashSet();
+            var dItems = g.SelectMany(d => d.Items)
+                .Select(i => new DeliveryItemDto(i.ItemId, i.Description, i.Quantity, i.UnitPrice, Math.Round(i.Quantity * i.UnitPrice, 2))).ToList();
+            var stopMoves = deliveryMoves.Where(m => dIds.Contains(m.DeliveryId)).ToList();
+            var stopPays = g.Where(d => d.PaymentId != null && paymentsById.ContainsKey(d.PaymentId.Value))
+                .Select(d => paymentsById[d.PaymentId!.Value]).ToList();
+            return new StopResultDto(
+                dItems, dItems.Sum(i => i.LineTotal),
+                stopMoves.Where(m => m.Type == "delivery").Sum(m => m.Quantity),
+                stopMoves.Where(m => m.Type == "return").Sum(m => m.Quantity),
+                stopMoves.Where(m => m.Type == "damaged").Sum(m => m.Quantity),
+                stopPays.Sum(p => p.Amount),
+                stopPays.Select(p => p.Method).Distinct().Count() == 1 ? stopPays[0].Method : (stopPays.Count > 1 ? "mixed" : null));
+        });
+
         var stops = new List<DriverStopDto>();
         foreach (var s in route.Stops.OrderBy(s => s.SortOrder))
         {
@@ -528,7 +562,8 @@ public class RouteService : IRouteService
                 billing.Balance, billing.CreditOnAccount, billing.OpenInvoices.Any(o => o.IsOverdue), billing.OpenInvoices,
                 contract?.ContractNumber, contract?.RacksLoaned ?? 0, contract?.BottlesLoaned ?? 0,
                 contract?.CreditDays ?? c?.CreditDays,
-                string.IsNullOrWhiteSpace(contract?.AgreedPrices) ? null : System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(contract!.AgreedPrices!)));
+                string.IsNullOrWhiteSpace(contract?.AgreedPrices) ? null : System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(contract!.AgreedPrices!),
+                resultByStop.TryGetValue(s.Id, out var result) ? result : null));
         }
 
         var types = await GetContainerTypesForSheetAsync(affiliateId);

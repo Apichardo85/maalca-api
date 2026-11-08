@@ -10,6 +10,10 @@ public class UserAffiliateMap : BaseEntity
     public Affiliate Affiliate { get; set; } = null!;
     public AffiliateRole Role { get; set; }
 
+    /// <summary>Perfil de acceso: "driver" | "cashier" | "warehouse" | "accounting". Null = sin perfil (Dueño, o un Empleado
+    /// con el comportamiento anterior). Ver AccessProfiles.</summary>
+    public string? Profile { get; set; }
+
     // ── Fase 60: panel de operaciones — impersonation de soporte ──────
     // Un mapa con IsImpersonation=true es un grant TEMPORAL creado por
     // PlatformAdminService.StartImpersonationAsync para que un admin de plataforma

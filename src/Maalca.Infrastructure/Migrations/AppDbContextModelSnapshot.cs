@@ -4333,6 +4333,10 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<bool>("IsImpersonation")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("Profile")
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
                     b.Property<int>("Role")
                         .HasColumnType("integer");
 

@@ -1185,6 +1185,7 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.SupabaseUserId).IsRequired().HasMaxLength(64);
             entity.Property(e => e.Email).IsRequired().HasMaxLength(256);
+            entity.Property(e => e.Profile).HasMaxLength(24);
             entity.HasIndex(e => e.SupabaseUserId);
             entity.HasIndex(e => new { e.SupabaseUserId, e.AffiliateId }).IsUnique();
             entity.HasOne(e => e.Affiliate)

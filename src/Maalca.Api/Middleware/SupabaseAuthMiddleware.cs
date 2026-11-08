@@ -208,6 +208,7 @@ public class SupabaseAuthMiddleware
                 new Claim("email", email ?? string.Empty),
                 new Claim("active_affiliate_id", activeMap.AffiliateId.ToString()),
                 new Claim("role", activeMap.Role.ToString()),
+                new Claim("profile", activeMap.Profile ?? string.Empty),
                 new Claim("affiliate_ids", string.Join(",", maps.Select(m => m.AffiliateId))),
                 new Claim("platform_admin", isPlatformAdmin ? "true" : "false"),
                 new Claim("platform_role", platformRole?.ToString() ?? ""),
