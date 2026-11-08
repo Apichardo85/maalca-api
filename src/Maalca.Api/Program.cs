@@ -107,6 +107,7 @@ builder.Services.AddScoped<IProspectIntakeService, ProspectIntakeService>();
 builder.Services.AddScoped<IContractService, ContractService>();
 builder.Services.AddScoped<IContainerService, ContainerService>();
 builder.Services.AddScoped<IExpenseService, ExpenseService>();
+builder.Services.AddScoped<IWaterQualityService, WaterQualityService>();
 builder.Services.AddScoped<IReceivablesSettingsService, ReceivablesSettingsService>();
 builder.Services.AddScoped<IRouteService, RouteService>();
 builder.Services.AddScoped<IDeliveryBillingService, DeliveryBillingService>();
@@ -3513,6 +3514,82 @@ app.MapPut("/api/affiliates/{id:guid}/receivables-settings", async (HttpContext 
     try { return Results.Ok(await svc.UpdateAsync(id, request)); }
     catch (ArgumentException ex) { return InvalidInput(ex); }
 });
+
+// ── Calidad del agua (Nueva Era): análisis de laboratorio y mantenimiento. Escribir = dueño/gerente, nunca Staff. ──
+app.MapGet("/api/affiliates/{id:guid}/water-quality/summary", async (HttpContext ctx, IWaterQualityService svc, Guid id) =>
+    !IsActiveAffiliate(ctx, id) ? Results.Forbid() : Results.Ok(await svc.GetSummaryAsync(id)));
+
+app.MapGet("/api/affiliates/{id:guid}/water-quality/tests", async (HttpContext ctx, IWaterQualityService svc, Guid id, int? year = null) =>
+    !IsActiveAffiliate(ctx, id) ? Results.Forbid() : Results.Ok(await svc.GetTestsAsync(id, year)));
+
+app.MapPost("/api/affiliates/{id:guid}/water-quality/tests", async (HttpContext ctx, IWaterQualityService svc, Guid id, UpsertWaterQualityTestRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await svc.CreateTestAsync(id, request, ctx.User.FindFirst("sub")?.Value);
+        return Results.Created($"/api/affiliates/{id}/water-quality/tests/{result.Id}", result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
+
+app.MapPut("/api/affiliates/{id:guid}/water-quality/tests/{testId:guid}", async (HttpContext ctx, IWaterQualityService svc, Guid id, Guid testId, UpsertWaterQualityTestRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await svc.UpdateTestAsync(id, testId, request, ctx.User.FindFirst("sub")?.Value);
+        return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
+
+app.MapDelete("/api/affiliates/{id:guid}/water-quality/tests/{testId:guid}", async (HttpContext ctx, IWaterQualityService svc, Guid id, Guid testId) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    return await svc.DeleteTestAsync(id, testId, ctx.User.FindFirst("sub")?.Value) ? Results.NoContent() : Results.NotFound();
+});
+
+app.MapGet("/api/affiliates/{id:guid}/water-quality/maintenance", async (HttpContext ctx, IWaterQualityService svc, Guid id) =>
+    !IsActiveAffiliate(ctx, id) ? Results.Forbid() : Results.Ok(await svc.GetMaintenanceAsync(id)));
+
+app.MapPost("/api/affiliates/{id:guid}/water-quality/maintenance", async (HttpContext ctx, IWaterQualityService svc, Guid id, UpsertWaterMaintenanceRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await svc.CreateMaintenanceAsync(id, request, ctx.User.FindFirst("sub")?.Value);
+        return Results.Created($"/api/affiliates/{id}/water-quality/maintenance/{result.Id}", result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
+
+app.MapPut("/api/affiliates/{id:guid}/water-quality/maintenance/{logId:guid}", async (HttpContext ctx, IWaterQualityService svc, Guid id, Guid logId, UpsertWaterMaintenanceRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await svc.UpdateMaintenanceAsync(id, logId, request, ctx.User.FindFirst("sub")?.Value);
+        return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
+
+app.MapDelete("/api/affiliates/{id:guid}/water-quality/maintenance/{logId:guid}", async (HttpContext ctx, IWaterQualityService svc, Guid id, Guid logId) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    return await svc.DeleteMaintenanceAsync(id, logId, ctx.User.FindFirst("sub")?.Value) ? Results.NoContent() : Results.NotFound();
+});
+
+// Página pública de transparencia (la que se abre desde el QR): proceso + análisis y mantenimientos marcados como públicos.
+app.MapGet("/api/public/affiliates/{slug}/water-quality", async (IWaterQualityService svc, string slug) =>
+{
+    var result = await svc.GetPublicAsync(slug);
+    return result is null
+        ? Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } })
+        : Results.Ok(result);
+})
+.AllowAnonymous();
 
 // ── Gastos y utilidad mensual (Nueva Era, Fase 3). Todo es financiero: solo dueño/gerente, nunca Staff. ──
 app.MapGet("/api/affiliates/{id:guid}/expenses", async (HttpContext ctx, IExpenseService svc, Guid id, DateOnly? from = null, DateOnly? to = null, string? category = null) =>

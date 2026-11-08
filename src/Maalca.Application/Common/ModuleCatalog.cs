@@ -101,6 +101,10 @@ public static class ModuleCatalog
         new ModuleDefinition("expenses", "Gastos y utilidad", "Expenses & profit",
             "Gastos fijos y sueltos por categoría y utilidad mensual (ventas menos gastos).", "Fixed and one-off expenses by category and monthly profit (sales minus expenses).",
             new[] { "retail" }, null, PlanTier.Professional),
+        // Calidad del agua: análisis de laboratorio, historial, mantenimiento y página pública de transparencia.
+        new ModuleDefinition("quality", "Calidad del agua", "Water quality",
+            "Resultados de laboratorio, historial y bitácora de mantenimiento, con una página pública que da confianza a los clientes.", "Lab results, history and maintenance log, with a public page that builds customer trust.",
+            new[] { "retail" }, null, PlanTier.Professional),
     };
 
     private static readonly Dictionary<string, ModuleDefinition> ByToken =

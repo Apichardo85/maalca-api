@@ -69,6 +69,8 @@ public class AppDbContext : DbContext
     public DbSet<StoreCustomer> StoreCustomers => Set<StoreCustomer>();
     public DbSet<Contract> Contracts => Set<Contract>();
     public DbSet<Expense> Expenses => Set<Expense>();
+    public DbSet<WaterQualityTest> WaterQualityTests => Set<WaterQualityTest>();
+    public DbSet<WaterMaintenanceLog> WaterMaintenanceLogs => Set<WaterMaintenanceLog>();
     public DbSet<ReceivablesSettings> ReceivablesSettings => Set<ReceivablesSettings>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<ContractTemplate> ContractTemplates => Set<ContractTemplate>();
@@ -914,6 +916,35 @@ public class AppDbContext : DbContext
                   .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.AffiliateId, e.ExpenseDate });
             entity.HasIndex(e => e.SourceExpenseId);
+        });
+
+        // WaterQualityTest / WaterMaintenanceLog -- calidad del agua: análisis de laboratorio y mantenimiento (Nueva Era)
+        modelBuilder.Entity<WaterQualityTest>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.LabName).HasMaxLength(150);
+            entity.Property(e => e.TestType).HasMaxLength(20);
+            entity.Property(e => e.Sample).HasMaxLength(200);
+            entity.Property(e => e.Result).HasMaxLength(20);
+            entity.Property(e => e.CertificateUrl).HasMaxLength(500);
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.AffiliateId, e.TestDate });
+        });
+
+        modelBuilder.Entity<WaterMaintenanceLog>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Kind).HasMaxLength(20);
+            entity.Property(e => e.Description).HasMaxLength(300);
+            entity.Property(e => e.PerformedBy).HasMaxLength(120);
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.AffiliateId, e.LogDate });
         });
 
         // Contract -- contrato recurrente de un cliente (Nueva Era, Fase 1)
