@@ -96,6 +96,11 @@ public static class ModuleCatalog
         new ModuleDefinition("routes", "Rutas y reparto", "Routes & delivery",
             "Rutas del día, entregas con envases, cobro en ruta y cuadre de cierre.", "Daily routes, deliveries with containers, on-route collection and closing reconciliation.",
             new[] { "retail" }, null, PlanTier.Professional),
+
+        // Gastos y utilidad mensual (ventas − gastos). Mismo criterio que contracts: solo retail y Professional.
+        new ModuleDefinition("expenses", "Gastos y utilidad", "Expenses & profit",
+            "Gastos fijos y sueltos por categoría y utilidad mensual (ventas menos gastos).", "Fixed and one-off expenses by category and monthly profit (sales minus expenses).",
+            new[] { "retail" }, null, PlanTier.Professional),
     };
 
     private static readonly Dictionary<string, ModuleDefinition> ByToken =
