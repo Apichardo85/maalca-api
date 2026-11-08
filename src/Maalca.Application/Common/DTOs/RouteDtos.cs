@@ -10,7 +10,8 @@ public record UpsertVehicleRequest(
 
 public record RouteStopDto(
     Guid Id, Guid CustomerId, string CustomerName, string? CustomerPhone, string? CustomerAddress,
-    int SortOrder, string Status, DateTime? VisitedAt, string? Notes);
+    int SortOrder, string Status, DateTime? VisitedAt, string? Notes,
+    DateTime? ArrivedAt = null, DateTime? DepartedAt = null, decimal? CustomerLat = null, decimal? CustomerLng = null);
 
 public record RouteDto(
     Guid Id, string Name, DateOnly RouteDate,

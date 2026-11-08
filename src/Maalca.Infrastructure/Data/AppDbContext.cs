@@ -80,6 +80,7 @@ public class AppDbContext : DbContext
     public DbSet<Vehicle> Vehicles => Set<Vehicle>();
     public DbSet<DeliveryRoute> DeliveryRoutes => Set<DeliveryRoute>();
     public DbSet<RouteStop> RouteStops => Set<RouteStop>();
+    public DbSet<VehiclePosition> VehiclePositions => Set<VehiclePosition>();
     public DbSet<Delivery> Deliveries => Set<Delivery>();
     public DbSet<DeliveryItem> DeliveryItems => Set<DeliveryItem>();
 
@@ -1094,10 +1095,22 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => new { e.AffiliateId, e.RouteDate });
         });
 
+        // VehiclePosition -- última ubicación conocida de una ruta en curso (modo camión). Una fila por ruta, se sobrescribe.
+        modelBuilder.Entity<VehiclePosition>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Lat).HasPrecision(9, 6);
+            entity.Property(e => e.Lng).HasPrecision(9, 6);
+            entity.HasIndex(e => e.RouteId).IsUnique();
+            entity.HasIndex(e => e.AffiliateId);
+        });
+
         modelBuilder.Entity<RouteStop>(entity =>
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Status).HasMaxLength(20);
+            entity.Property(e => e.ArrivalLat).HasPrecision(9, 6);
+            entity.Property(e => e.ArrivalLng).HasPrecision(9, 6);
             entity.HasOne(e => e.Route)
                   .WithMany(r => r.Stops)
                   .HasForeignKey(e => e.RouteId)

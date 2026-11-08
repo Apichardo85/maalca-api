@@ -14,6 +14,12 @@ public class RouteStop : BaseEntity
     public DateTime? VisitedAt { get; set; }
     /// <summary>Motivo si se saltó o falló (cerrado, no estaba, etc.).</summary>
     public string? Notes { get; set; }
+    /// <summary>Modo camión: cuándo el conductor marcó "llegué" y dónde estaba (para validar la visita).</summary>
+    public DateTime? ArrivedAt { get; set; }
+    public decimal? ArrivalLat { get; set; }
+    public decimal? ArrivalLng { get; set; }
+    /// <summary>Cuándo el conductor marcó "salí" de la parada.</summary>
+    public DateTime? DepartedAt { get; set; }
 
     public DeliveryRoute? Route { get; set; }
     public Customer? Customer { get; set; }

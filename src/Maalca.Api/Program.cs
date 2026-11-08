@@ -108,6 +108,7 @@ builder.Services.AddScoped<IContractService, ContractService>();
 builder.Services.AddScoped<IContainerService, ContainerService>();
 builder.Services.AddScoped<IExpenseService, ExpenseService>();
 builder.Services.AddScoped<IWaterQualityService, WaterQualityService>();
+builder.Services.AddScoped<IRouteTrackingService, RouteTrackingService>();
 builder.Services.AddScoped<IReceivablesSettingsService, ReceivablesSettingsService>();
 builder.Services.AddScoped<IRouteService, RouteService>();
 builder.Services.AddScoped<IDeliveryBillingService, DeliveryBillingService>();
@@ -3005,6 +3006,49 @@ app.MapPost("/api/affiliates/{id:guid}/routes/{routeId:guid}/stops/{stopId:guid}
     catch (ArgumentException ex) { return InvalidInput(ex); }
     catch (InvalidOperationException ex) { return BillingConflict(ex); }
 });
+
+// ── Modo camión: "llegué"/"salí" por parada y ubicación en vivo desde el teléfono del conductor. ──
+// El Staff solo opera sus rutas (DriverScopeAsync). La posición viaja a /position cada pocos segundos mientras la ruta está en curso.
+app.MapPost("/api/affiliates/{id:guid}/routes/{routeId:guid}/stops/{stopId:guid}/arrive", async (HttpContext ctx, IRouteService routes, IRouteTrackingService svc, Guid id, Guid routeId, Guid stopId, ArriveStopRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    var (allowed, driverId) = await DriverScopeAsync(ctx, routes, id);
+    if (!allowed) return Results.NotFound();
+    try
+    {
+        var result = await svc.ArriveAsync(id, routeId, stopId, request, ctx.User.FindFirst("sub")?.Value, driverId);
+        return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+    catch (InvalidOperationException ex) { return BillingConflict(ex); }
+});
+
+app.MapPost("/api/affiliates/{id:guid}/routes/{routeId:guid}/stops/{stopId:guid}/depart", async (HttpContext ctx, IRouteService routes, IRouteTrackingService svc, Guid id, Guid routeId, Guid stopId) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    var (allowed, driverId) = await DriverScopeAsync(ctx, routes, id);
+    if (!allowed) return Results.NotFound();
+    try
+    {
+        var result = await svc.DepartAsync(id, routeId, stopId, ctx.User.FindFirst("sub")?.Value, driverId);
+        return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+    catch (InvalidOperationException ex) { return BillingConflict(ex); }
+});
+
+app.MapPost("/api/affiliates/{id:guid}/routes/{routeId:guid}/position", async (HttpContext ctx, IRouteService routes, IRouteTrackingService svc, Guid id, Guid routeId, PositionRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    var (allowed, driverId) = await DriverScopeAsync(ctx, routes, id);
+    if (!allowed) return Results.NotFound();
+    try { return await svc.PostPositionAsync(id, routeId, request, driverId) ? Results.NoContent() : Results.NotFound(); }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+    catch (InvalidOperationException ex) { return BillingConflict(ex); }
+});
+
+// Rutas en curso con su última posición. Solo dueño/gerente (no Staff).
+app.MapGet("/api/affiliates/{id:guid}/routes/live", async (HttpContext ctx, IRouteTrackingService svc, Guid id) =>
+    !IsActiveAffiliate(ctx, id) || IsStaff(ctx) ? Results.Forbid() : Results.Ok(await svc.GetLiveAsync(id)));
 
 // Facturación de entregas por ciclo de cobro (clientes a crédito). Solo dueño/gerente (no Staff).
 // GET: qué hay por facturar. POST: dryRun=true (por defecto) simula; dryRun=false crea una factura por cliente.

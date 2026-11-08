@@ -522,7 +522,7 @@ public class RouteService : IRouteService
             contractByCustomer.TryGetValue(s.CustomerId, out var contract);
 
             stops.Add(new DriverStopDto(
-                new RouteStopDto(s.Id, s.CustomerId, c?.Name ?? "—", c?.Phone, c?.Address, s.SortOrder, s.Status, s.VisitedAt, s.Notes),
+                new RouteStopDto(s.Id, s.CustomerId, c?.Name ?? "—", c?.Phone, c?.Address, s.SortOrder, s.Status, s.VisitedAt, s.Notes, s.ArrivedAt, s.DepartedAt, c?.GpsLat, c?.GpsLng),
                 balanceByCustomer.TryGetValue(s.CustomerId, out var bal) ? bal : Array.Empty<ContainerBalanceItemDto>(),
                 anaquelesByCustomer.TryGetValue(s.CustomerId, out var an) ? an : Array.Empty<DriverAnaquelDto>(),
                 billing.Balance, billing.CreditOnAccount, billing.OpenInvoices.Any(o => o.IsOverdue), billing.OpenInvoices,
@@ -677,7 +677,7 @@ public class RouteService : IRouteService
             ? r.Stops.OrderBy(s => s.SortOrder).Select(s =>
             {
                 customers!.TryGetValue(s.CustomerId, out var c);
-                return new RouteStopDto(s.Id, s.CustomerId, c?.Name ?? "—", c?.Phone, c?.Address, s.SortOrder, s.Status, s.VisitedAt, s.Notes);
+                return new RouteStopDto(s.Id, s.CustomerId, c?.Name ?? "—", c?.Phone, c?.Address, s.SortOrder, s.Status, s.VisitedAt, s.Notes, s.ArrivedAt, s.DepartedAt, c?.GpsLat, c?.GpsLng);
             }).ToList()
             : new List<RouteStopDto>();
         return new RouteDto(
