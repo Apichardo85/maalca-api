@@ -3331,6 +3331,48 @@ namespace Maalca.Infrastructure.Migrations
                     b.ToTable("QueueEntries");
                 });
 
+            modelBuilder.Entity("Maalca.Domain.Entities.ReceivablesSettings", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AffiliateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AgingBasis")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TaxLabel")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("TaxMode")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<decimal>("TaxRate")
+                        .HasPrecision(6, 3)
+                        .HasColumnType("numeric(6,3)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AffiliateId")
+                        .IsUnique();
+
+                    b.ToTable("ReceivablesSettings");
+                });
+
             modelBuilder.Entity("Maalca.Domain.Entities.Recipe", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4961,6 +5003,17 @@ namespace Maalca.Infrastructure.Migrations
                     b.Navigation("Customer");
 
                     b.Navigation("Service");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.ReceivablesSettings", b =>
+                {
+                    b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
+                        .WithMany()
+                        .HasForeignKey("AffiliateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Affiliate");
                 });
 
             modelBuilder.Entity("Maalca.Domain.Entities.Recipe", b =>

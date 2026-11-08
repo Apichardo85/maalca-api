@@ -29,4 +29,4 @@ public record AgingRowDto(
 /// <summary>Antigüedad de saldos de todos los clientes con deuda o crédito a favor.</summary>
 public record AgingReportDto(
     DateTime AsOf, decimal TotalBalance, decimal TotalCreditOnAccount,
-    AgingBucketsDto Totals, IReadOnlyList<AgingRowDto> Rows);
+    AgingBucketsDto Totals, IReadOnlyList<AgingRowDto> Rows, string Basis = "issue");

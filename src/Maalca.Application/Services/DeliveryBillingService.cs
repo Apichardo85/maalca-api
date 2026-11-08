@@ -57,6 +57,7 @@ public class DeliveryBillingService : IDeliveryBillingService
             await _db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({BillingLockKey(affiliateId)})");
 
         var (deliveries, customers) = await LoadUnbilledAsync(affiliateId, request.CustomerIds, track: !request.DryRun);
+        var settings = await ReceivablesSettingsService.LoadAsync(_db, affiliateId);
 
         var rows = new List<BillDeliveriesRowDto>();
         var created = new List<(Invoice Invoice, string CustomerName, int Count)>();
@@ -82,9 +83,10 @@ public class DeliveryBillingService : IDeliveryBillingService
             }
 
             var lines = DeliveryInvoicing.BuildLines(billable.SelectMany(d => d.Items));
-            var subtotal = lines.Sum(l => l.Total);
+            var linesTotal = lines.Sum(l => l.Total);
+            var (subtotal, taxAmount, total) = DeliveryInvoicing.ApplyTax(linesTotal, settings.TaxMode, settings.TaxRate);
             DateTime? due = c.CreditDays.HasValue ? now.AddDays(c.CreditDays.Value) : null;
-            if (subtotal <= 0)
+            if (linesTotal <= 0)
             {
                 rows.Add(new BillDeliveriesRowDto(c.Id, c.Name, "zero_total", billable.Count, 0m, through, due, null, null));
                 continue;
@@ -92,7 +94,7 @@ public class DeliveryBillingService : IDeliveryBillingService
 
             if (request.DryRun)
             {
-                rows.Add(new BillDeliveriesRowDto(c.Id, c.Name, "preview", billable.Count, subtotal, through, due, null, null));
+                rows.Add(new BillDeliveriesRowDto(c.Id, c.Name, "preview", billable.Count, total, through, due, null, null));
                 continue;
             }
 
@@ -103,8 +105,8 @@ public class DeliveryBillingService : IDeliveryBillingService
                 CustomerId = c.Id,
                 InvoiceNumber = DeliveryInvoicing.NewInvoiceNumber(),
                 Subtotal = subtotal,
-                Tax = 0m,
-                Total = subtotal,
+                Tax = taxAmount,
+                Total = total,
                 Status = "Pending",
                 IssueDate = now,
                 DueDate = due,
@@ -116,7 +118,7 @@ public class DeliveryBillingService : IDeliveryBillingService
             _db.Invoices.Add(invoice);
             foreach (var d in billable) d.InvoiceId = invoice.Id;
             created.Add((invoice, c.Name, billable.Count));
-            rows.Add(new BillDeliveriesRowDto(c.Id, c.Name, "invoiced", billable.Count, subtotal, through, due, invoice.Id, invoice.InvoiceNumber));
+            rows.Add(new BillDeliveriesRowDto(c.Id, c.Name, "invoiced", billable.Count, total, through, due, invoice.Id, invoice.InvoiceNumber));
         }
 
         if (created.Count > 0) await _db.SaveChangesAsync();

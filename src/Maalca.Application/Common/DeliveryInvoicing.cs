@@ -29,6 +29,27 @@ public static class DeliveryInvoicing
 
     public static DateOnly Today() => LocalDate(DateTime.UtcNow);
 
+    /// <summary>
+    /// Subtotal, impuesto y total de una factura según los ajustes del negocio. "added": el precio no incluye impuesto y se suma;
+    /// "included": el precio ya lo incluye (se separa la base); cualquier otro modo o tasa 0: sin impuesto.
+    /// </summary>
+    public static (decimal Subtotal, decimal Tax, decimal Total) ApplyTax(decimal lineTotal, string taxMode, decimal ratePercent)
+    {
+        var amount = Math.Round(lineTotal, 2, MidpointRounding.AwayFromZero);
+        if (ratePercent <= 0) return (amount, 0m, amount);
+        if (taxMode == "added")
+        {
+            var tax = Math.Round(amount * ratePercent / 100m, 2, MidpointRounding.AwayFromZero);
+            return (amount, tax, amount + tax);
+        }
+        if (taxMode == "included")
+        {
+            var baseAmount = Math.Round(amount / (1 + ratePercent / 100m), 2, MidpointRounding.AwayFromZero);
+            return (baseAmount, amount - baseAmount, amount);
+        }
+        return (amount, 0m, amount);
+    }
+
     /// <summary>Mes calendario local del negocio como rango UTC [from, to): para filtrar columnas DateTime guardadas en UTC.</summary>
     public static (DateTime FromUtc, DateTime ToUtc) MonthRangeUtc(int year, int month)
     {

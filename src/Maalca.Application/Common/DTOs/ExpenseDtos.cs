@@ -22,4 +22,6 @@ public record ProfitReportDto(
     decimal SalesInvoiced, int InvoicesCount, decimal SalesCounter, int CounterOrdersCount, decimal SalesTotal,
     decimal CollectedCash, decimal CollectedTransfer, decimal CollectedCounter, decimal CollectedTotal,
     decimal ExpensesTotal, IReadOnlyList<ExpenseCategoryTotalDto> ExpensesByCategory,
-    decimal Profit, decimal CashProfit);
+    decimal Profit, decimal CashProfit,
+    /// <summary>Impuesto (ITBIS) de las facturas del mes: se cobra a nombre del fisco, no entra en ventas ni en utilidad.</summary>
+    decimal TaxInvoiced = 0m);

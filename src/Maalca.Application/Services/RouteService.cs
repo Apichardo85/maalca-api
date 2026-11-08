@@ -352,8 +352,10 @@ public class RouteService : IRouteService
             if (creditDays == 0)
             {
                 var invoiceLines = DeliveryInvoicing.BuildLines(delivery.Items);
-                var subtotal = invoiceLines.Sum(l => l.Total);
-                if (subtotal > 0)
+                var linesTotal = invoiceLines.Sum(l => l.Total);
+                var taxSettings = await ReceivablesSettingsService.LoadAsync(_db, affiliateId);
+                var (subtotal, taxAmount, invoiceTotal) = DeliveryInvoicing.ApplyTax(linesTotal, taxSettings.TaxMode, taxSettings.TaxRate);
+                if (linesTotal > 0)
                 {
                     invoice = new Invoice
                     {
@@ -362,8 +364,8 @@ public class RouteService : IRouteService
                         CustomerId = stop.CustomerId,
                         InvoiceNumber = DeliveryInvoicing.NewInvoiceNumber(),
                         Subtotal = subtotal,
-                        Tax = 0m,
-                        Total = subtotal,
+                        Tax = taxAmount,
+                        Total = invoiceTotal,
                         Status = "Pending",
                         IssueDate = at,
                         DueDate = at,

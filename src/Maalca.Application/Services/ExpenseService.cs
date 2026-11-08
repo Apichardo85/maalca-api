@@ -120,7 +120,7 @@ public class ExpenseService : IExpenseService
         // Facturas emitidas (reparto/contratos). Las anuladas no cuentan.
         var invoices = await _db.Invoices.AsNoTracking()
             .Where(i => i.AffiliateId == affiliateId && i.Status != "Cancelled" && i.VoidedAt == null && i.IssueDate >= fromUtc && i.IssueDate < toUtc)
-            .Select(i => i.Total).ToListAsync();
+            .Select(i => new { i.Subtotal, i.Tax }).ToListAsync();
 
         // Ventas de mostrador/tienda: pedidos pagados o entregados, sin la propina (no es ingreso del negocio).
         var counter = await _db.Orders.AsNoTracking()
@@ -136,7 +136,9 @@ public class ExpenseService : IExpenseService
             .Where(e => e.AffiliateId == affiliateId && e.IsActive && e.ExpenseDate >= first && e.ExpenseDate <= last)
             .Select(e => new { e.Category, e.Amount }).ToListAsync();
 
-        var salesInvoiced = Math.Round(invoices.Sum(), 2);
+        // El impuesto facturado (ITBIS) no es ingreso del negocio: las ventas cuentan la base sin impuesto.
+        var salesInvoiced = Math.Round(invoices.Sum(i => i.Subtotal), 2);
+        var taxInvoiced = Math.Round(invoices.Sum(i => i.Tax), 2);
         var salesCounter = Math.Round(counter.Sum(), 2);
         var cash = Math.Round(payments.Where(p => p.Method == "cash").Sum(p => p.Amount), 2);
         var transfer = Math.Round(payments.Where(p => p.Method != "cash").Sum(p => p.Amount), 2);
@@ -152,7 +154,7 @@ public class ExpenseService : IExpenseService
             salesInvoiced, invoices.Count, salesCounter, counter.Count, salesTotal,
             cash, transfer, salesCounter, collectedTotal,
             expensesTotal, byCategory,
-            salesTotal - expensesTotal, collectedTotal - expensesTotal);
+            salesTotal - expensesTotal, collectedTotal - expensesTotal, taxInvoiced);
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────

@@ -69,6 +69,7 @@ public class AppDbContext : DbContext
     public DbSet<StoreCustomer> StoreCustomers => Set<StoreCustomer>();
     public DbSet<Contract> Contracts => Set<Contract>();
     public DbSet<Expense> Expenses => Set<Expense>();
+    public DbSet<ReceivablesSettings> ReceivablesSettings => Set<ReceivablesSettings>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<ContractTemplate> ContractTemplates => Set<ContractTemplate>();
     public DbSet<ContainerType> ContainerTypes => Set<ContainerType>();
@@ -880,6 +881,21 @@ public class AppDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(e => e.CustomerId)
                   .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ReceivablesSettings -- antigüedad de saldos e impuesto de las facturas de reparto (uno por negocio)
+        modelBuilder.Entity<ReceivablesSettings>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.AgingBasis).HasMaxLength(10);
+            entity.Property(e => e.TaxMode).HasMaxLength(10);
+            entity.Property(e => e.TaxRate).HasPrecision(6, 3);
+            entity.Property(e => e.TaxLabel).HasMaxLength(20);
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => e.AffiliateId).IsUnique();
         });
 
         // Expense -- gastos del negocio para la utilidad mensual (Nueva Era, Fase 3)

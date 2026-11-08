@@ -40,7 +40,7 @@ public class BillingService : IBillingService
         var result = BillingCalculator.Compute(
             invoices.Select(i => new BillingInvoice(i.Id, i.InvoiceNumber, i.Total, i.Status, i.IssueDate, i.DueDate, i.PaidDate, i.CreatedAt)),
             payments.Select(p => new BillingPayment(p.Id, p.InvoiceId, p.Amount, p.PaidAt, p.Method, p.Notes)),
-            at);
+            at, (await ReceivablesSettingsService.LoadAsync(_db, affiliateId)).AgingBasis);
 
         return new CustomerStatementDto(
             customer.Id, customer.Name, at, result.TotalInvoiced, result.TotalPaid, result.Balance,
@@ -69,13 +69,14 @@ public class BillingService : IBillingService
             .Select(c => new { c.Id, c.Name })
             .ToDictionaryAsync(c => c.Id, c => c.Name);
 
+        var basis = (await ReceivablesSettingsService.LoadAsync(_db, affiliateId)).AgingBasis;
         var rows = new List<AgingRowDto>();
         foreach (var id in customerIds)
         {
             var r = BillingCalculator.Compute(
                 invoicesByCustomer[id].Select(i => new BillingInvoice(i.Id, i.InvoiceNumber, i.Total, i.Status, i.IssueDate, i.DueDate, i.PaidDate, i.CreatedAt)),
                 paymentsByCustomer[id].Select(p => new BillingPayment(p.Id, p.InvoiceId, p.Amount, p.PaidAt, p.Method, p.Notes)),
-                at);
+                at, basis);
             if (r.Balance <= 0 && r.CreditOnAccount <= 0) continue;
 
             rows.Add(new AgingRowDto(
@@ -88,7 +89,7 @@ public class BillingService : IBillingService
         var totals = new AgingBucketsDto(
             rows.Sum(r => r.Aging.Days0To15), rows.Sum(r => r.Aging.Days16To30),
             rows.Sum(r => r.Aging.Days31To60), rows.Sum(r => r.Aging.Over60));
-        return new AgingReportDto(at, rows.Sum(r => r.Balance), rows.Sum(r => r.CreditOnAccount), totals, rows);
+        return new AgingReportDto(at, rows.Sum(r => r.Balance), rows.Sum(r => r.CreditOnAccount), totals, rows, basis);
     }
 
     // ── Pagos ────────────────────────────────────────────────────────────────

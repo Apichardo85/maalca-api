@@ -21,7 +21,8 @@ public record CustomerBillingResult(
 ///  - Un pago ligado a una factura la abona. Un pago sin factura (InvoiceId null), el sobrante de una factura
 ///    pagada de más y los pagos de facturas anuladas forman un "crédito a cuenta".
 ///  - El crédito a cuenta se aplica a las facturas abiertas de la más vieja a la más nueva (FIFO).
-///  - Antigüedad = días desde la fecha de emisión: 0–15, 16–30, 31–60, 61+.
+///  - Antigüedad: 0–15, 16–30, 31–60, 61+ días, contados desde la emisión (agingBasis "issue") o desde el vencimiento
+///    ("due"; lo que aún no vence cae en el primer rango).
 ///  - Identidad: TotalInvoiced − TotalPaid = Balance − CreditOnAccount.
 /// </summary>
 public static class BillingCalculator
@@ -30,7 +31,7 @@ public static class BillingCalculator
     public const string Paid = "Paid";
 
     public static CustomerBillingResult Compute(
-        IEnumerable<BillingInvoice> invoices, IEnumerable<BillingPayment> payments, DateTime asOf)
+        IEnumerable<BillingInvoice> invoices, IEnumerable<BillingPayment> payments, DateTime asOf, string agingBasis = "issue")
     {
         var asOfDate = asOf.Date;
         var live = invoices
@@ -98,7 +99,7 @@ public static class BillingCalculator
             var left = amount - applied;
             if (left <= 0) continue;
 
-            var age = (asOfDate - inv.IssueDate.Date).Days;
+            var age = Math.Max(0, agingBasis == "due" ? (asOfDate - (inv.DueDate ?? inv.IssueDate).Date).Days : (asOfDate - inv.IssueDate.Date).Days);
             if (age <= 15) b0 += left;
             else if (age <= 30) b1 += left;
             else if (age <= 60) b2 += left;

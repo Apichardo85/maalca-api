@@ -107,6 +107,7 @@ builder.Services.AddScoped<IProspectIntakeService, ProspectIntakeService>();
 builder.Services.AddScoped<IContractService, ContractService>();
 builder.Services.AddScoped<IContainerService, ContainerService>();
 builder.Services.AddScoped<IExpenseService, ExpenseService>();
+builder.Services.AddScoped<IReceivablesSettingsService, ReceivablesSettingsService>();
 builder.Services.AddScoped<IRouteService, RouteService>();
 builder.Services.AddScoped<IDeliveryBillingService, DeliveryBillingService>();
 builder.Services.AddScoped<IBillingService, BillingService>();
@@ -1151,6 +1152,8 @@ app.MapGet("/api/internal/invoices/due-reminders", async (HttpContext ctx, AppDb
         .Select(i => new
         {
             id = i.Id,
+            affiliateId = i.AffiliateId,
+            customerId = i.CustomerId,
             customerEmail = i.Customer!.Email,
             customerName = i.Customer!.Name,
             businessName = i.Affiliate != null ? i.Affiliate.Name : "",
@@ -1164,7 +1167,34 @@ app.MapGet("/api/internal/invoices/due-reminders", async (HttpContext ctx, AppDb
         })
         .ToListAsync();
 
-    return Results.Ok(due);
+    // Solo se avisa lo que el cliente realmente debe: una factura "Pendiente" cubierta por crédito a cuenta (pagos sin factura
+    // o sobrantes) no tiene saldo abierto y no recibe recordatorio. El monto del correo es el saldo abierto, no el total.
+    var openByInvoice = new Dictionary<Guid, decimal>();
+    foreach (var g in due.GroupBy(d => new { d.affiliateId, d.customerId }))
+    {
+        var invs = await db.Invoices.AsNoTracking()
+            .Where(i => i.AffiliateId == g.Key.affiliateId && i.CustomerId == g.Key.customerId && i.VoidedAt == null)
+            .Select(i => new BillingInvoice(i.Id, i.InvoiceNumber, i.Total, i.Status, i.IssueDate, i.DueDate, i.PaidDate, i.CreatedAt))
+            .ToListAsync();
+        var pays = await db.Payments.AsNoTracking()
+            .Where(p => p.AffiliateId == g.Key.affiliateId && p.CustomerId == g.Key.customerId)
+            .Select(p => new BillingPayment(p.Id, p.InvoiceId, p.Amount, p.PaidAt, p.Method, p.Notes))
+            .ToListAsync();
+        foreach (var o in BillingCalculator.Compute(invs, pays, now).OpenInvoices)
+            openByInvoice[o.InvoiceId] = o.Open;
+    }
+
+    var result = due
+        .Where(d => openByInvoice.ContainsKey(d.id))
+        .Select(d => new
+        {
+            d.id, d.customerEmail, d.customerName, d.businessName, d.invoiceNumber,
+            total = openByInvoice[d.id],
+            d.currency, d.dueDate, d.isOverdue, d.logoUrl, d.brandColor,
+        })
+        .ToList();
+
+    return Results.Ok(result);
 });
 
 app.MapPost("/api/internal/invoices/{id:guid}/mark-reminded", async (HttpContext ctx, AppDbContext db, Guid id) =>
@@ -3472,6 +3502,17 @@ static async Task<(bool Allowed, Guid? DriverId)> DriverScopeAsync(HttpContext c
     return (driverId.HasValue, driverId);
 }
 static IResult InvalidInput(ArgumentException ex) => Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+
+// ── Ajustes de cobros e impuestos (antigüedad de saldos, ITBIS). Solo dueño/gerente. ──
+app.MapGet("/api/affiliates/{id:guid}/receivables-settings", async (HttpContext ctx, IReceivablesSettingsService svc, Guid id) =>
+    !IsActiveAffiliate(ctx, id) || IsStaff(ctx) ? Results.Forbid() : Results.Ok(await svc.GetAsync(id)));
+
+app.MapPut("/api/affiliates/{id:guid}/receivables-settings", async (HttpContext ctx, IReceivablesSettingsService svc, Guid id, ReceivablesSettingsDto request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try { return Results.Ok(await svc.UpdateAsync(id, request)); }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
 
 // ── Gastos y utilidad mensual (Nueva Era, Fase 3). Todo es financiero: solo dueño/gerente, nunca Staff. ──
 app.MapGet("/api/affiliates/{id:guid}/expenses", async (HttpContext ctx, IExpenseService svc, Guid id, DateOnly? from = null, DateOnly? to = null, string? category = null) =>
