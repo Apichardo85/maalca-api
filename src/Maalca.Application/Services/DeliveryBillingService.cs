@@ -50,6 +50,12 @@ public class DeliveryBillingService : IDeliveryBillingService
         if (request.ThroughDate.HasValue && request.ThroughDate.Value > today)
             throw new ArgumentException("La fecha de corte no puede ser futura.");
 
+        // Facturar de verdad: una sola corrida a la vez por negocio. El candado se toma antes de leer las entregas sin factura,
+        // así una segunda corrida simultánea (doble clic, dos pestañas) espera, las ve ya facturadas y no las factura otra vez.
+        await using var tx = request.DryRun ? null : await _db.Database.BeginTransactionAsync();
+        if (tx is not null)
+            await _db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({BillingLockKey(affiliateId)})");
+
         var (deliveries, customers) = await LoadUnbilledAsync(affiliateId, request.CustomerIds, track: !request.DryRun);
 
         var rows = new List<BillDeliveriesRowDto>();
@@ -114,6 +120,7 @@ public class DeliveryBillingService : IDeliveryBillingService
         }
 
         if (created.Count > 0) await _db.SaveChangesAsync();
+        if (tx is not null) await tx.CommitAsync();
 
         foreach (var (invoice, name, count) in created)
         {
@@ -126,6 +133,9 @@ public class DeliveryBillingService : IDeliveryBillingService
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
+
+    /// <summary>Llave del candado de facturación por negocio (primeros 8 bytes del id).</summary>
+    private static long BillingLockKey(Guid affiliateId) => BitConverter.ToInt64(affiliateId.ToByteArray(), 0);
 
     private static decimal Total(Delivery d) => d.Items.Sum(i => Math.Round(i.Quantity * i.UnitPrice, 2, MidpointRounding.AwayFromZero));
 
