@@ -68,6 +68,7 @@ public class AppDbContext : DbContext
     public DbSet<CarrierAccount> CarrierAccounts => Set<CarrierAccount>();
     public DbSet<StoreCustomer> StoreCustomers => Set<StoreCustomer>();
     public DbSet<Contract> Contracts => Set<Contract>();
+    public DbSet<Expense> Expenses => Set<Expense>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<ContractTemplate> ContractTemplates => Set<ContractTemplate>();
     public DbSet<ContainerType> ContainerTypes => Set<ContainerType>();
@@ -879,6 +880,24 @@ public class AppDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(e => e.CustomerId)
                   .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Expense -- gastos del negocio para la utilidad mensual (Nueva Era, Fase 3)
+        modelBuilder.Entity<Expense>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Category).HasMaxLength(30);
+            entity.Property(e => e.Description).HasMaxLength(200);
+            entity.Property(e => e.Amount).HasPrecision(18, 2);
+            entity.Property(e => e.Recurrence).HasMaxLength(10);
+            entity.Property(e => e.Vendor).HasMaxLength(120);
+            entity.Property(e => e.PaymentMethod).HasMaxLength(10);
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.AffiliateId, e.ExpenseDate });
+            entity.HasIndex(e => e.SourceExpenseId);
         });
 
         // Contract -- contrato recurrente de un cliente (Nueva Era, Fase 1)

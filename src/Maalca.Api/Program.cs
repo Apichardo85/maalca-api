@@ -106,6 +106,7 @@ builder.Services.AddScoped<IPlatformContentService, PlatformContentService>();
 builder.Services.AddScoped<IProspectIntakeService, ProspectIntakeService>();
 builder.Services.AddScoped<IContractService, ContractService>();
 builder.Services.AddScoped<IContainerService, ContainerService>();
+builder.Services.AddScoped<IExpenseService, ExpenseService>();
 builder.Services.AddScoped<IRouteService, RouteService>();
 builder.Services.AddScoped<IDeliveryBillingService, DeliveryBillingService>();
 builder.Services.AddScoped<IBillingService, BillingService>();
@@ -3471,6 +3472,53 @@ static async Task<(bool Allowed, Guid? DriverId)> DriverScopeAsync(HttpContext c
     return (driverId.HasValue, driverId);
 }
 static IResult InvalidInput(ArgumentException ex) => Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
+
+// ── Gastos y utilidad mensual (Nueva Era, Fase 3). Todo es financiero: solo dueño/gerente, nunca Staff. ──
+app.MapGet("/api/affiliates/{id:guid}/expenses", async (HttpContext ctx, IExpenseService svc, Guid id, DateOnly? from = null, DateOnly? to = null, string? category = null) =>
+    !IsActiveAffiliate(ctx, id) || IsStaff(ctx) ? Results.Forbid() : Results.Ok(await svc.GetAsync(id, from, to, category)));
+
+app.MapPost("/api/affiliates/{id:guid}/expenses", async (HttpContext ctx, IExpenseService svc, Guid id, UpsertExpenseRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await svc.CreateAsync(id, request, ctx.User.FindFirst("sub")?.Value);
+        return Results.Created($"/api/affiliates/{id}/expenses/{result.Id}", result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
+
+app.MapPut("/api/affiliates/{id:guid}/expenses/{expenseId:guid}", async (HttpContext ctx, IExpenseService svc, Guid id, Guid expenseId, UpsertExpenseRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await svc.UpdateAsync(id, expenseId, request, ctx.User.FindFirst("sub")?.Value);
+        return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
+
+// "Borrar" un gasto = desactivarlo (sale de los reportes, queda en el historial).
+app.MapDelete("/api/affiliates/{id:guid}/expenses/{expenseId:guid}", async (HttpContext ctx, IExpenseService svc, Guid id, Guid expenseId) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    return await svc.DeleteAsync(id, expenseId, ctx.User.FindFirst("sub")?.Value) ? Results.NoContent() : Results.NotFound();
+});
+
+app.MapPost("/api/affiliates/{id:guid}/expenses/generate-recurring", async (HttpContext ctx, IExpenseService svc, Guid id, GenerateRecurringRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try { return Results.Ok(await svc.GenerateRecurringAsync(id, request, ctx.User.FindFirst("sub")?.Value)); }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
+
+app.MapGet("/api/affiliates/{id:guid}/reports/profit", async (HttpContext ctx, IExpenseService svc, Guid id, string month) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try { return Results.Ok(await svc.GetProfitAsync(id, month)); }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
 
 app.MapGet("/api/affiliates/{id:guid}/price-lists", async (HttpContext ctx, IPriceListService svc, Guid id) =>
     !IsActiveAffiliate(ctx, id) ? Results.Forbid() : Results.Ok(await svc.GetAllAsync(id)));

@@ -29,6 +29,14 @@ public static class DeliveryInvoicing
 
     public static DateOnly Today() => LocalDate(DateTime.UtcNow);
 
+    /// <summary>Mes calendario local del negocio como rango UTC [from, to): para filtrar columnas DateTime guardadas en UTC.</summary>
+    public static (DateTime FromUtc, DateTime ToUtc) MonthRangeUtc(int year, int month)
+    {
+        var start = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Unspecified);
+        var end = start.AddMonths(1);
+        return (TimeZoneInfo.ConvertTimeToUtc(start, BusinessZone), TimeZoneInfo.ConvertTimeToUtc(end, BusinessZone));
+    }
+
     /// <summary>Mismo formato que el resto de las facturas (INV-aaaammdd-xxxxxxxx).</summary>
     public static string NewInvoiceNumber() => $"INV-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString()[..8]}";
 
