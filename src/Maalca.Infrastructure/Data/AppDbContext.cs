@@ -217,6 +217,10 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Message).HasMaxLength(500);
             entity.Property(e => e.Status).HasMaxLength(20).IsRequired();
             entity.Property(e => e.Notes).HasMaxLength(1000);
+            entity.Property(e => e.Address).HasMaxLength(250);
+            entity.Property(e => e.GpsLat).HasPrecision(9, 6);
+            entity.Property(e => e.GpsLng).HasPrecision(9, 6);
+            entity.Property(e => e.DeliveryFrequency).HasMaxLength(20);
             entity.HasOne(e => e.Affiliate).WithMany().HasForeignKey(e => e.AffiliateId).OnDelete(DeleteBehavior.Cascade);
             // Borrar una lista deja a sus miembros a precio público (no los borra).
             entity.HasOne(e => e.PriceList).WithMany().HasForeignKey(e => e.PriceListId).OnDelete(DeleteBehavior.SetNull);

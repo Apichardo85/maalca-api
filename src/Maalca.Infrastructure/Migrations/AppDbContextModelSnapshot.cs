@@ -3935,6 +3935,10 @@ namespace Maalca.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Address")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)");
+
                     b.Property<Guid>("AffiliateId")
                         .HasColumnType("uuid");
 
@@ -3948,10 +3952,22 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("DeliveryFrequency")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<decimal?>("GpsLat")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)");
+
+                    b.Property<decimal?>("GpsLng")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)");
 
                     b.Property<string>("Message")
                         .HasMaxLength(500)
@@ -3989,6 +4005,9 @@ namespace Maalca.Infrastructure.Migrations
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("WantsCredit")
+                        .HasColumnType("boolean");
 
                     b.HasKey("Id");
 

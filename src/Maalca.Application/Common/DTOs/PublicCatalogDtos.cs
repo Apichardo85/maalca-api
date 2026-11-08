@@ -140,7 +140,9 @@ public record PlanCapabilitiesDto(
     decimal? SalesTaxRate = null,
     bool SalesTaxOnShipping = true,
     // Estado donde se cobra impuesto: un envío a otro estado va sin impuesto (null = siempre).
-    string? SalesTaxState = null
+    string? SalesTaxState = null,
+    // Negocio con reparto (módulo de rutas): el registro de cliente pide dirección, ubicación y frecuencia de entrega.
+    bool DeliveryRoutes = false
 );
 
 public record PublicCatalogResponse(

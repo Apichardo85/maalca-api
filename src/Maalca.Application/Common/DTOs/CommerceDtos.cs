@@ -137,7 +137,8 @@ public record StoreMeDto(
 /// <summary>"Mi cuenta": el cliente corrige sus datos. Null = no se toca.</summary>
 public record UpdateMyStoreProfileRequest(string? Name, string? Phone, string? BusinessName, string? TaxId);
 
-public record JoinStoreRequest(string Name, string? Phone, string? BusinessName, string? TaxId, string? Message);
+public record JoinStoreRequest(string Name, string? Phone, string? BusinessName, string? TaxId, string? Message,
+    string? Address = null, decimal? GpsLat = null, decimal? GpsLng = null, string? DeliveryFrequency = null, bool WantsCredit = false);
 
 public record MemberPriceDto(Guid ItemId, decimal Price);
 
@@ -157,7 +158,8 @@ public record StoreOrderLineDto(string ItemId, string Name, int Qty, decimal Uni
 public record StoreCustomerDto(
     Guid Id, string Name, string Email, string? Phone, string? BusinessName, string? TaxId, string? Message,
     string Status, Guid? PriceListId, string? PriceListName, string? Notes, DateTime CreatedAt, DateTime? ApprovedAt,
-    int OrderCount);
+    int OrderCount,
+    string? Address = null, decimal? GpsLat = null, decimal? GpsLng = null, string? DeliveryFrequency = null, bool WantsCredit = false);
 
 /// <summary>Dueño: aprobar/rechazar, asignar lista y notas. Null = no tocar.</summary>
 public record UpdateStoreCustomerRequest(string? Status, Guid? PriceListId, bool ClearPriceList = false, string? Notes = null);

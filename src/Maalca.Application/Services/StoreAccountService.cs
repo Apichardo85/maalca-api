@@ -119,6 +119,7 @@ public class StoreAccountService : IStoreAccountService
                 existing.BusinessName = Clip(r.BusinessName, 160);
                 existing.TaxId = Clip(r.TaxId, 40);
                 existing.Message = Clip(r.Message, 500);
+                ApplyDelivery(existing, r);
                 existing.UpdatedAt = DateTime.UtcNow;
                 await _db.SaveChangesAsync();
                 await NotifyOwnerAsync(affiliate, existing);
@@ -141,6 +142,7 @@ public class StoreAccountService : IStoreAccountService
             PriceListId = open ? affiliate.StoreDefaultPriceListId : null,
             ApprovedAt = open ? DateTime.UtcNow : null,
         };
+        ApplyDelivery(account, r);
         _db.StoreCustomers.Add(account);
         try
         {
@@ -332,6 +334,11 @@ public class StoreAccountService : IStoreAccountService
                     Name = Clip(name, 160) ?? account.Name,
                     Email = email,
                     Phone = account.Phone,
+                    Rnc = Clip(account.TaxId, 40),
+                    Address = account.Address,
+                    GpsLat = account.GpsLat,
+                    GpsLng = account.GpsLng,
+                    DeliveryFrequency = account.DeliveryFrequency,
                     Status = "Active",
                 });
             }
@@ -339,6 +346,10 @@ public class StoreAccountService : IStoreAccountService
             {
                 // No se pisa lo que el dueño haya escrito a mano: solo se rellenan los huecos.
                 if (string.IsNullOrWhiteSpace(existing.Phone)) existing.Phone = account.Phone;
+                if (string.IsNullOrWhiteSpace(existing.Address)) existing.Address = account.Address;
+                if (existing.GpsLat is null || existing.GpsLng is null) { existing.GpsLat = account.GpsLat; existing.GpsLng = account.GpsLng; }
+                if (string.IsNullOrWhiteSpace(existing.Rnc)) existing.Rnc = Clip(account.TaxId, 40);
+                if (string.IsNullOrWhiteSpace(existing.DeliveryFrequency)) existing.DeliveryFrequency = account.DeliveryFrequency;
                 existing.Status = "Active";
                 existing.UpdatedAt = DateTime.UtcNow;
             }
@@ -381,9 +392,24 @@ public class StoreAccountService : IStoreAccountService
             "price-lists", c.Id);
     }
 
+    private static readonly string[] DeliveryFrequencies = { "daily", "weekly", "on_demand" };
+
+    /// <summary>Datos de entrega que pide el registro de un negocio con reparto. Todo opcional; lo inválido se descarta en vez de
+    /// rechazar la solicitud (el cliente no debe quedarse sin registrarse por un GPS raro).</summary>
+    private static void ApplyDelivery(StoreCustomer account, JoinStoreRequest r)
+    {
+        account.Address = Clip(r.Address, 250);
+        var coordsOk = r.GpsLat is >= -90 and <= 90 && r.GpsLng is >= -180 and <= 180;
+        account.GpsLat = coordsOk ? Math.Round(r.GpsLat!.Value, 6) : null;
+        account.GpsLng = coordsOk ? Math.Round(r.GpsLng!.Value, 6) : null;
+        account.DeliveryFrequency = r.DeliveryFrequency is not null && DeliveryFrequencies.Contains(r.DeliveryFrequency) ? r.DeliveryFrequency : null;
+        account.WantsCredit = r.WantsCredit;
+    }
+
     private static StoreCustomerDto ToDto(StoreCustomer c, int orders) => new(
         c.Id, c.Name, c.Email, c.Phone, c.BusinessName, c.TaxId, c.Message, c.Status,
-        c.PriceListId, c.PriceList?.Name, c.Notes, c.CreatedAt, c.ApprovedAt, orders);
+        c.PriceListId, c.PriceList?.Name, c.Notes, c.CreatedAt, c.ApprovedAt, orders,
+        c.Address, c.GpsLat, c.GpsLng, c.DeliveryFrequency, c.WantsCredit);
 
     private static string NormalizeMode(string? mode) => mode == "open" ? "open" : "approval";
 

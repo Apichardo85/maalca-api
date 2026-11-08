@@ -226,7 +226,7 @@ public class PublicCatalogService : IPublicCatalogService
         return new PublicCatalogResponse(
             await MapToAffiliatePublicDtoAsync(affiliate),
             items,
-            BuildCapabilities(ModuleAccess.GetEffectiveTier(affiliate), boardOn) with { StripeReady = affiliate.StripeConnectChargesEnabled && !string.IsNullOrEmpty(affiliate.StripeConnectAccountId), PickupNewCustomerLimit = affiliate.PickupNewCustomerLimit, ShippingMethods = shippingMethods, StoreAccounts = activeModules.Contains(Maalca.Application.Common.StoreAccounts.ModuleToken, StringComparer.OrdinalIgnoreCase), SalesTaxRate = affiliate.SalesTaxRate, SalesTaxOnShipping = affiliate.SalesTaxOnShipping, SalesTaxState = affiliate.SalesTaxState },
+            BuildCapabilities(ModuleAccess.GetEffectiveTier(affiliate), boardOn) with { StripeReady = affiliate.StripeConnectChargesEnabled && !string.IsNullOrEmpty(affiliate.StripeConnectAccountId), PickupNewCustomerLimit = affiliate.PickupNewCustomerLimit, ShippingMethods = shippingMethods, StoreAccounts = activeModules.Contains(Maalca.Application.Common.StoreAccounts.ModuleToken, StringComparer.OrdinalIgnoreCase), SalesTaxRate = affiliate.SalesTaxRate, SalesTaxOnShipping = affiliate.SalesTaxOnShipping, SalesTaxState = affiliate.SalesTaxState, DeliveryRoutes = activeModules.Contains("routes", StringComparer.OrdinalIgnoreCase) },
             screenAds,
             adsScreen?.AdFrequency ?? affiliate.AdFrequency,
             screen?.Language ?? affiliate.Language,

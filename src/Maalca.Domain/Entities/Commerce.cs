@@ -83,6 +83,14 @@ public class StoreCustomer : BaseEntity
     /// <summary>Notas internas del dueño (el cliente no las ve).</summary>
     public string? Notes { get; set; }
     public DateTime? ApprovedAt { get; set; }
+    /// <summary>Dónde se le entrega (negocios con reparto). Al aprobar pasa a la ficha del Cliente para ubicarlo en la ruta.</summary>
+    public string? Address { get; set; }
+    public decimal? GpsLat { get; set; }
+    public decimal? GpsLng { get; set; }
+    /// <summary>Lo que pidió al registrarse: daily | weekly | on_demand. El contrato real lo fija la fábrica.</summary>
+    public string? DeliveryFrequency { get; set; }
+    /// <summary>Pidió crédito. Solo es una solicitud: los días de crédito los decide la fábrica en el contrato.</summary>
+    public bool WantsCredit { get; set; }
 
     public Affiliate? Affiliate { get; set; }
     public PriceList? PriceList { get; set; }
