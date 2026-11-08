@@ -4378,7 +4378,8 @@ namespace Maalca.Infrastructure.Migrations
                     b.HasIndex("TeamMemberId");
 
                     b.HasIndex("SupabaseUserId", "AffiliateId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("\"SupabaseUserId\" <> ''");
 
                     b.ToTable("UserAffiliateMaps");
                 });
