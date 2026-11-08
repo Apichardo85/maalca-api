@@ -1187,7 +1187,9 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Email).IsRequired().HasMaxLength(256);
             entity.Property(e => e.Profile).HasMaxLength(24);
             entity.HasIndex(e => e.SupabaseUserId);
-            entity.HasIndex(e => new { e.SupabaseUserId, e.AffiliateId }).IsUnique();
+            // Único por persona y negocio, pero solo para cuentas ya enganchadas: las invitaciones pendientes llevan
+            // SupabaseUserId vacío y varias pueden convivir en el mismo negocio (antes solo cabía UNA).
+            entity.HasIndex(e => new { e.SupabaseUserId, e.AffiliateId }).IsUnique().HasFilter("\"SupabaseUserId\" <> ''");
             entity.HasOne(e => e.Affiliate)
                   .WithMany()
                   .HasForeignKey(e => e.AffiliateId)

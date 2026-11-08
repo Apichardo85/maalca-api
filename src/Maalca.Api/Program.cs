@@ -807,12 +807,27 @@ app.MapGet("/api/affiliates/{affiliateId:guid}/customers/{id:guid}", async (Http
     return Results.Ok(result);
 });
 
-app.MapPost("/api/affiliates/{affiliateId:guid}/customers", async (HttpContext ctx, ICustomerService customerService, Guid affiliateId, Customer customer) =>
+app.MapPost("/api/affiliates/{affiliateId:guid}/customers", async (HttpContext ctx, ICustomerService customerService, AppDbContext db, Guid affiliateId, Customer customer) =>
 {
     if (ctx.User.FindFirst("active_affiliate_id")?.Value != affiliateId.ToString())
         return Results.Forbid();
-    if (ctx.User.FindFirst("role")?.Value == "Staff")
+    // Empleado básico no crea clientes; la cajera sí (su perfil lo permite: lee y crea clientes).
+    if (IsStaff(ctx) && ctx.User.FindFirst("profile")?.Value != AccessProfiles.Cashier)
         return Results.Forbid();
+    if (string.IsNullOrWhiteSpace(customer.Name))
+        return Results.BadRequest(new { error = new { code = "INVALID_REQUEST", message = "El nombre es obligatorio." } });
+    // Negocios tipo tienda (reparto a domicilio): sin correo no hay acceso al portal y sin dirección no hay ruta.
+    var affiliateType = await db.Affiliates.Where(a => a.Id == affiliateId).Select(a => a.BusinessType).FirstOrDefaultAsync();
+    if (affiliateType == BusinessType.Retail)
+    {
+        if (string.IsNullOrWhiteSpace(customer.Email) || !customer.Email.Contains('@'))
+            return Results.BadRequest(new { error = new { code = "INVALID_REQUEST", message = "El correo es obligatorio." } });
+        if (string.IsNullOrWhiteSpace(customer.Address))
+            return Results.BadRequest(new { error = new { code = "INVALID_REQUEST", message = "La dirección es obligatoria." } });
+    }
+    // El portal enlaza la cuenta con la ficha por correo en minúsculas.
+    if (!string.IsNullOrWhiteSpace(customer.Email)) customer.Email = customer.Email.Trim().ToLowerInvariant();
+    if (!string.IsNullOrWhiteSpace(customer.Address)) customer.Address = customer.Address.Trim();
     var result = await customerService.CreateCustomerAsync(affiliateId, customer);
     return Results.Created($"/api/affiliates/{affiliateId}/customers/{result.Id}", result);
 });
