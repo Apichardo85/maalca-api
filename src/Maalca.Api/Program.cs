@@ -109,6 +109,7 @@ builder.Services.AddScoped<IContainerService, ContainerService>();
 builder.Services.AddScoped<IExpenseService, ExpenseService>();
 builder.Services.AddScoped<IWaterQualityService, WaterQualityService>();
 builder.Services.AddScoped<IRouteTrackingService, RouteTrackingService>();
+builder.Services.AddScoped<IOwnerBoardService, OwnerBoardService>();
 builder.Services.AddScoped<IReceivablesSettingsService, ReceivablesSettingsService>();
 builder.Services.AddScoped<IRouteService, RouteService>();
 builder.Services.AddScoped<IDeliveryBillingService, DeliveryBillingService>();
@@ -3049,6 +3050,10 @@ app.MapPost("/api/affiliates/{id:guid}/routes/{routeId:guid}/position", async (H
 // Rutas en curso con su última posición. Solo dueño/gerente (no Staff).
 app.MapGet("/api/affiliates/{id:guid}/routes/live", async (HttpContext ctx, IRouteTrackingService svc, Guid id) =>
     !IsActiveAffiliate(ctx, id) || IsStaff(ctx) ? Results.Forbid() : Results.Ok(await svc.GetLiveAsync(id)));
+
+// Tablero del dueño: cobros y entregas de hoy. Es financiero: solo dueño/gerente, nunca Staff.
+app.MapGet("/api/affiliates/{id:guid}/board/today", async (HttpContext ctx, IOwnerBoardService svc, Guid id) =>
+    !IsActiveAffiliate(ctx, id) || IsStaff(ctx) ? Results.Forbid() : Results.Ok(await svc.GetTodayAsync(id)));
 
 // Facturación de entregas por ciclo de cobro (clientes a crédito). Solo dueño/gerente (no Staff).
 // GET: qué hay por facturar. POST: dryRun=true (por defecto) simula; dryRun=false crea una factura por cliente.
