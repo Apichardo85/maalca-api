@@ -133,7 +133,7 @@ public class OrderService : IOrderService
             TaxRate = taxRate is not null && !taxExempt ? taxRate : null,
             Tip = priced.Tip,
             Total = priced.Subtotal + tax + priced.Tip + shippingCost,
-            Currency = string.IsNullOrWhiteSpace(request.Currency) ? "USD" : request.Currency.ToUpperInvariant(),
+            Currency = string.IsNullOrWhiteSpace(request.Currency) ? (string.IsNullOrWhiteSpace(affiliate.Currency) ? "USD" : affiliate.Currency.ToUpperInvariant()) : request.Currency.ToUpperInvariant(),
             Status = OrderStatus.Pending,
             TableNumber = tableNumber,
             CustomerId = customer?.Id,
@@ -447,7 +447,7 @@ public class OrderService : IOrderService
             Tax = request.Tax,
             Tip = request.Tip,
             Total = request.Total,
-            Currency = string.IsNullOrWhiteSpace(request.Currency) ? "USD" : request.Currency.ToUpperInvariant(),
+            Currency = string.IsNullOrWhiteSpace(request.Currency) ? (string.IsNullOrWhiteSpace(affiliate.Currency) ? "USD" : affiliate.Currency.ToUpperInvariant()) : request.Currency.ToUpperInvariant(),
             // A diferencia de CreateOrderAsync (Pending -> espera Stripe Checkout), el POS entra
             // directo Paid: el cobro presencial (efectivo/tarjeta externa) ya pasó en el
             // mostrador antes de tocar "Cobrar" aquí.
@@ -507,7 +507,7 @@ public class OrderService : IOrderService
             Tax = request.Tax,
             Tip = request.Tip,
             Total = request.Total,
-            Currency = string.IsNullOrWhiteSpace(request.Currency) ? "USD" : request.Currency.ToUpperInvariant(),
+            Currency = string.IsNullOrWhiteSpace(request.Currency) ? (string.IsNullOrWhiteSpace(affiliate.Currency) ? "USD" : affiliate.Currency.ToUpperInvariant()) : request.Currency.ToUpperInvariant(),
             Status = OrderStatus.Pending,
             Channel = "POS",
             PaymentMethod = "Card",
