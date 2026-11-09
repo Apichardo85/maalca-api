@@ -99,7 +99,8 @@ public class OnboardingService : IOnboardingService
             PlanStatus = PlanStatus.Active,
             Published = true,
             PrimaryColor = request.PrimaryColor?.Trim(),
-            LogoUrl = request.LogoUrl?.Trim()
+            LogoUrl = request.LogoUrl?.Trim(),
+            Currency = string.Equals(request.Country?.Trim(), "DO", StringComparison.OrdinalIgnoreCase) ? "DOP" : "USD"
         };
 
         // Modo "Solo pantallas": el negocio solo quiere sus TVs. La página pública arranca

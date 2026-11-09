@@ -437,6 +437,10 @@ public class OrderService : IOrderService
         if (affiliate is null) return null;
         if (request.Items.Count == 0) throw new ArgumentException("Order must have at least one item.");
 
+        // Venta a crédito: no es un cobro de mostrador, es una factura por cobrar (entra a Contratos y cobros).
+        if (string.Equals(request.PaymentMethod, "Credit", StringComparison.OrdinalIgnoreCase))
+            return await CreatePosCreditSaleAsync(affiliate, request);
+
         var order = new Order
         {
             AffiliateId = affiliateId,
@@ -466,6 +470,85 @@ public class OrderService : IOrderService
         // en el Kitchen Display, sin que la cocina tenga que saber de dónde vino.
         await _realtime.NotifyOrderUpdatedAsync(affiliateId, dto);
         return dto;
+    }
+
+    /// <summary>Venta a crédito desde el POS: crea una factura Pendiente (vence según los días de crédito del cliente) y
+    /// descuenta el inventario. No crea Order: así no se cuenta dos veces (Facturado y Mostrador) en ventas y utilidad.</summary>
+    private async Task<OrderDto?> CreatePosCreditSaleAsync(Affiliate affiliate, CreatePosOrderRequest request)
+    {
+        if (request.CustomerId is not { } customerId)
+            throw new ArgumentException("Elige el cliente al que le vendes a crédito.");
+        var customer = await _db.Customers.AsNoTracking()
+            .Where(c => c.Id == customerId && c.AffiliateId == affiliate.Id)
+            .Select(c => new { c.Id, c.Name, c.Phone, c.CreditDays }).FirstOrDefaultAsync();
+        if (customer is null) throw new ArgumentException("Cliente no encontrado.");
+        if (customer.CreditDays == 0)
+            throw new ArgumentException("Este cliente es de contado (0 días de crédito). Cóbrale en efectivo o transferencia.");
+        var creditDays = customer.CreditDays ?? 15;
+
+        var lines = request.Items
+            .Where(i => i.Qty > 0 && i.Price >= 0)
+            .Select(i => new InvoiceItem
+            {
+                Id = Guid.NewGuid(),
+                Description = i.Name.Trim(),
+                Quantity = i.Qty,
+                UnitPrice = i.Price,
+                Total = Math.Round(i.Qty * i.Price, 2, MidpointRounding.AwayFromZero),
+            }).ToList();
+        if (lines.Count == 0) throw new ArgumentException("La venta no tiene productos.");
+
+        var settings = await ReceivablesSettingsService.LoadAsync(_db, affiliate.Id);
+        var (subtotal, tax, total) = DeliveryInvoicing.ApplyTax(lines.Sum(l => l.Total), settings.TaxMode, settings.TaxRate);
+        var now = DateTime.UtcNow;
+        var invoice = new Invoice
+        {
+            Id = Guid.NewGuid(),
+            AffiliateId = affiliate.Id,
+            CustomerId = customer.Id,
+            InvoiceNumber = DeliveryInvoicing.NewInvoiceNumber(),
+            Subtotal = subtotal,
+            Tax = tax,
+            Total = total,
+            Status = "Pending",
+            IssueDate = now,
+            DueDate = now.AddDays(creditDays),
+            Notes = string.IsNullOrWhiteSpace(request.Notes) ? "Venta a crédito en mostrador" : $"Venta a crédito en mostrador. {request.Notes.Trim()}",
+            CreatedAt = now,
+            Items = lines,
+        };
+        _db.Invoices.Add(invoice);
+
+        // Baja el inventario con el mismo mecanismo que una venta normal (el Order no se guarda: solo lleva los items).
+        var stockOrder = new Order
+        {
+            Id = invoice.Id,
+            AffiliateId = affiliate.Id,
+            ItemsJson = JsonArrayField.Serialize(request.Items),
+        };
+        await DecrementStockAsync(stockOrder);
+        await _db.SaveChangesAsync();
+
+        // Mismo formato de respuesta que una venta normal, para el recibo del POS (Pending = aún sin cobrar).
+        var receipt = new Order
+        {
+            Id = invoice.Id,
+            AffiliateId = affiliate.Id,
+            CustomerId = customer.Id,
+            CustomerName = customer.Name,
+            CustomerPhone = customer.Phone,
+            ItemsJson = JsonArrayField.Serialize(request.Items),
+            Subtotal = subtotal,
+            Tax = tax,
+            Tip = 0,
+            Total = total,
+            Currency = string.IsNullOrWhiteSpace(affiliate.Currency) ? "USD" : affiliate.Currency.ToUpperInvariant(),
+            Status = OrderStatus.Pending,
+            Channel = "POS",
+            PaymentMethod = "Credit",
+            CreatedAt = now,
+        };
+        return ToDto(receipt);
     }
 
     /// <summary>Venta del POS a nombre de un cliente: queda en su ficha (CustomerId) con su contacto y, si el POS

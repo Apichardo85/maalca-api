@@ -12,7 +12,10 @@ public record OnboardingRequest(
     string? OperatorType = null,
     // true = modo "Solo pantallas" (ver Affiliate.ScreensOnly): sin catálogo demo, página
     // apagada, módulos board/catalog/page y sin setup al pagar.
-    bool? ScreensOnly = null
+    bool? ScreensOnly = null,
+    // País (ISO-2) desde donde se registra; solo decide la moneda inicial: DO → DOP, el resto → USD.
+    // NO se guarda en Affiliate.Country (ese campo lo usa Stripe Connect).
+    string? Country = null
 );
 
 public record OnboardingResponse(
