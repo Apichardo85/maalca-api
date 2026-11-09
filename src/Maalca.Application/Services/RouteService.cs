@@ -389,6 +389,8 @@ public class RouteService : IRouteService
             }
         }
 
+        await DecrementStockAsync(affiliateId, delivery, route.Name);
+
         stop.Status = "visited";
         stop.VisitedAt = at;
 
@@ -411,6 +413,46 @@ public class RouteService : IRouteService
 
         var balance = await _containers.GetBalanceAsync(affiliateId, stop.CustomerId);
         return new RegisterDeliveryResultDto(ToDto(delivery, payment?.Amount, invoice?.InvoiceNumber), false, balance);
+    }
+
+    /// <summary>
+    /// Descuenta del inventario lo que sale en una entrega de ruta. Antes solo los pedidos (online y POS)
+    /// movían stock vía OrderService.DecrementStockAsync: una fábrica que reparte en camión vendía casi
+    /// todo por acá y el inventario nunca bajaba. Se descuenta al ENTREGAR al cliente (la venta es la
+    /// entrega), no al cargar el camión, que es un traslado interno. Los envases retornables se siguen
+    /// llevando aparte en ContainerMovements: esto mueve el producto, no el botellón prestado.
+    /// Mismo criterio que Retail en OrderService: el catálogo ES el InventoryItem, misma fila y mismo Id.
+    /// </summary>
+    private async Task DecrementStockAsync(Guid affiliateId, Delivery delivery, string routeName)
+    {
+        var itemIds = delivery.Items
+            .Where(i => i.ItemId.HasValue && i.Quantity > 0)
+            .Select(i => i.ItemId!.Value)
+            .Distinct()
+            .ToList();
+        if (itemIds.Count == 0) return;
+
+        var inventoryItems = await _db.InventoryItems
+            .Where(inv => inv.AffiliateId == affiliateId && itemIds.Contains(inv.Id))
+            .ToListAsync();
+        if (inventoryItems.Count == 0) return;
+
+        foreach (var line in delivery.Items)
+        {
+            if (!line.ItemId.HasValue || line.Quantity <= 0) continue;
+            var inv = inventoryItems.FirstOrDefault(i => i.Id == line.ItemId.Value);
+            // TrackStock apagado = el dueño no lleva stock de ese item (agua a granel, por ejemplo).
+            if (inv is null || !inv.TrackStock) continue;
+
+            inv.Quantity = Math.Max(0, inv.Quantity - line.Quantity);
+            _db.InventoryMovements.Add(new InventoryMovement
+            {
+                InventoryItemId = inv.Id,
+                Type = "out",
+                Quantity = line.Quantity,
+                Notes = $"Entrega en ruta: {routeName}",
+            });
+        }
     }
 
     public async Task<RouteDto?> SkipStopAsync(Guid affiliateId, Guid routeId, Guid stopId, SkipStopRequest request, string? actorId, Guid? restrictDriverId = null)
@@ -509,6 +551,11 @@ public class RouteService : IRouteService
                 .ToListAsync())
             .GroupBy(c => c.CustomerId).ToDictionary(g => g.Key, g => g.OrderByDescending(c => c.StartDate).First());
 
+        // Lista de precios del cliente (Mayorista, Miembro…). Antes solo contaba el precio acordado del contrato y,
+        // si no había, el precio público: una lista asignada al cliente no llegaba nunca al camión, así que el dueño
+        // tenía que teclear el precio uno por uno en cada contrato. Precedencia: contrato > lista del cliente > público.
+        var priceListByCustomer = await ResolveCustomerPricesAsync(affiliateId, customers.Values);
+
         // Lo ya registrado en cada parada (entregas, envases y cobros), para la hoja impresa.
         var stopIds = route.Stops.Select(s => s.Id).ToList();
         var deliveries = await _db.Deliveries.AsNoTracking().Include(d => d.Items)
@@ -562,13 +609,86 @@ public class RouteService : IRouteService
                 billing.Balance, billing.CreditOnAccount, billing.OpenInvoices.Any(o => o.IsOverdue), billing.OpenInvoices,
                 contract?.ContractNumber, contract?.RacksLoaned ?? 0, contract?.BottlesLoaned ?? 0,
                 contract?.CreditDays ?? c?.CreditDays,
-                string.IsNullOrWhiteSpace(contract?.AgreedPrices) ? null : System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(contract!.AgreedPrices!),
+                MergeAgreedPrices(contract?.AgreedPrices,
+                    priceListByCustomer.TryGetValue(s.CustomerId, out var listPrices) ? listPrices : null),
                 resultByStop.TryGetValue(s.Id, out var result) ? result : null));
         }
 
         var types = await GetContainerTypesForSheetAsync(affiliateId);
         return new DriverSheetDto(route.Id, route.Name, route.RouteDate, route.Status, route.Vehicle?.Plate, route.LoadedFull,
             stops, types, DateTime.UtcNow);
+    }
+
+    /// <summary>
+    /// Precio de cada producto para los clientes de la hoja que tienen lista asignada (Customer.PriceListId).
+    /// Usa el mismo cálculo que la tienda (PriceListPricing): precio fijo de la lista > descuento general > público.
+    /// Sin ningún cliente con lista no toca la base.
+    /// </summary>
+    private async Task<Dictionary<Guid, Dictionary<Guid, decimal>>> ResolveCustomerPricesAsync(
+        Guid affiliateId, IEnumerable<Customer> customers)
+    {
+        var result = new Dictionary<Guid, Dictionary<Guid, decimal>>();
+        var withList = customers.Where(c => c.PriceListId.HasValue).ToList();
+        if (withList.Count == 0) return result;
+
+        var publicPrices = new Dictionary<Guid, decimal>();
+        foreach (var row in await _db.InventoryItems.AsNoTracking()
+                     .Where(i => i.AffiliateId == affiliateId)
+                     .Select(i => new { i.Id, Price = i.UnitPrice }).ToListAsync())
+            publicPrices[row.Id] = row.Price;
+        foreach (var row in await _db.Products.AsNoTracking()
+                     .Where(pr => pr.AffiliateId == affiliateId)
+                     .Select(pr => new { pr.Id, pr.Price }).ToListAsync())
+            publicPrices.TryAdd(row.Id, row.Price);
+        if (publicPrices.Count == 0) return result;
+
+        var contexts = new Dictionary<Guid, PriceListContext?>();
+        foreach (var listId in withList.Select(c => c.PriceListId!.Value).Distinct())
+            contexts[listId] = await PriceListPricing.LoadAsync(_db, affiliateId, listId);
+
+        foreach (var c in withList)
+        {
+            // Lista borrada o apagada: el cliente vuelve al precio público, no se inventa nada.
+            if (!contexts.TryGetValue(c.PriceListId!.Value, out var ctx) || ctx is null) continue;
+            result[c.Id] = publicPrices.ToDictionary(kv => kv.Key, kv => PriceListPricing.Resolve(kv.Key, kv.Value, ctx));
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Los precios que el camión debe cobrar a un cliente: la lista como base y encima lo pactado en su contrato,
+    /// que siempre manda. Devuelve el mismo formato que ya leía la app del conductor ([{itemId, price}]).
+    /// </summary>
+    private static System.Text.Json.JsonElement? MergeAgreedPrices(string? contractJson, Dictionary<Guid, decimal>? listPrices)
+    {
+        var merged = listPrices is null
+            ? new Dictionary<Guid, decimal>()
+            : new Dictionary<Guid, decimal>(listPrices);
+
+        if (!string.IsNullOrWhiteSpace(contractJson))
+        {
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(contractJson!);
+                if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    foreach (var entry in doc.RootElement.EnumerateArray())
+                    {
+                        if (!entry.TryGetProperty("itemId", out var idProp) || !entry.TryGetProperty("price", out var priceProp)) continue;
+                        if (!Guid.TryParse(idProp.GetString(), out var itemId)) continue;
+                        if (priceProp.ValueKind != System.Text.Json.JsonValueKind.Number) continue;
+                        merged[itemId] = priceProp.GetDecimal();
+                    }
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                // Contrato con JSON corrupto: se ignora el pactado y queda la lista. Nunca tumba la hoja de ruta.
+            }
+        }
+
+        if (merged.Count == 0) return null;
+        var payload = merged.Select(kv => new { itemId = kv.Key.ToString(), price = kv.Value }).ToList();
+        using var built = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(payload));
+        return built.RootElement.Clone();
     }
 
     private async Task<IReadOnlyList<ContainerTypeDto>> GetContainerTypesForSheetAsync(Guid affiliateId) =>

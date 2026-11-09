@@ -3749,6 +3749,24 @@ app.MapGet("/api/affiliates/{id:guid}/price-lists/{listId:guid}/preview", async 
     return result is null ? Results.NotFound() : Results.Ok(result);
 });
 
+// Clientes del negocio por lista de precios. listId vacío = todos, para el buscador al asignar.
+app.MapGet("/api/affiliates/{id:guid}/price-lists/customers", async (HttpContext ctx, IPriceListService svc, Guid id, Guid? listId, string? q, int? take) =>
+    !IsActiveAffiliate(ctx, id) ? Results.Forbid() : Results.Ok(await svc.GetCustomersAsync(id, listId, q, take ?? 200)));
+
+app.MapGet("/api/affiliates/{id:guid}/price-lists/customer-counts", async (HttpContext ctx, IPriceListService svc, Guid id) =>
+    !IsActiveAffiliate(ctx, id) ? Results.Forbid() : Results.Ok(await svc.GetCustomerCountsAsync(id)));
+
+app.MapPost("/api/affiliates/{id:guid}/price-lists/{listId:guid}/customers", async (HttpContext ctx, IPriceListService svc, Guid id, Guid listId, AssignPriceListCustomersRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var changed = await svc.AssignCustomersAsync(id, listId, request);
+        return changed is null ? Results.NotFound() : Results.Ok(new { changed });
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
+
 app.MapGet("/api/affiliates/{id:guid}/shipping-methods", async (HttpContext ctx, IShippingService svc, Guid id) =>
     !IsActiveAffiliate(ctx, id) ? Results.Forbid() : Results.Ok(await svc.GetMethodsAsync(id)));
 

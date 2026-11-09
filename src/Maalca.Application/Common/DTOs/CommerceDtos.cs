@@ -198,3 +198,12 @@ public record CustomerPriceListDto(string Name, decimal? MinOrderAmount, bool Ta
 /// <summary>Reporte de ventas por cliente en un rango de fechas.</summary>
 public record CustomerSalesRowDto(Guid CustomerId, string Name, string? Email, string? Phone, string? BusinessName,
     int Orders, decimal Spent, decimal AvgTicket, DateTime? LastOrderAt);
+
+/// <summary>Cliente del negocio en el panel de una lista de precios (dashboard → Listas de precio → Clientes).</summary>
+public record PriceListCustomerDto(Guid Id, string Name, string? Phone, string? Address, Guid? PriceListId, string? PriceListName);
+
+/// <summary>Cuántos clientes hay en cada lista. PriceListId null = clientes a precio público.</summary>
+public record PriceListCustomerCountDto(Guid? PriceListId, int Count);
+
+/// <summary>Asignar o quitar una lista a varios clientes de una vez. Assign=false deja a esos clientes en precio público.</summary>
+public record AssignPriceListCustomersRequest(IReadOnlyList<Guid> CustomerIds, bool Assign = true);

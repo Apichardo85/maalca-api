@@ -70,6 +70,64 @@ public class PriceListService : IPriceListService
             PriceListPricing.Resolve(i.Id, i.UnitPrice, context))).ToList();
     }
 
+    public async Task<IReadOnlyList<PriceListCustomerDto>> GetCustomersAsync(Guid affiliateId, Guid? listId, string? q, int take)
+    {
+        var names = await _db.PriceLists.AsNoTracking()
+            .Where(l => l.AffiliateId == affiliateId)
+            .ToDictionaryAsync(l => l.Id, l => l.Name);
+
+        var query = _db.Customers.AsNoTracking().Where(c => c.AffiliateId == affiliateId && c.Status == "Active");
+        if (listId.HasValue) query = query.Where(c => c.PriceListId == listId.Value);
+        var term = q?.Trim();
+        if (!string.IsNullOrEmpty(term))
+            query = query.Where(c => EF.Functions.ILike(c.Name, $"%{term}%")
+                || (c.Phone != null && EF.Functions.ILike(c.Phone, $"%{term}%")));
+
+        var rows = await query
+            .OrderBy(c => c.Name)
+            .Take(Math.Clamp(take, 1, 500))
+            .Select(c => new { c.Id, c.Name, c.Phone, c.Address, c.PriceListId })
+            .ToListAsync();
+
+        return rows.Select(c => new PriceListCustomerDto(
+            c.Id, c.Name, c.Phone, c.Address, c.PriceListId,
+            c.PriceListId is { } id && names.TryGetValue(id, out var n) ? n : null)).ToList();
+    }
+
+    public async Task<IReadOnlyList<PriceListCustomerCountDto>> GetCustomerCountsAsync(Guid affiliateId) =>
+        (await _db.Customers.AsNoTracking()
+            .Where(c => c.AffiliateId == affiliateId && c.Status == "Active")
+            .GroupBy(c => c.PriceListId)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToListAsync())
+        .Select(g => new PriceListCustomerCountDto(g.Key, g.Count)).ToList();
+
+    public async Task<int?> AssignCustomersAsync(Guid affiliateId, Guid listId, AssignPriceListCustomersRequest request)
+    {
+        if (!await _db.PriceLists.AnyAsync(l => l.Id == listId && l.AffiliateId == affiliateId)) return null;
+        var ids = (request.CustomerIds ?? Array.Empty<Guid>()).Distinct().ToList();
+        if (ids.Count == 0) return 0;
+        if (ids.Count > 1000) throw new ArgumentException("Son demasiados clientes de una vez (máximo 1000).");
+
+        // Quitar solo despega a los que están en ESTA lista: no se toca a quien pertenece a otra.
+        var customers = await _db.Customers
+            .Where(c => c.AffiliateId == affiliateId && ids.Contains(c.Id)
+                && (request.Assign || c.PriceListId == listId))
+            .ToListAsync();
+
+        var changed = 0;
+        foreach (var c in customers)
+        {
+            var target = request.Assign ? listId : (Guid?)null;
+            if (c.PriceListId == target) continue;
+            c.PriceListId = target;
+            c.UpdatedAt = DateTime.UtcNow;
+            changed++;
+        }
+        if (changed > 0) await _db.SaveChangesAsync();
+        return changed;
+    }
+
     private async Task ApplyAsync(Guid affiliateId, PriceList list, UpsertPriceListRequest r)
     {
         var name = r.Name?.Trim();
