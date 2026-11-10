@@ -103,6 +103,7 @@ builder.Services.AddScoped<ICustomerPortalService, CustomerPortalService>();
 builder.Services.AddScoped<IDonationService, DonationService>();
 builder.Services.AddScoped<IScreenAdService, ScreenAdService>();
 builder.Services.AddScoped<IPlatformAddOnService, PlatformAddOnService>();
+builder.Services.AddScoped<IQuoteService, QuoteService>();
 builder.Services.AddScoped<IPlatformContentService, PlatformContentService>();
 builder.Services.AddScoped<IProspectIntakeService, ProspectIntakeService>();
 builder.Services.AddScoped<IContractService, ContractService>();
@@ -4121,6 +4122,88 @@ app.MapPut("/api/ops/platform-addons/{key}", async (HttpContext ctx, IPlatformAd
     {
         return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } });
     }
+});
+
+// ============ PRECIOS POR MÓDULO Y NIVEL DE PAÍS (cotizador) ============
+// Todo en USD. Fórmula en QuoteService/PricingEngine; se edita en /ops/precios sin desplegar.
+static bool IsPlatformOwner(HttpContext ctx) =>
+    ctx.User.FindFirst("platform_admin")?.Value == "true"
+    && ctx.User.FindFirst("platform_role")?.Value == nameof(PlatformAdminRole.Owner);
+
+// Público: libro de precios de /servicios con el nivel del país (?country=DO). Cacheado.
+app.MapGet("/api/public/pricing", async (IQuoteService quotes, HttpResponse response, string? country) =>
+{
+    response.Headers.CacheControl = "public, max-age=60";
+    return Results.Ok(await quotes.GetPublicPriceBookAsync(country));
+})
+.AllowAnonymous();
+
+// Configuración de la fórmula: la ven Owner y Support, solo Owner la edita.
+app.MapGet("/api/ops/pricing", async (HttpContext ctx, IQuoteService quotes) =>
+{
+    if (ctx.User.FindFirst("platform_admin")?.Value != "true")
+        return Results.Forbid();
+    return Results.Ok(await quotes.GetConfigAsync());
+});
+
+app.MapPut("/api/ops/pricing/modules", async (HttpContext ctx, IQuoteService quotes, UpdateModuleWeightsRequest request) =>
+{
+    if (!IsPlatformOwner(ctx)) return Results.Forbid();
+    try { await quotes.UpdateModuleWeightsAsync(request, ctx.User.FindFirst("email")?.Value); return Results.Ok(await quotes.GetConfigAsync()); }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } }); }
+});
+
+app.MapPut("/api/ops/pricing/tiers", async (HttpContext ctx, IQuoteService quotes, UpdateTiersRequest request) =>
+{
+    if (!IsPlatformOwner(ctx)) return Results.Forbid();
+    try { await quotes.UpdateTiersAsync(request, ctx.User.FindFirst("email")?.Value); return Results.Ok(await quotes.GetConfigAsync()); }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } }); }
+});
+
+app.MapPut("/api/ops/pricing/countries", async (HttpContext ctx, IQuoteService quotes, UpdateCountriesRequest request) =>
+{
+    if (!IsPlatformOwner(ctx)) return Results.Forbid();
+    try { await quotes.UpdateCountriesAsync(request, ctx.User.FindFirst("email")?.Value); return Results.Ok(await quotes.GetConfigAsync()); }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } }); }
+});
+
+app.MapPut("/api/ops/pricing/settings", async (HttpContext ctx, IQuoteService quotes, PricingSettingsDto request) =>
+{
+    if (!IsPlatformOwner(ctx)) return Results.Forbid();
+    try { await quotes.UpdateSettingsAsync(request, ctx.User.FindFirst("email")?.Value); return Results.Ok(await quotes.GetConfigAsync()); }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } }); }
+});
+
+// Cotizador (solo Owner, como la pestaña de /ops).
+app.MapGet("/api/ops/affiliates/{affiliateId:guid}/quote", async (HttpContext ctx, IQuoteService quotes, Guid affiliateId) =>
+{
+    if (!IsPlatformOwner(ctx)) return Results.Forbid();
+    try { return Results.Ok(await quotes.ComputeForAffiliateAsync(affiliateId)); }
+    catch (KeyNotFoundException ex) { return Results.NotFound(new { error = new { code = "NOT_FOUND", message = ex.Message } }); }
+});
+
+app.MapPost("/api/ops/quote", async (HttpContext ctx, IQuoteService quotes, QuoteSelectionRequest request) =>
+{
+    if (!IsPlatformOwner(ctx)) return Results.Forbid();
+    return Results.Ok(await quotes.ComputeForSelectionAsync(request));
+});
+
+app.MapPatch("/api/ops/affiliates/{affiliateId:guid}/corporate", async (HttpContext ctx, IQuoteService quotes, Guid affiliateId, SetCorporateRequest request) =>
+{
+    if (!IsPlatformOwner(ctx)) return Results.Forbid();
+    return await quotes.SetCorporateAsync(affiliateId, request)
+        ? Results.Ok(new { isCorporate = request.IsCorporate, locations = Math.Clamp(request.Locations, 1, 50) })
+        : Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Ese negocio no existe." } });
+});
+
+// Precio del botón "Mejorar" del dashboard (por el país del negocio).
+app.MapGet("/api/affiliates/{id}/billing/upgrade-price", async (HttpContext ctx, IQuoteService quotes, Guid id) =>
+{
+    var activeAffiliate = ctx.User.FindFirst("active_affiliate_id")?.Value;
+    if (activeAffiliate != id.ToString())
+        return Results.Forbid();
+    try { return Results.Ok(await quotes.GetUpgradePriceAsync(id)); }
+    catch (KeyNotFoundException ex) { return Results.NotFound(new { error = new { code = "NOT_FOUND", message = ex.Message } }); }
 });
 
 // ============ SITE CONTENT (copy de maalca.com editable desde /ops/sitio) ============

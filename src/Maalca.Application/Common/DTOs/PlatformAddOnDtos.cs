@@ -27,7 +27,8 @@ public record PlatformAddOnAdminDto(
     int SortOrder,
     bool Active,
     DateTime? UpdatedAt,
-    string? UpdatedBy);
+    string? UpdatedBy,
+    bool ApplyTierDiscount = true);
 
 /// <summary>Crear o editar un extra desde /ops/precios. En la edición, Key se ignora (viene en la ruta).</summary>
 public record UpsertPlatformAddOnRequest(
@@ -41,7 +42,8 @@ public record UpsertPlatformAddOnRequest(
     int? VolumeFromQty,
     string Unit,
     int SortOrder,
-    bool Active);
+    bool Active,
+    bool ApplyTierDiscount = true);
 
 /// <summary>Activar/desactivar el modo "Solo pantallas" de un negocio desde /ops.</summary>
 public record SetScreensOnlyRequest(bool ScreensOnly);

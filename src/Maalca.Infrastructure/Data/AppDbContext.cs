@@ -51,6 +51,10 @@ public class AppDbContext : DbContext
     public DbSet<PlatformContent> PlatformContents => Set<PlatformContent>();
     public DbSet<ProspectIntake> ProspectIntakes => Set<ProspectIntake>();
     public DbSet<ModulePlanRule> ModulePlanRules => Set<ModulePlanRule>();
+    public DbSet<ModulePricing> ModulePricings => Set<ModulePricing>();
+    public DbSet<PriceTier> PriceTiers => Set<PriceTier>();
+    public DbSet<CountryTier> CountryTiers => Set<CountryTier>();
+    public DbSet<PricingSettings> PricingSettings => Set<PricingSettings>();
     public DbSet<TimeBlock> TimeBlocks => Set<TimeBlock>();
     public DbSet<Proposal> Proposals => Set<Proposal>();
     public DbSet<Activity> Activities => Set<Activity>();
@@ -107,6 +111,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.BillingInterval).HasMaxLength(8);
             entity.Property(e => e.StoreSignupMode).HasMaxLength(20);
             entity.Property(e => e.StoreLayout).HasMaxLength(20).HasDefaultValue("boutique");
+            entity.Property(e => e.Locations).HasDefaultValue(1);
             entity.Property(e => e.StoreSignupNote).HasMaxLength(500);
             entity.Property(e => e.SalesTaxRate).HasPrecision(6, 3);
             entity.Property(e => e.SalesTaxState).HasMaxLength(2);
@@ -262,6 +267,44 @@ public class AppDbContext : DbContext
             entity.Property(e => e.UpdatedBy).HasMaxLength(255);
         });
 
+        // Precios por módulo y por nivel de país — editables desde /ops/precios
+        modelBuilder.Entity<ModulePricing>(entity =>
+        {
+            entity.HasKey(e => e.Token);
+            entity.Property(e => e.Token).HasMaxLength(40);
+            entity.Property(e => e.Weight).HasPrecision(6, 2);
+            entity.Property(e => e.UpdatedBy).HasMaxLength(255);
+        });
+        modelBuilder.Entity<PriceTier>(entity =>
+        {
+            entity.HasKey(e => e.Tier);
+            entity.Property(e => e.Tier).ValueGeneratedNever();
+            entity.Property(e => e.Name).HasMaxLength(60).IsRequired();
+            entity.Property(e => e.Factor).HasPrecision(5, 3);
+            entity.Property(e => e.RoundTo).HasPrecision(6, 2);
+            entity.Property(e => e.UpdatedBy).HasMaxLength(255);
+        });
+        modelBuilder.Entity<CountryTier>(entity =>
+        {
+            entity.HasKey(e => e.Country);
+            entity.Property(e => e.Country).HasMaxLength(2);
+            entity.Property(e => e.UpdatedBy).HasMaxLength(255);
+        });
+        modelBuilder.Entity<PricingSettings>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).ValueGeneratedNever();
+            entity.Property(e => e.GrowthUsd).HasPrecision(10, 2);
+            entity.Property(e => e.ProfessionalUsd).HasPrecision(10, 2);
+            entity.Property(e => e.SoloMarkup).HasPrecision(5, 2);
+            entity.Property(e => e.CorporateMinUsd).HasPrecision(10, 2);
+            entity.Property(e => e.SetupBaseUsd).HasPrecision(10, 2);
+            entity.Property(e => e.SetupGrowthPerWeightUsd).HasPrecision(10, 2);
+            entity.Property(e => e.SetupProPerWeightUsd).HasPrecision(10, 2);
+            entity.Property(e => e.ExtraLocationFactor).HasPrecision(5, 2);
+            entity.Property(e => e.UpdatedBy).HasMaxLength(255);
+        });
+
         // PlatformAddOn — extras de MaalCa editables desde /ops/precios
         modelBuilder.Entity<PlatformAddOn>(entity =>
         {
@@ -274,6 +317,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.DescEn).HasMaxLength(600).IsRequired();
             entity.Property(e => e.Price).HasPrecision(10, 2);
             entity.Property(e => e.VolumePrice).HasPrecision(10, 2);
+            entity.Property(e => e.ApplyTierDiscount).HasDefaultValue(true);
             entity.Property(e => e.UpdatedBy).HasMaxLength(255);
         });
 

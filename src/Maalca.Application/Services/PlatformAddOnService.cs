@@ -35,7 +35,7 @@ public class PlatformAddOnService : IPlatformAddOnService
             return cached;
 
         var rows = await _db.PlatformAddOns.AsNoTracking()
-            .Where(a => a.Active)
+            .Where(a => a.Active && !a.Key.StartsWith("unit-") && !a.Key.StartsWith("corp-") && !a.Key.StartsWith("data-import"))
             .OrderBy(a => a.SortOrder).ThenBy(a => a.Key)
             .ToListAsync();
 
@@ -111,6 +111,7 @@ public class PlatformAddOnService : IPlatformAddOnService
         addOn.Unit = unit;
         addOn.SortOrder = r.SortOrder;
         addOn.Active = r.Active;
+        addOn.ApplyTierDiscount = r.ApplyTierDiscount;
         addOn.UpdatedBy = string.IsNullOrWhiteSpace(adminEmail) ? addOn.UpdatedBy : adminEmail.Trim();
     }
 
@@ -124,5 +125,5 @@ public class PlatformAddOnService : IPlatformAddOnService
 
     private static PlatformAddOnAdminDto ToAdminDto(PlatformAddOn a) => new(
         a.Id, a.Key, a.NameEs, a.NameEn, a.DescEs, a.DescEn, a.Price, a.VolumePrice, a.VolumeFromQty,
-        a.Unit.ToString(), a.SortOrder, a.Active, a.UpdatedAt, a.UpdatedBy);
+        a.Unit.ToString(), a.SortOrder, a.Active, a.UpdatedAt, a.UpdatedBy, a.ApplyTierDiscount);
 }

@@ -33,6 +33,9 @@ public class PlatformAddOn : BaseEntity
     public int SortOrder { get; set; }
     public bool Active { get; set; } = true;
 
+    /// <summary>false = el nivel de país no lo rebaja (hardware, ej. Kit de pantalla).</summary>
+    public bool ApplyTierDiscount { get; set; } = true;
+
     /// <summary>Email del admin de plataforma que lo editó por última vez.</summary>
     public string? UpdatedBy { get; set; }
 }

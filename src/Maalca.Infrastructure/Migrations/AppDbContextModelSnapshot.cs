@@ -213,6 +213,9 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsCorporate")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsFeatured")
                         .HasColumnType("boolean");
 
@@ -220,6 +223,11 @@ namespace Maalca.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(2)
                         .HasColumnType("character varying(2)");
+
+                    b.Property<int>("Locations")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
 
                     b.Property<string>("Logo")
                         .HasColumnType("text");
@@ -1377,6 +1385,27 @@ namespace Maalca.Infrastructure.Migrations
                     b.ToTable("ContractTemplates");
                 });
 
+            modelBuilder.Entity("Maalca.Domain.Entities.CountryTier", b =>
+                {
+                    b.Property<string>("Country")
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)");
+
+                    b.Property<int>("Tier")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.HasKey("Country");
+
+                    b.ToTable("CountryTiers");
+                });
+
             modelBuilder.Entity("Maalca.Domain.Entities.Customer", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2296,6 +2325,28 @@ namespace Maalca.Infrastructure.Migrations
                     b.ToTable("ModulePlanRules");
                 });
 
+            modelBuilder.Entity("Maalca.Domain.Entities.ModulePricing", b =>
+                {
+                    b.Property<string>("Token")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<decimal>("Weight")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)");
+
+                    b.HasKey("Token");
+
+                    b.ToTable("ModulePricings");
+                });
+
             modelBuilder.Entity("Maalca.Domain.Entities.Order", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2661,6 +2712,11 @@ namespace Maalca.Infrastructure.Migrations
                     b.Property<bool>("Active")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("ApplyTierDiscount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2875,6 +2931,91 @@ namespace Maalca.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("PriceListItems");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.PriceTier", b =>
+                {
+                    b.Property<int>("Tier")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Factor")
+                        .HasPrecision(5, 3)
+                        .HasColumnType("numeric(5,3)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<decimal>("RoundTo")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.HasKey("Tier");
+
+                    b.ToTable("PriceTiers");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.PricingSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("CorporateMinUsd")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<decimal>("ExtraLocationFactor")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("GrowthUsd")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<int>("IncludedClients")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("IncludedUsers")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("ProfessionalUsd")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<decimal>("SetupBaseUsd")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<decimal>("SetupGrowthPerWeightUsd")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<decimal>("SetupProPerWeightUsd")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<decimal>("SoloMarkup")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("PricingSettings");
                 });
 
             modelBuilder.Entity("Maalca.Domain.Entities.Product", b =>

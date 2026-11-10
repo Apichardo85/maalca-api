@@ -34,6 +34,15 @@ public class StripeBillingService : IStripeBillingService
     public const string ExtraScreenMonthly = "maalca_extra_screen_monthly";
     public const string ExtraScreenYearly = "maalca_extra_screen_yearly";
 
+    // Nivel 2 de precio (RD y Latinoamérica): mismos planes en USD con el factor del nivel aplicado.
+    // Si el precio _t2 no existe en Stripe, el checkout cae al precio normal (falla abierto).
+    public const string T2Suffix = "_t2";
+    public const string GrowthMonthlyT2 = GrowthMonthly + T2Suffix;
+    public const string GrowthYearlyT2 = GrowthYearly + T2Suffix;
+    public const string ProfessionalMonthlyT2 = ProfessionalMonthly + T2Suffix;
+    public const string ProfessionalYearlyT2 = ProfessionalYearly + T2Suffix;
+    public const string SetupFeeT2 = SetupFee + T2Suffix;
+
     public const string AlreadySubscribedMessage = "Este negocio ya tiene una suscripción activa. Cambia el plan desde \"Administrar suscripción\".";
     public const string NoSubscriptionMessage = "Primero activa un plan; las pantallas extra se agregan a esa suscripción.";
     public const int MaxExtraScreens = 20;
@@ -42,6 +51,7 @@ public class StripeBillingService : IStripeBillingService
     {
         GrowthMonthly, GrowthYearly, ProfessionalMonthly, ProfessionalYearly,
         SetupFee, ExtraScreenMonthly, ExtraScreenYearly,
+        GrowthMonthlyT2, GrowthYearlyT2, ProfessionalMonthlyT2, ProfessionalYearlyT2, SetupFeeT2,
     };
 
     // Cache de precios por proceso (10 min): el resumen del plan se pide en cada carga del
@@ -92,8 +102,8 @@ public class StripeBillingService : IStripeBillingService
 
     private static Plan? PlanFromLookupKey(string? key) => key switch
     {
-        GrowthMonthly or GrowthYearly => Plan.Entrepreneur,
-        ProfessionalMonthly or ProfessionalYearly => Plan.Enterprise,
+        GrowthMonthly or GrowthYearly or GrowthMonthlyT2 or GrowthYearlyT2 => Plan.Entrepreneur,
+        ProfessionalMonthly or ProfessionalYearly or ProfessionalMonthlyT2 or ProfessionalYearlyT2 => Plan.Enterprise,
         _ => null,
     };
 
@@ -149,6 +159,27 @@ public class StripeBillingService : IStripeBillingService
         }
     }
 
+    /// <summary>Nivel de precio del país del negocio (sin fila = 1).</summary>
+    private async Task<int> TierOfAsync(string? country)
+    {
+        if (string.IsNullOrWhiteSpace(country)) return 1;
+        var c = country.Trim().ToUpperInvariant();
+        var tier = await _db.CountryTiers.AsNoTracking().Where(x => x.Country == c).Select(x => x.Tier).FirstOrDefaultAsync();
+        return tier > 0 ? tier : 1;
+    }
+
+    /// <summary>Precio del nivel si existe en Stripe (clave + "_t2"); si no, el precio normal.</summary>
+    private static async Task<Price> RequireTierPriceAsync(string lookupKey, int tier)
+    {
+        if (tier > 1)
+        {
+            var prices = await GetPricesAsync();
+            if (prices.TryGetValue(lookupKey + T2Suffix, out var tiered)) return tiered;
+            Console.Error.WriteLine($"[billing] Falta el precio \"{lookupKey}{T2Suffix}\" en Stripe: se cobra el precio normal.");
+        }
+        return await RequirePriceAsync(lookupKey);
+    }
+
     private static async Task<Price> RequirePriceAsync(string lookupKey)
     {
         var prices = await GetPricesAsync();
@@ -178,17 +209,18 @@ public class StripeBillingService : IStripeBillingService
         var extras = Math.Clamp(request.ExtraScreens, 0, MaxExtraScreens);
         // Modo "Solo pantallas": no se cobra setup, el Kit de pantalla ya cubre ese trabajo.
         var chargeSetup = affiliate.SetupFeePaidAt is null && !affiliate.ScreensOnly;
+        var priceTier = await TierOfAsync(affiliate.Country);
 
         var lineItems = new List<SessionLineItemOptions>
         {
-            new() { Price = (await RequirePriceAsync(PlanKey(plan, interval))).Id, Quantity = 1 },
+            new() { Price = (await RequireTierPriceAsync(PlanKey(plan, interval), priceTier)).Id, Quantity = 1 },
         };
         if (extras > 0)
             lineItems.Add(new() { Price = (await RequirePriceAsync(ExtraScreenKey(interval))).Id, Quantity = extras });
         // Precio one_time dentro de un Checkout de suscripción: Stripe lo agrega solo a la
         // primera factura.
         if (chargeSetup)
-            lineItems.Add(new() { Price = (await RequirePriceAsync(SetupFee)).Id, Quantity = 1 });
+            lineItems.Add(new() { Price = (await RequireTierPriceAsync(SetupFee, priceTier)).Id, Quantity = 1 });
 
         var metadata = new Dictionary<string, string>
         {
@@ -304,9 +336,17 @@ public class StripeBillingService : IStripeBillingService
         IReadOnlyList<BillingPriceDto> prices;
         try
         {
-            prices = (await GetPricesAsync()).Values
-                .Select(ToPriceDto)
-                .OrderBy(p => p.LookupKey).ToList();
+            var all = await GetPricesAsync();
+            var byKey = all.Where(kv => !kv.Key.EndsWith(T2Suffix))
+                .ToDictionary(kv => kv.Key, kv => ToPriceDto(kv.Value));
+            // Un negocio de Nivel 2 ve (y paga) los precios _t2 bajo el nombre normal del plan.
+            if (await TierOfAsync(affiliate.Country) > 1)
+                foreach (var kv in all.Where(k => k.Key.EndsWith(T2Suffix)))
+                {
+                    var baseKey = kv.Key[..^T2Suffix.Length];
+                    byKey[baseKey] = ToPriceDto(kv.Value) with { LookupKey = baseKey };
+                }
+            prices = byKey.Values.OrderBy(p => p.LookupKey).ToList();
         }
         catch (StripeException)
         {

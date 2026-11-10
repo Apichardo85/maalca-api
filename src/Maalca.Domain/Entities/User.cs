@@ -176,6 +176,10 @@ public class Affiliate : BaseEntity
     // Stripe Connect) — un negocio en RD puede facturar en USD y viceversa, así que no se infiere.
     public string Currency { get; set; } = "USD";
 
+    // Cotizador de /ops: cliente corporativo (soporte + mínimo) y número de locales (el 1.º va en la base).
+    public bool IsCorporate { get; set; } = false;
+    public int Locations { get; set; } = 1;
+
     // Fase 9 Etapa A — cada cuántos slides de menú se inserta un comercial en el Menu Board
     // público. Null/0 = sin comerciales intercalados (comportamiento actual, sin cambios para
     // quien no configure esto). Simple a propósito — nada de listas de orden explícito todavía.
