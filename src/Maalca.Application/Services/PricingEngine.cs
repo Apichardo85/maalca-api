@@ -28,7 +28,8 @@ public record PricingInput(
 /// La fórmula de precios de MaalCa, en una sola función pura (fácil de probar):
 ///   mensualidad = min(módulos sueltos, paquete del plan) + locales + unidades + soporte, con mínimo corporativo,
 ///   y al final el nivel de país (factor + redondeo). Todo en USD.
-/// Ver docs/billing/cotizador-por-modulos.md.
+/// Piso: los módulos sueltos nunca cuestan menos que el plan Growth. Cortesías: se muestran con su valor y un renglón
+/// de descuento igual (neto 0), para que el cliente vea lo que se le regala. Ver docs/billing/cotizador-por-modulos.md.
 /// </summary>
 public static class PricingEngine
 {
@@ -92,12 +93,18 @@ public static class PricingEngine
 
         // 1) Módulos sueltos
         var paid = new List<PricingModuleInput>();
+        var gifts = new List<PricingModuleInput>();
         decimal solos = 0m;
         foreach (var m in i.Modules.Where(m => m.Tier != PlanTier.Starter).OrderBy(m => m.Tier).ThenBy(m => m.Token))
         {
             if (m.Courtesy)
             {
-                monthly.Add(new QuoteLineDto("modules", m.Token, m.Label, 1, 0m, 0m, true));
+                // Cortesía: se muestra el valor real del módulo y un descuento igual (neto 0). No cuenta para el paquete ni la implementación.
+                gifts.Add(m);
+                var gift = Solo(s, i.TierWeightSums, m.Tier, m.Weight);
+                monthly.Add(new QuoteLineDto("modules", m.Token, m.Label, 1, gift, gift, true));
+                if (gift > 0m)
+                    monthly.Add(new QuoteLineDto("courtesy", "courtesy-" + m.Token, $"Cortesía: {m.Label}", 1, -gift, -gift, true));
                 continue;
             }
             var solo = Solo(s, i.TierWeightSums, m.Tier, m.Weight);
@@ -120,6 +127,13 @@ public static class PricingEngine
                 savings = R2(solos - pkgPrice);
                 baseUsd = pkgPrice;
                 monthly.Add(new QuoteLineDto("package", "package", $"Ahorro por paquete {pkgName}", 1, -savings, -savings, false));
+            }
+            else if (baseUsd < s.GrowthUsd)
+            {
+                // Piso: unos pocos módulos sueltos no pueden costar menos que el plan más barato de pago.
+                var adj = R2(s.GrowthUsd - baseUsd);
+                monthly.Add(new QuoteLineDto("minimum", "plan-min", "Ajuste a mínimo del plan Growth", 1, adj, adj, false));
+                baseUsd = s.GrowthUsd;
             }
         }
 
@@ -184,6 +198,13 @@ public static class PricingEngine
             var v = SetupOf(s, m.Tier, m.Weight);
             modulesSetup += v;
             setup.Add(new QuoteLineDto("setup", m.Token, m.Label, 1, v, v, false));
+        }
+        foreach (var g in gifts)
+        {
+            var v = SetupOf(s, g.Tier, g.Weight);
+            if (v <= 0m) continue;
+            setup.Add(new QuoteLineDto("setup", g.Token, g.Label, 1, v, v, true));
+            setup.Add(new QuoteLineDto("courtesy", "courtesy-" + g.Token, $"Cortesía: {g.Label}", 1, -v, -v, true));
         }
         if (extraLocations > 0 && modulesSetup > 0m)
         {
