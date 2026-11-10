@@ -21,6 +21,8 @@ public class DeliveryRoute : AuditableEntity
     public DateTime? DepartedAt { get; set; }
     public DateTime? ClosedAt { get; set; }
     public string? Notes { get; set; }
+    /// <summary>Ruta fija de la que salió (null si se armó a mano). Única por (plantilla, fecha): evita duplicar el día.</summary>
+    public Guid? TemplateId { get; set; }
 
     public Affiliate? Affiliate { get; set; }
     public Vehicle? Vehicle { get; set; }

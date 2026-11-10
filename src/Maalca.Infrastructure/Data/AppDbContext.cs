@@ -84,6 +84,8 @@ public class AppDbContext : DbContext
     public DbSet<Vehicle> Vehicles => Set<Vehicle>();
     public DbSet<DeliveryRoute> DeliveryRoutes => Set<DeliveryRoute>();
     public DbSet<RouteStop> RouteStops => Set<RouteStop>();
+    public DbSet<RouteTemplate> RouteTemplates => Set<RouteTemplate>();
+    public DbSet<RouteTemplateStop> RouteTemplateStops => Set<RouteTemplateStop>();
     public DbSet<VehiclePosition> VehiclePositions => Set<VehiclePosition>();
     public DbSet<Delivery> Deliveries => Set<Delivery>();
     public DbSet<DeliveryItem> DeliveryItems => Set<DeliveryItem>();
@@ -1144,6 +1146,40 @@ public class AppDbContext : DbContext
                   .HasForeignKey(e => e.VehicleId)
                   .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(e => new { e.AffiliateId, e.RouteDate });
+            // Una sola ruta por plantilla y día (la generación automática es idempotente aunque dos peticiones coincidan).
+            entity.HasIndex(e => new { e.TemplateId, e.RouteDate })
+                  .IsUnique()
+                  .HasFilter("\"TemplateId\" IS NOT NULL");
+        });
+
+        // RouteTemplate -- ruta fija que genera una DeliveryRoute cada día marcado.
+        modelBuilder.Entity<RouteTemplate>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(100).IsRequired();
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Vehicle)
+                  .WithMany()
+                  .HasForeignKey(e => e.VehicleId)
+                  .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => e.AffiliateId);
+        });
+
+        modelBuilder.Entity<RouteTemplateStop>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasOne(e => e.Template)
+                  .WithMany(t => t.Stops)
+                  .HasForeignKey(e => e.TemplateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Customer)
+                  .WithMany()
+                  .HasForeignKey(e => e.CustomerId)
+                  .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => new { e.TemplateId, e.SortOrder });
         });
 
         // VehiclePosition -- última ubicación conocida de una ruta en curso (modo camión). Una fila por ruta, se sobrescribe.

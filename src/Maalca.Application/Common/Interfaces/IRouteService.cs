@@ -10,6 +10,11 @@ public interface IRouteService
     Task<VehicleDto> CreateVehicleAsync(Guid affiliateId, UpsertVehicleRequest request, string? actorId);
     Task<VehicleDto?> UpdateVehicleAsync(Guid affiliateId, Guid vehicleId, UpsertVehicleRequest request, string? actorId);
 
+    /// <summary>Rutas fijas. Las plantillas no se borran: se desactivan.</summary>
+    Task<IReadOnlyList<RouteTemplateDto>> GetTemplatesAsync(Guid affiliateId, bool includeInactive);
+    Task<RouteTemplateDto> CreateTemplateAsync(Guid affiliateId, UpsertRouteTemplateRequest request, string? actorId);
+    Task<RouteTemplateDto?> UpdateTemplateAsync(Guid affiliateId, Guid templateId, UpsertRouteTemplateRequest request, string? actorId);
+
     Task<IReadOnlyList<RouteDto>> GetRoutesAsync(Guid affiliateId, DateOnly? from, DateOnly? to, string? status, Guid? restrictDriverId = null);
     Task<RouteDto?> GetRouteAsync(Guid affiliateId, Guid routeId, Guid? restrictDriverId = null);
     Task<RouteDto> CreateRouteAsync(Guid affiliateId, UpsertRouteRequest request, string? actorId);

@@ -95,3 +95,17 @@ public record DriverSheetDto(
     IReadOnlyList<DriverStopDto> Stops,
     IReadOnlyList<ContainerTypeDto> ContainerTypes,
     DateTime GeneratedAt);
+
+public record RouteTemplateStopDto(Guid CustomerId, string CustomerName, string? CustomerAddress, int SortOrder);
+
+/// <summary>Days: 0 = domingo … 6 = sábado (igual que Date.getDay() en JS).</summary>
+public record RouteTemplateDto(
+    Guid Id, string Name, Guid? VehicleId, string? VehiclePlate, Guid? DriverId, string? DriverName,
+    IReadOnlyList<int> Days, bool IsActive, string? Notes, int StopsTotal,
+    IReadOnlyList<RouteTemplateStopDto> Stops);
+
+/// <summary>CustomerIds = paradas en orden; en una actualización reemplaza las paradas de la plantilla (no toca rutas ya creadas).</summary>
+public record UpsertRouteTemplateRequest(
+    string Name, Guid? VehicleId = null, Guid? DriverId = null,
+    IReadOnlyList<int>? Days = null, bool IsActive = true, string? Notes = null,
+    IReadOnlyList<Guid>? CustomerIds = null);

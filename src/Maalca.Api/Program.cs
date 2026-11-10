@@ -2901,6 +2901,35 @@ app.MapPut("/api/affiliates/{id:guid}/vehicles/{vehicleId:guid}", async (HttpCon
     catch (ArgumentException ex) { return InvalidInput(ex); }
 });
 
+// ── Rutas fijas: se crean solas cada día marcado (GetRoutes/GetMyRoutes las generan al listar). Solo administración. ──
+app.MapGet("/api/affiliates/{id:guid}/route-templates", async (HttpContext ctx, IRouteService svc, Guid id, bool includeInactive = false) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    return Results.Ok(await svc.GetTemplatesAsync(id, includeInactive));
+});
+
+app.MapPost("/api/affiliates/{id:guid}/route-templates", async (HttpContext ctx, IRouteService svc, Guid id, UpsertRouteTemplateRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await svc.CreateTemplateAsync(id, request, ctx.User.FindFirst("sub")?.Value);
+        return Results.Created($"/api/affiliates/{id}/route-templates/{result.Id}", result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
+
+app.MapPut("/api/affiliates/{id:guid}/route-templates/{templateId:guid}", async (HttpContext ctx, IRouteService svc, Guid id, Guid templateId, UpsertRouteTemplateRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await svc.UpdateTemplateAsync(id, templateId, request, ctx.User.FindFirst("sub")?.Value);
+        return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
+
 app.MapGet("/api/affiliates/{id:guid}/routes", async (HttpContext ctx, IRouteService svc, Guid id, DateOnly? from = null, DateOnly? to = null, string? status = null) =>
 {
     if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();

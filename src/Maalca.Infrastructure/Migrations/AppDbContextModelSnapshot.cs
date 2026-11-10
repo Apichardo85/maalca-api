@@ -1632,6 +1632,9 @@ namespace Maalca.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<Guid?>("TemplateId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1646,6 +1649,10 @@ namespace Maalca.Infrastructure.Migrations
                     b.HasIndex("VehicleId");
 
                     b.HasIndex("AffiliateId", "RouteDate");
+
+                    b.HasIndex("TemplateId", "RouteDate")
+                        .IsUnique()
+                        .HasFilter("\"TemplateId\" IS NOT NULL");
 
                     b.ToTable("DeliveryRoutes");
                 });
@@ -3658,6 +3665,89 @@ namespace Maalca.Infrastructure.Migrations
                     b.ToTable("RouteStops");
                 });
 
+            modelBuilder.Entity("Maalca.Domain.Entities.RouteTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AffiliateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<int>("DaysMask")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("DriverId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("VehicleId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AffiliateId");
+
+                    b.HasIndex("VehicleId");
+
+                    b.ToTable("RouteTemplates");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.RouteTemplateStop", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AffiliateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TemplateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("TemplateId", "SortOrder");
+
+                    b.ToTable("RouteTemplateStops");
+                });
+
             modelBuilder.Entity("Maalca.Domain.Entities.Screen", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5424,6 +5514,43 @@ namespace Maalca.Infrastructure.Migrations
                     b.Navigation("Route");
                 });
 
+            modelBuilder.Entity("Maalca.Domain.Entities.RouteTemplate", b =>
+                {
+                    b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
+                        .WithMany()
+                        .HasForeignKey("AffiliateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Maalca.Domain.Entities.Vehicle", "Vehicle")
+                        .WithMany()
+                        .HasForeignKey("VehicleId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Affiliate");
+
+                    b.Navigation("Vehicle");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.RouteTemplateStop", b =>
+                {
+                    b.HasOne("Maalca.Domain.Entities.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Maalca.Domain.Entities.RouteTemplate", "Template")
+                        .WithMany("Stops")
+                        .HasForeignKey("TemplateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Customer");
+
+                    b.Navigation("Template");
+                });
+
             modelBuilder.Entity("Maalca.Domain.Entities.Screen", b =>
                 {
                     b.HasOne("Maalca.Domain.Entities.Affiliate", "Affiliate")
@@ -5725,6 +5852,11 @@ namespace Maalca.Infrastructure.Migrations
             modelBuilder.Entity("Maalca.Domain.Entities.Recipe", b =>
                 {
                     b.Navigation("Ingredients");
+                });
+
+            modelBuilder.Entity("Maalca.Domain.Entities.RouteTemplate", b =>
+                {
+                    b.Navigation("Stops");
                 });
 
             modelBuilder.Entity("Maalca.Domain.Entities.Service", b =>

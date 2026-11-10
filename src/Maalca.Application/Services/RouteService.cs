@@ -55,10 +55,183 @@ public class RouteService : IRouteService
         return ToDto(vehicle, await DriverNamesAsync(affiliateId, new[] { vehicle.DriverId }));
     }
 
+    // ── Rutas fijas (plantillas) ─────────────────────────────────────────────
+
+    public async Task<IReadOnlyList<RouteTemplateDto>> GetTemplatesAsync(Guid affiliateId, bool includeInactive)
+    {
+        var q = _db.RouteTemplates.AsNoTracking().Include(t => t.Vehicle).Include(t => t.Stops)
+            .Where(t => t.AffiliateId == affiliateId);
+        if (!includeInactive) q = q.Where(t => t.IsActive);
+        var list = await q.OrderBy(t => t.Name).ToListAsync();
+        var names = await DriverNamesAsync(affiliateId, list.Select(t => t.DriverId));
+        var customerIds = list.SelectMany(t => t.Stops).Select(s => s.CustomerId).Distinct().ToList();
+        var customers = await _db.Customers.AsNoTracking()
+            .Where(c => c.AffiliateId == affiliateId && customerIds.Contains(c.Id)).ToDictionaryAsync(c => c.Id);
+        return list.Select(t => ToDto(t, names, customers)).ToList();
+    }
+
+    public async Task<RouteTemplateDto> CreateTemplateAsync(Guid affiliateId, UpsertRouteTemplateRequest request, string? actorId)
+    {
+        await ValidateTemplateAsync(affiliateId, request);
+        var template = new RouteTemplate { AffiliateId = affiliateId, CreatedBy = actorId };
+        ApplyTemplate(template, request);
+        await ReplaceTemplateStopsAsync(affiliateId, template, request.CustomerIds);
+        _db.RouteTemplates.Add(template);
+        await _db.SaveChangesAsync();
+        return (await LoadTemplateDtoAsync(affiliateId, template.Id))!;
+    }
+
+    public async Task<RouteTemplateDto?> UpdateTemplateAsync(Guid affiliateId, Guid templateId, UpsertRouteTemplateRequest request, string? actorId)
+    {
+        var template = await _db.RouteTemplates.Include(t => t.Stops)
+            .FirstOrDefaultAsync(t => t.Id == templateId && t.AffiliateId == affiliateId);
+        if (template is null) return null;
+        await ValidateTemplateAsync(affiliateId, request);
+        ApplyTemplate(template, request);
+        if (request.CustomerIds is not null) await ReplaceTemplateStopsAsync(affiliateId, template, request.CustomerIds);
+        template.UpdatedAt = DateTime.UtcNow;
+        template.UpdatedBy = actorId;
+        await _db.SaveChangesAsync();
+        return await LoadTemplateDtoAsync(affiliateId, templateId);
+    }
+
+    private async Task<RouteTemplateDto?> LoadTemplateDtoAsync(Guid affiliateId, Guid templateId)
+    {
+        var t = await _db.RouteTemplates.AsNoTracking().Include(x => x.Vehicle).Include(x => x.Stops)
+            .FirstOrDefaultAsync(x => x.Id == templateId && x.AffiliateId == affiliateId);
+        if (t is null) return null;
+        var names = await DriverNamesAsync(affiliateId, new[] { t.DriverId });
+        var ids = t.Stops.Select(s => s.CustomerId).ToList();
+        var customers = await _db.Customers.AsNoTracking()
+            .Where(c => c.AffiliateId == affiliateId && ids.Contains(c.Id)).ToDictionaryAsync(c => c.Id);
+        return ToDto(t, names, customers);
+    }
+
+    private async Task ValidateTemplateAsync(Guid affiliateId, UpsertRouteTemplateRequest r)
+    {
+        if (string.IsNullOrWhiteSpace(r.Name) || r.Name.Trim().Length > 100)
+            throw new ArgumentException("El nombre de la ruta es obligatorio (máx. 100 caracteres).");
+        if (r.Days is not null && r.Days.Any(d => d is < 0 or > 6))
+            throw new ArgumentException("Los días deben ir de 0 (domingo) a 6 (sábado).");
+        if (r.VehicleId.HasValue)
+        {
+            var ok = await _db.Vehicles.AnyAsync(v => v.Id == r.VehicleId.Value && v.AffiliateId == affiliateId && v.IsActive);
+            if (!ok) throw new ArgumentException("El vehículo no existe en este negocio o está inactivo.");
+        }
+        await EnsureDriverAsync(affiliateId, r.DriverId);
+    }
+
+    private static void ApplyTemplate(RouteTemplate t, UpsertRouteTemplateRequest r)
+    {
+        t.Name = r.Name.Trim();
+        t.VehicleId = r.VehicleId;
+        t.DriverId = r.DriverId;
+        t.DaysMask = (r.Days ?? Array.Empty<int>()).Distinct().Aggregate(0, (mask, d) => mask | (1 << d));
+        t.IsActive = r.IsActive;
+        t.Notes = string.IsNullOrWhiteSpace(r.Notes) ? null : r.Notes.Trim();
+    }
+
+    private async Task ReplaceTemplateStopsAsync(Guid affiliateId, RouteTemplate template, IReadOnlyList<Guid>? customerIds)
+    {
+        var wanted = (customerIds ?? Array.Empty<Guid>()).ToList();
+        if (wanted.Distinct().Count() != wanted.Count)
+            throw new ArgumentException("Un cliente no puede estar dos veces en la misma ruta.");
+        if (wanted.Count > 500) throw new ArgumentException("Una ruta no puede pasar de 500 paradas.");
+        var found = await _db.Customers.AsNoTracking()
+            .Where(c => c.AffiliateId == affiliateId && wanted.Contains(c.Id)).Select(c => c.Id).ToListAsync();
+        if (found.Count != wanted.Count) throw new ArgumentException("Algún cliente de la lista no existe en este negocio.");
+
+        foreach (var gone in template.Stops.Where(s => !wanted.Contains(s.CustomerId)).ToList())
+        {
+            template.Stops.Remove(gone);
+            if (_db.Entry(gone).State != EntityState.Detached && _db.Entry(gone).State != EntityState.Added)
+                _db.RouteTemplateStops.Remove(gone);
+        }
+        for (var i = 0; i < wanted.Count; i++)
+        {
+            var stop = template.Stops.FirstOrDefault(s => s.CustomerId == wanted[i]);
+            if (stop is null)
+            {
+                stop = new RouteTemplateStop { AffiliateId = affiliateId, CustomerId = wanted[i] };
+                template.Stops.Add(stop);
+            }
+            stop.SortOrder = i + 1;
+        }
+    }
+
+    /// <summary>
+    /// Crea las rutas del día que faltan a partir de las rutas fijas activas (solo de hoy en adelante, máx. 14 días).
+    /// Perezoso e idempotente: se llama al listar rutas. Una ruta cancelada ese día no se vuelve a crear (el índice único
+    /// por plantilla+fecha lo impide). Falla abierto: si algo sale mal no bloquea el listado.
+    /// </summary>
+    private async Task EnsureTemplateRoutesAsync(Guid affiliateId, DateOnly start, DateOnly end)
+    {
+        try
+        {
+            var today = DeliveryInvoicing.Today();
+            if (start < today) start = today;
+            if (end > today.AddDays(14)) end = today.AddDays(14);
+            if (start > end) return;
+
+            var templates = await _db.RouteTemplates.AsNoTracking().Include(t => t.Stops)
+                .Where(t => t.AffiliateId == affiliateId && t.IsActive && t.DaysMask != 0).ToListAsync();
+            templates = templates.Where(t => t.Stops.Count > 0).ToList();
+            if (templates.Count == 0) return;
+
+            var ids = templates.Select(t => t.Id).ToList();
+            var existing = await _db.DeliveryRoutes.AsNoTracking()
+                .Where(r => r.TemplateId != null && ids.Contains(r.TemplateId.Value) && r.RouteDate >= start && r.RouteDate <= end)
+                .Select(r => new { r.TemplateId, r.RouteDate }).ToListAsync();
+            var have = existing.Select(e => (e.TemplateId!.Value, e.RouteDate)).ToHashSet();
+
+            var vehicleIds = templates.Where(t => t.VehicleId.HasValue).Select(t => t.VehicleId!.Value).Distinct().ToList();
+            var vehicleDrivers = vehicleIds.Count == 0
+                ? new Dictionary<Guid, Guid?>()
+                : await _db.Vehicles.AsNoTracking().Where(v => vehicleIds.Contains(v.Id)).ToDictionaryAsync(v => v.Id, v => v.DriverId);
+
+            var added = false;
+            for (var day = start; day <= end; day = day.AddDays(1))
+            {
+                foreach (var t in templates)
+                {
+                    if ((t.DaysMask & (1 << (int)day.DayOfWeek)) == 0 || have.Contains((t.Id, day))) continue;
+                    var driverId = t.DriverId;
+                    if (!driverId.HasValue && t.VehicleId.HasValue) vehicleDrivers.TryGetValue(t.VehicleId.Value, out driverId);
+                    var route = new DeliveryRoute
+                    {
+                        AffiliateId = affiliateId, Name = t.Name, RouteDate = day, VehicleId = t.VehicleId,
+                        DriverId = driverId, Notes = t.Notes, TemplateId = t.Id, CreatedBy = "ruta-fija",
+                    };
+                    foreach (var s in t.Stops.OrderBy(s => s.SortOrder))
+                        route.Stops.Add(new RouteStop { AffiliateId = affiliateId, CustomerId = s.CustomerId, SortOrder = s.SortOrder });
+                    _db.DeliveryRoutes.Add(route);
+                    added = true;
+                }
+            }
+            if (!added) return;
+
+            try { await _db.SaveChangesAsync(); }
+            catch (DbUpdateException)
+            {
+                // Otra petición creó las mismas rutas al mismo tiempo (índice único): no pasa nada.
+                foreach (var entry in _db.ChangeTracker.Entries().Where(e => e.State == EntityState.Added).ToList())
+                    entry.State = EntityState.Detached;
+            }
+        }
+        catch (Exception)
+        {
+            // Crear rutas automáticas nunca debe impedir ver las que ya existen.
+        }
+    }
+
     // ── Rutas ────────────────────────────────────────────────────────────────
 
     public async Task<IReadOnlyList<RouteDto>> GetRoutesAsync(Guid affiliateId, DateOnly? from, DateOnly? to, string? status, Guid? restrictDriverId = null)
     {
+        // Rutas fijas: antes de listar, se crean las de hoy y mañana (o las del rango pedido) que falten.
+        var today = DeliveryInvoicing.Today();
+        await EnsureTemplateRoutesAsync(affiliateId, from ?? today, to ?? today.AddDays(1));
+
         var q = _db.DeliveryRoutes.AsNoTracking().Include(r => r.Vehicle).Include(r => r.Stops)
             .Where(r => r.AffiliateId == affiliateId);
         if (from.HasValue) q = q.Where(r => r.RouteDate >= from.Value);
@@ -491,6 +664,7 @@ public class RouteService : IRouteService
     public async Task<IReadOnlyList<RouteDto>> GetMyRoutesAsync(Guid affiliateId, Guid driverId, DateOnly? date)
     {
         var day = date ?? DeliveryInvoicing.Today();
+        await EnsureTemplateRoutesAsync(affiliateId, day, day);
         var list = await _db.DeliveryRoutes.AsNoTracking().Include(r => r.Vehicle).Include(r => r.Stops)
             .Where(r => r.AffiliateId == affiliateId && r.DriverId == driverId && r.RouteDate == day
                 && (r.Status == "planned" || r.Status == "loading" || r.Status == "in_progress"))
@@ -841,6 +1015,17 @@ public class RouteService : IRouteService
             r.Status, r.LoadedFull, r.DepartedAt, r.ClosedAt, r.Notes,
             r.Stops.Count, r.Stops.Count(s => s.Status != "pending"), stops);
     }
+
+    private static RouteTemplateDto ToDto(RouteTemplate t, Dictionary<Guid, string> driverNames, Dictionary<Guid, Customer> customers) =>
+        new(t.Id, t.Name, t.VehicleId, t.Vehicle?.Plate, t.DriverId,
+            t.DriverId.HasValue && driverNames.TryGetValue(t.DriverId.Value, out var dn) ? dn : null,
+            Enumerable.Range(0, 7).Where(i => (t.DaysMask & (1 << i)) != 0).ToList(),
+            t.IsActive, t.Notes, t.Stops.Count,
+            t.Stops.OrderBy(s => s.SortOrder).Select(s =>
+            {
+                customers.TryGetValue(s.CustomerId, out var c);
+                return new RouteTemplateStopDto(s.CustomerId, c?.Name ?? "—", c?.Address, s.SortOrder);
+            }).ToList());
 
     private static VehicleDto ToDto(Vehicle v, Dictionary<Guid, string> driverNames) =>
         new(v.Id, v.Plate, v.Name, v.CapacityContainers, v.DriverId,
