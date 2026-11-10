@@ -56,6 +56,8 @@ builder.Services.AddScoped<IProposalService, ProposalService>();
 builder.Services.AddScoped<IServiceService, ServiceService>();
 builder.Services.AddScoped<IActivityService, ActivityService>();
 builder.Services.AddScoped<ICommunityProgramService, CommunityProgramService>();
+builder.Services.AddScoped<IVehicleListingService, VehicleListingService>();
+builder.Services.AddScoped<IVehicleLeadService, VehicleLeadService>();
 builder.Services.AddScoped<ICausaService, CausaService>();
 builder.Services.AddScoped<IOwnerNotificationService, OwnerNotificationService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
@@ -1713,6 +1715,92 @@ app.MapDelete("/api/affiliates/{affiliateId:guid}/programs/{id:guid}", async (IC
     if (!result)
         return Results.NotFound();
     return Results.NoContent();
+}).RequireAuthorization();
+
+// ============ DEALER -- inventario de vehiculos (BusinessType.Dealer) ============
+// Config del dealer (moneda USD/DOP/ambas, unidad de millaje, mostrar reservados) vive en
+// Affiliate.Settings -> "dealer". Ver plans/spec-espacio-dealer.md.
+app.MapGet("/api/affiliates/{id:guid}/dealer-vehicles", async (HttpContext ctx, IVehicleListingService svc, Guid id) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    return Results.Ok(await svc.GetAsync(id));
+}).RequireAuthorization();
+
+app.MapPost("/api/affiliates/{id:guid}/dealer-vehicles", async (HttpContext ctx, IVehicleListingService svc, Guid id, UpsertVehicleListingRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await svc.CreateAsync(id, request);
+        return Results.Created($"/api/affiliates/{id}/dealer-vehicles/{result.Id}", result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+}).RequireAuthorization();
+
+app.MapPut("/api/affiliates/{id:guid}/dealer-vehicles/{vehicleId:guid}", async (HttpContext ctx, IVehicleListingService svc, Guid id, Guid vehicleId, UpsertVehicleListingRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await svc.UpdateAsync(id, vehicleId, request);
+        return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+}).RequireAuthorization();
+
+app.MapDelete("/api/affiliates/{id:guid}/dealer-vehicles/{vehicleId:guid}", async (HttpContext ctx, IVehicleListingService svc, Guid id, Guid vehicleId) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    return await svc.DeleteAsync(id, vehicleId) ? Results.NoContent() : Results.NotFound();
+}).RequireAuthorization();
+
+app.MapGet("/api/affiliates/{id:guid}/dealer-settings", async (HttpContext ctx, IVehicleListingService svc, Guid id) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    var result = await svc.GetSettingsAsync(id);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+}).RequireAuthorization();
+
+app.MapPut("/api/affiliates/{id:guid}/dealer-settings", async (HttpContext ctx, IVehicleListingService svc, Guid id, DealerSettingsDto request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await svc.UpdateSettingsAsync(id, request);
+        return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+}).RequireAuthorization();
+
+// Dealer -- interesados (financiamiento, vendo mi carro, prueba de manejo, consultas). Los crea la vitrina
+// publica (POST /api/public/affiliates/{slug}/dealer-leads); aqui el dueno los gestiona.
+app.MapGet("/api/affiliates/{id:guid}/dealer-leads", async (HttpContext ctx, IVehicleLeadService svc, Guid id, string? status = null) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    return Results.Ok(await svc.GetAsync(id, status));
+}).RequireAuthorization();
+
+app.MapGet("/api/affiliates/{id:guid}/dealer-leads/count-new", async (HttpContext ctx, IVehicleLeadService svc, Guid id) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    return Results.Ok(new { count = await svc.CountNewAsync(id) });
+}).RequireAuthorization();
+
+app.MapPut("/api/affiliates/{id:guid}/dealer-leads/{leadId:guid}", async (HttpContext ctx, IVehicleLeadService svc, Guid id, Guid leadId, UpdateVehicleLeadRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try
+    {
+        var result = await svc.UpdateAsync(id, leadId, request);
+        return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+}).RequireAuthorization();
+
+app.MapDelete("/api/affiliates/{id:guid}/dealer-leads/{leadId:guid}", async (HttpContext ctx, IVehicleLeadService svc, Guid id, Guid leadId) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    return await svc.DeleteAsync(id, leadId) ? Results.NoContent() : Results.NotFound();
 }).RequireAuthorization();
 
 // ============ CAUSAS (Community -- movido de columna JSON a tabla propia, backlog 2026-09-25) ============
@@ -5326,6 +5414,42 @@ app.MapGet("/api/public/affiliates/{slug}/programs", async (AppDbContext db, ICo
     var result = await programService.GetProgramsAsync(affiliate.Id, activeOnly: true);
     response.Headers.CacheControl = "public, max-age=60";
     return Results.Ok(result);
+})
+.AllowAnonymous();
+
+// Vitrina Dealer -- vehiculos publicos + config (moneda/millaje/reservados). Los vendidos y los ocultos
+// nunca salen; los reservados solo si el dueno lo permite (se filtra en el servicio, no en la web).
+app.MapGet("/api/public/affiliates/{slug}/dealer-vehicles", async (IVehicleListingService svc, string slug, HttpResponse response) =>
+{
+    var result = await svc.GetPublicAsync(slug);
+    if (result is null)
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
+    response.Headers.CacheControl = "public, max-age=60";
+    return Results.Ok(result);
+})
+.AllowAnonymous();
+
+// Vitrina Dealer -- el cliente final deja su interes (financiamiento / vendo mi carro / prueba de manejo / consulta).
+// El servicio valida contra la config del dueno y calcula la cuota; 429 = tope por hora del negocio.
+app.MapPost("/api/public/affiliates/{slug}/dealer-leads", async (
+    IVehicleLeadService svc, string slug, CreateVehicleLeadRequest request) =>
+{
+    try
+    {
+        return Results.Ok(await svc.CreatePublicAsync(slug, request));
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound(new { error = new { code = "NOT_FOUND", message = "Affiliate not found" } });
+    }
+    catch (ArgumentException ex)
+    {
+        return InvalidInput(ex);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.Json(new { error = new { code = "RATE_LIMITED", message = ex.Message } }, statusCode: StatusCodes.Status429TooManyRequests);
+    }
 })
 .AllowAnonymous();
 

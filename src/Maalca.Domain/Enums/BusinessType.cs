@@ -9,5 +9,6 @@ public enum BusinessType
     Creator      = 4,   // CiriWhispers y similares
     Publisher    = 5,   // Editorial MaalCa
     Professional = 6,   // Dr. Pichardo y similares
-    Community    = 7    // MaalCa Comunidad — comedores, bancos de alimentos, causas
+    Community    = 7,   // MaalCa Comunidad — comedores, bancos de alimentos, causas
+    Dealer       = 8    // Autoventas / concesionarios — inventario de vehículos (VehicleListing)
 }

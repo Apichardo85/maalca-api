@@ -118,7 +118,7 @@ public class OnboardingService : IOnboardingService
 
         if (!affiliate.ScreensOnly)
         {
-            SeedDemoCatalog(affiliate.Id, businessType);
+            SeedDemoCatalog(affiliate.Id, businessType, affiliate.Currency);
             await _db.SaveChangesAsync();
         }
 
@@ -135,7 +135,7 @@ public class OnboardingService : IOnboardingService
         return (affiliate, response);
     }
 
-    private void SeedDemoCatalog(Guid affiliateId, BusinessType businessType)
+    private void SeedDemoCatalog(Guid affiliateId, BusinessType businessType, string? currency = null)
     {
         switch (businessType)
         {
@@ -190,6 +190,54 @@ public class OnboardingService : IOnboardingService
                     ("Producto E",           "Descripción corta",                     "Categoría 2",  9.99m),
                 ]);
                 break;
+
+            case BusinessType.Dealer:
+                AddDemoVehicles(affiliateId, currency);
+                break;
+        }
+    }
+
+    // Dealer: 4 vehículos de ejemplo (IsDemo) para que la vitrina no nazca vacía. Precios pensados en USD;
+    // si el negocio es DOP se convierten con una tasa de referencia (el dueño los reemplaza al subir los suyos).
+    private void AddDemoVehicles(Guid affiliateId, string? currency)
+    {
+        var rate = string.Equals(currency, "DOP", StringComparison.OrdinalIgnoreCase) ? 60m : 1m;
+        var year = DateTime.UtcNow.Year;
+        (string Make, string Model, string Trim, int Year, decimal Price, int Mileage, string Body, string Fuel, string Drive, string Origin, bool Featured)[] items =
+        [
+            ("Toyota",  "RAV4",    "XLE",    year - 3, 22500m, 48000, "suv",     "gasoline", "awd", "usa",   true),
+            ("Honda",   "Civic",   "EX",     year - 4, 14900m, 62000, "sedan",   "gasoline", "fwd", "usa",   false),
+            ("Hyundai", "Tucson",  "SEL",    year - 2, 19800m, 31000, "crossover","gasoline","fwd", "korea", false),
+            ("Toyota",  "Hilux",   "SR5",    year - 5, 26500m, 90000, "pickup",  "diesel",   "4x4", "japan", false),
+        ];
+        for (var i = 0; i < items.Length; i++)
+        {
+            var it = items[i];
+            _db.VehicleListings.Add(new VehicleListing
+            {
+                Id = Guid.NewGuid(),
+                AffiliateId = affiliateId,
+                Make = it.Make,
+                Model = it.Model,
+                Trim = it.Trim,
+                Year = it.Year,
+                Condition = "used",
+                Price = Math.Round(it.Price * rate, 0),
+                Mileage = it.Mileage,
+                MileageUnit = "km",
+                Transmission = "automatic",
+                FuelType = it.Fuel,
+                BodyType = it.Body,
+                Drivetrain = it.Drive,
+                ImportOrigin = it.Origin,
+                Status = "available",
+                Featured = it.Featured,
+                IsPubliclyVisible = true,
+                SortOrder = i,
+                IsDemo = true,
+                Description = "Vehículo de ejemplo. Reemplázalo con tu inventario real desde el panel.",
+                CreatedAt = DateTime.UtcNow,
+            });
         }
     }
 

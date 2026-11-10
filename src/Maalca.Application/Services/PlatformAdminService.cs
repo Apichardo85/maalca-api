@@ -339,7 +339,7 @@ public class PlatformAdminService : IPlatformAdminService
     private static readonly HashSet<BusinessType> BusinessTypesWithTemplate = new()
     {
         BusinessType.Restaurant, BusinessType.Barber, BusinessType.Service, BusinessType.Retail,
-        BusinessType.Community,
+        BusinessType.Community, BusinessType.Dealer,
     };
 
     /// <summary>

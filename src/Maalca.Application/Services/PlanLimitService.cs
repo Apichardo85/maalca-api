@@ -55,6 +55,9 @@ public class PlanLimitService : IPlanLimitService
             BusinessType.Retail =>
                 await _db.InventoryItems.CountAsync(i => i.AffiliateId == affiliateId && !i.IsDemo),
 
+            BusinessType.Dealer =>
+                await _db.VehicleListings.CountAsync(v => v.AffiliateId == affiliateId && !v.IsDemo),
+
             _ => 0
         };
     }

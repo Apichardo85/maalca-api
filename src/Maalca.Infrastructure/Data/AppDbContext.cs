@@ -66,6 +66,8 @@ public class AppDbContext : DbContext
     public DbSet<OrderPushSubscription> OrderPushSubscriptions => Set<OrderPushSubscription>();
     public DbSet<Donation> Donations => Set<Donation>();
     public DbSet<CommunityProgram> CommunityPrograms => Set<CommunityProgram>();
+    public DbSet<VehicleListing> VehicleListings => Set<VehicleListing>();
+    public DbSet<VehicleLead> VehicleLeads => Set<VehicleLead>();
     public DbSet<PriceList> PriceLists => Set<PriceList>();
     public DbSet<PriceListItem> PriceListItems => Set<PriceListItem>();
     public DbSet<ShippingMethod> ShippingMethods => Set<ShippingMethod>();
@@ -583,6 +585,78 @@ public class AppDbContext : DbContext
                   .HasForeignKey(e => e.AffiliateId)
                   .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.AffiliateId, e.SortOrder });
+        });
+
+        // VehicleListing -- inventario de vehículos del tipo de negocio Dealer (autoventas). Tabla
+        // propia (no InventoryItem + JSON) porque el cliente filtra por varias columnas a la vez
+        // (carrocería, marca, año, precio). Ver VehicleListing.cs.
+        modelBuilder.Entity<VehicleListing>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Make).IsRequired().HasMaxLength(60);
+            entity.Property(e => e.Model).IsRequired().HasMaxLength(80);
+            entity.Property(e => e.Trim).HasMaxLength(80);
+            entity.Property(e => e.Condition).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.Price).HasPrecision(18, 2);
+            entity.Property(e => e.CompareAtPrice).HasPrecision(18, 2);
+            entity.Property(e => e.MileageUnit).IsRequired().HasMaxLength(2);
+            entity.Property(e => e.Transmission).HasMaxLength(20);
+            entity.Property(e => e.FuelType).HasMaxLength(20);
+            entity.Property(e => e.BodyType).HasMaxLength(20);
+            entity.Property(e => e.Drivetrain).HasMaxLength(10);
+            entity.Property(e => e.ExteriorColor).HasMaxLength(40);
+            entity.Property(e => e.InteriorColor).HasMaxLength(40);
+            entity.Property(e => e.Engine).HasMaxLength(60);
+            entity.Property(e => e.Vin).HasMaxLength(20);
+            entity.Property(e => e.StockNumber).HasMaxLength(40);
+            entity.Property(e => e.ImportOrigin).HasMaxLength(20);
+            entity.Property(e => e.Status).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.ImageUrl).HasMaxLength(500);
+            entity.Property(e => e.DescriptionEn).HasMaxLength(2000);
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            // Lista pública (visible + no vendido) y filtros del dashboard.
+            entity.HasIndex(e => new { e.AffiliateId, e.IsPubliclyVisible, e.Status });
+            entity.HasIndex(e => new { e.AffiliateId, e.Make, e.Model });
+            entity.HasIndex(e => new { e.AffiliateId, e.Year });
+            entity.HasIndex(e => new { e.AffiliateId, e.Price });
+            entity.HasIndex(e => new { e.AffiliateId, e.BodyType });
+        });
+
+        // VehicleLead -- interesados de la vitrina Dealer (financiamiento, trade-in, prueba de manejo, consulta).
+        // Borrar el vehículo no borra el lead: VehicleListingId pasa a null y VehicleSummary conserva el nombre.
+        modelBuilder.Entity<VehicleLead>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.VehicleSummary).HasMaxLength(200);
+            entity.Property(e => e.Kind).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Phone).HasMaxLength(30);
+            entity.Property(e => e.Email).HasMaxLength(200);
+            entity.Property(e => e.Message).HasMaxLength(1000);
+            entity.Property(e => e.Currency).HasMaxLength(3);
+            entity.Property(e => e.DownPayment).HasPrecision(18, 2);
+            entity.Property(e => e.MonthlyEstimate).HasPrecision(18, 2);
+            entity.Property(e => e.TradeMake).HasMaxLength(60);
+            entity.Property(e => e.TradeModel).HasMaxLength(80);
+            entity.Property(e => e.TradeMileageUnit).HasMaxLength(2);
+            entity.Property(e => e.TradeCondition).HasMaxLength(20);
+            entity.Property(e => e.Status).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.InternalNotes).HasMaxLength(2000);
+            entity.Property(e => e.Source).HasMaxLength(20);
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.VehicleListing)
+                  .WithMany()
+                  .HasForeignKey(e => e.VehicleListingId)
+                  .OnDelete(DeleteBehavior.SetNull);
+            // Bandeja del dueño: por estado y más recientes primero; y el anti-duplicado del alta pública.
+            entity.HasIndex(e => new { e.AffiliateId, e.Status, e.CreatedAt });
+            entity.HasIndex(e => new { e.AffiliateId, e.Kind, e.VehicleListingId });
         });
 
         // Appointment

@@ -30,7 +30,11 @@ public static class ModuleCatalog
     {
         new ModuleDefinition("catalog", "Catálogo", "Catalog",
             "Tus items y precios, siempre al día.", "Your items and prices, always up to date.",
-            null, null, PlanTier.Starter),
+            null, new[] { "dealer" }, PlanTier.Starter),
+        // Dealer: el inventario de vehículos reemplaza al catálogo (VehicleListing, ver plans/spec-espacio-dealer.md).
+        new ModuleDefinition("vehicles", "Vehículos", "Vehicles",
+            "Tu inventario de vehículos y los interesados en cada uno.", "Your vehicle inventory and the leads on each one.",
+            new[] { "dealer" }, null, PlanTier.Starter),
         new ModuleDefinition("page", "Página", "Page",
             "Tu página pública en maalca.com.", "Your public page on maalca.com.",
             null, null, PlanTier.Starter),
@@ -39,10 +43,10 @@ public static class ModuleCatalog
             null, null, PlanTier.Starter),
         new ModuleDefinition("board", "Pantalla", "Screen",
             "Menú, anuncios o contenido en las TVs de tu local.", "Menu, ads or content on the TVs in your place.",
-            null, null, PlanTier.Growth),
+            null, new[] { "dealer" }, PlanTier.Growth),
         new ModuleDefinition("orders", "Pedidos", "Orders",
             "Pedidos online: para recoger, en mesa o con tarjeta.", "Online orders: pickup, at the table or by card.",
-            null, null, PlanTier.Growth),
+            null, new[] { "dealer" }, PlanTier.Growth),
         new ModuleDefinition("kitchen", "Cocina", "Kitchen",
             "Kanban en tiempo real para preparar pedidos.", "Real-time kanban to prepare orders.",
             new[] { "restaurant" }, null, PlanTier.Growth),
@@ -69,7 +73,7 @@ public static class ModuleCatalog
             new[] { "restaurant" }, null, PlanTier.Growth),
         new ModuleDefinition("appointments", "Agenda", "Agenda",
             "Citas agendadas, asignadas a tu personal.", "Booked appointments, assigned to your staff.",
-            null, new[] { "retail", "creator", "publisher", "restaurant", "community" }, PlanTier.Growth),
+            null, new[] { "retail", "creator", "publisher", "restaurant", "community", "dealer" }, PlanTier.Growth),
         new ModuleDefinition("queue", "Fila de espera", "Waiting queue",
             "Walk-ins que esperan turno sin cita previa.", "Walk-ins waiting their turn without an appointment.",
             new[] { "barber" }, null, PlanTier.Growth),
@@ -100,7 +104,7 @@ public static class ModuleCatalog
         // Gastos y utilidad mensual (ventas − gastos). Mismo criterio que contracts: solo retail y Professional.
         new ModuleDefinition("expenses", "Gastos y utilidad", "Expenses & profit",
             "Gastos fijos y sueltos por categoría y utilidad mensual (ventas menos gastos).", "Fixed and one-off expenses by category and monthly profit (sales minus expenses).",
-            new[] { "retail" }, null, PlanTier.Professional),
+            new[] { "retail", "dealer" }, null, PlanTier.Professional),
         // Calidad del agua: análisis de laboratorio, historial, mantenimiento y página pública de transparencia.
         new ModuleDefinition("quality", "Calidad del agua", "Water quality",
             "Resultados de laboratorio, historial y bitácora de mantenimiento, con una página pública que da confianza a los clientes.", "Lab results, history and maintenance log, with a public page that builds customer trust.",
