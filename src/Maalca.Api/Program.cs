@@ -99,6 +99,7 @@ builder.Services.AddScoped<Maalca.Application.Common.Payments.IPaymentProviderRe
 builder.Services.AddScoped<IPriceListService, PriceListService>();
 builder.Services.AddScoped<IShippingService, ShippingService>();
 builder.Services.AddScoped<ICarrierService, CarrierService>();
+builder.Services.AddScoped<ICloverService, CloverService>();
 builder.Services.AddScoped<IStoreAccountNotificationService, StoreAccountNotificationService>();
 builder.Services.AddScoped<IStoreAccountService, StoreAccountService>();
 builder.Services.AddScoped<ICustomerPortalService, CustomerPortalService>();
@@ -3943,6 +3944,37 @@ app.MapPut("/api/affiliates/{id:guid}/carrier-account", async (HttpContext ctx, 
 {
     if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
     try { return Results.Ok(await svc.UpsertAccountAsync(id, request)); }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
+
+// Clover (solo lectura): conexión del negocio (Merchant ID + token cifrado) y resumen de ventas del local.
+// El token nunca se devuelve. Conectar/desconectar queda fuera del acceso de soporte.
+app.MapGet("/api/affiliates/{id:guid}/integrations/clover", async (HttpContext ctx, ICloverService svc, Guid id) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    return Results.Ok(await svc.GetConnectionAsync(id));
+});
+
+app.MapPut("/api/affiliates/{id:guid}/integrations/clover", async (HttpContext ctx, ICloverService svc, Guid id, ConnectCloverRequest request) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    try { return Results.Ok(await svc.ConnectAsync(id, request)); }
+    catch (ArgumentException ex) { return InvalidInput(ex); }
+});
+
+app.MapDelete("/api/affiliates/{id:guid}/integrations/clover", async (HttpContext ctx, ICloverService svc, Guid id) =>
+{
+    if (!IsActiveAffiliate(ctx, id) || IsStaff(ctx)) return Results.Forbid();
+    await svc.DisconnectAsync(id);
+    return Results.NoContent();
+});
+
+app.MapGet("/api/affiliates/{id:guid}/integrations/clover/sales", async (HttpContext ctx, ICloverService svc, Guid id, DateOnly? from, DateOnly? to) =>
+{
+    if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+    var end = to ?? DateOnly.FromDateTime(DateTime.UtcNow);
+    var start = from ?? end.AddDays(-6);
+    try { return Results.Ok(await svc.GetSalesReportAsync(id, start, end)); }
     catch (ArgumentException ex) { return InvalidInput(ex); }
 });
 

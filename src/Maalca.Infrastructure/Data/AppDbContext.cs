@@ -72,6 +72,7 @@ public class AppDbContext : DbContext
     public DbSet<PriceListItem> PriceListItems => Set<PriceListItem>();
     public DbSet<ShippingMethod> ShippingMethods => Set<ShippingMethod>();
     public DbSet<CarrierAccount> CarrierAccounts => Set<CarrierAccount>();
+    public DbSet<IntegrationConnection> IntegrationConnections => Set<IntegrationConnection>();
     public DbSet<StoreCustomer> StoreCustomers => Set<StoreCustomer>();
     public DbSet<Contract> Contracts => Set<Contract>();
     public DbSet<Expense> Expenses => Set<Expense>();
@@ -259,6 +260,19 @@ public class AppDbContext : DbContext
             entity.Property(e => e.WidthIn).HasPrecision(10, 2);
             entity.Property(e => e.HeightIn).HasPrecision(10, 2);
             entity.Property(e => e.BoxWeightOz).HasPrecision(10, 2);
+            entity.HasOne<Affiliate>().WithMany().HasForeignKey(e => e.AffiliateId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.AffiliateId, e.Provider }).IsUnique();
+        });
+
+        modelBuilder.Entity<IntegrationConnection>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Provider).HasMaxLength(30).IsRequired();
+            entity.Property(e => e.Kind).HasMaxLength(20).IsRequired();
+            entity.Property(e => e.CredentialsLast4).HasMaxLength(8);
+            entity.Property(e => e.ExternalId).HasMaxLength(80);
+            entity.Property(e => e.ExternalName).HasMaxLength(200);
+            entity.Property(e => e.Status).HasMaxLength(20).IsRequired();
             entity.HasOne<Affiliate>().WithMany().HasForeignKey(e => e.AffiliateId).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.AffiliateId, e.Provider }).IsUnique();
         });
