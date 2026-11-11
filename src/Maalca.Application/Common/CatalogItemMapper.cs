@@ -26,8 +26,9 @@ public static class CatalogItemMapper
     public static CatalogItemDto FromInventoryItem(InventoryItem i) => new(
         i.Id, i.Name, i.Description, i.UnitPrice, i.Category, i.ImageUrl, i.SortOrder, i.IsDemo,
         // Stock del catálogo sigue siendo entero (Retail vende unidades enteras); Quantity es
-        // decimal desde Comunidad Fase 1 — se trunca solo para esta vista.
-        null, (int)Math.Floor(i.Quantity), i.Status,
+        // decimal desde Comunidad Fase 1 — se trunca solo para esta vista. Se acota a [0, 1,000,000]:
+        // un Quantity absurdo (p. ej. importado de Clover) desbordaba el int y tumbaba TODO el catálogo con 500.
+        null, (int)Math.Clamp(Math.Floor(i.Quantity), 0m, 1_000_000m), i.Status,
         i.DescriptionEn, Images: JsonArrayField.Parse<string>(i.Images), NameEn: i.NameEn,
         Featured: i.Featured, Popular: i.Popular,
         CompareAtPrice: i.CompareAtPrice, TrackStock: i.TrackStock,
