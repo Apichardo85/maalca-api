@@ -156,7 +156,11 @@ public class StripeConnectService : IStripeConnectService
         // si el pago ya se completó de verdad — checkout.session.completed puede dispararse con
         // payment_status "unpaid" para métodos de pago asíncronos (ej. transferencias), que no
         // aplican aquí porque el Checkout solo se creó con tarjeta.
-        if (stripeEvent.Type == "checkout.session.completed" && stripeEvent.Data.Object is Session session
+        // async_payment_succeeded: los metodos con liquidacion diferida (ACH / debito bancario) cierran el
+        // Checkout con payment_status "unpaid" y avisan dias despues con este evento, ya con el dinero
+        // confirmado; sin el esos pedidos se quedarian en Pending para siempre.
+        if ((stripeEvent.Type == "checkout.session.completed" || stripeEvent.Type == "checkout.session.async_payment_succeeded")
+            && stripeEvent.Data.Object is Session session
             && session.PaymentStatus == "paid")
         {
             // Un mismo checkout.session.completed solo le pertenece a Order, Invoice O Donation,
