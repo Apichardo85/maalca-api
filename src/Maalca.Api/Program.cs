@@ -129,6 +129,10 @@ builder.Services.AddScoped<IPublicBookingService, PublicBookingService>();
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
 
+// Compresión de respuestas (gzip/brotli, viene en el framework — sin dependencias nuevas). El catálogo
+// público de una tienda con miles de productos es un JSON de varios MB; comprimido baja ~10x.
+builder.Services.AddResponseCompression(o => o.EnableForHttps = true);
+
 // Red de seguridad global contra ciclos de referencia en respuestas JSON. Bug real encontrado:
 // GET /api/affiliates/{id}/appointments hace .Include(a => a.Service), y EF Core's change
 // tracker auto-completa la navegación inversa Service.Appointments con ese mismo appointment
@@ -175,6 +179,8 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+app.UseResponseCompression();
 
 // Configure the HTTP request pipeline
 app.UseSwagger();
