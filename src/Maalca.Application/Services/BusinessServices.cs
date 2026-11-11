@@ -1122,6 +1122,9 @@ public class InventoryService : IInventoryService
                 // Mismo código interno que al crear a mano (CreateInventoryItemAsync): ningún item queda sin código.
                 newItem.InternalCode = $"INT-{newItem.Id.ToString()[..8].ToUpperInvariant()}";
                 if (isRetail) ApplyRetailCells(newItem, cols, rowNum);
+                // Un producto sin precio (en Clover suelen ser apuntes de caja, clientes o atajos) entra OCULTO:
+                // el dueño lo revisa y lo publica a mano. Nunca sale a la tienda pública con $0 por accidente.
+                if (newItem.UnitPrice <= 0) newItem.IsPubliclyVisible = false;
                 _context.InventoryItems.Add(newItem);
             }
             created++;
