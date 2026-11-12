@@ -20,8 +20,14 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // Database
+// PendingModelChangesWarning: desde EF Core 9, Database.Migrate() lanza excepción si el modelo
+// no coincide con AppDbContextModelSnapshot. Aquí varias migraciones están escritas a mano y no
+// actualizan el snapshot (p. ej. IntegrationConnections), así que sin esto el API no arranca.
+// Ignorarlo conserva el comportamiento que tenía con EF Core 8.
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
+        .ConfigureWarnings(w => w.Ignore(
+            Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
 // JWT Authentication
 var jwtKey = builder.Configuration["Jwt:Key"] ?? "MaalcaSecretKey12345678901234567890";
@@ -126,6 +132,8 @@ builder.Services.AddScoped<IScreenDeviceService, ScreenDeviceService>();
 builder.Services.AddHostedService<Maalca.Api.Workers.ScreenMonitorWorker>();
 builder.Services.AddScoped<IScreenWallService, ScreenWallService>();
 builder.Services.AddScoped<IPublicBookingService, PublicBookingService>();
+// Orquestador de agentes: servicios, conectores y worker de la cola (ver Endpoints/AgentEndpoints.cs).
+Maalca.Api.Endpoints.AgentEndpoints.AddAgentServices(builder.Services);
 
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
@@ -6136,6 +6144,9 @@ app.MapGet("/api/agents/stats", async (AppDbContext db) =>
 .WithName("GetAgentStats")
 .WithTags("Agents")
 .AllowAnonymous();
+
+// Orquestador de agentes — endpoints de /api/ops/agents (ver Endpoints/AgentEndpoints.cs).
+Maalca.Api.Endpoints.AgentEndpoints.MapAgentEndpoints(app);
 
 app.MapGet("/health", () =>
 {
