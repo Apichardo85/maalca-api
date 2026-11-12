@@ -44,7 +44,7 @@ public class CloverService : ICloverService
 
     public async Task<CloverConnectionDto> ConnectAsync(Guid affiliateId, ConnectCloverRequest r)
     {
-        var mid = (r.MerchantId ?? "").Trim();
+        var mid = (r.MerchantId ?? "").Trim().ToUpperInvariant();
         if (!MerchantIdRx.IsMatch(mid)) throw new ArgumentException("Merchant ID inválido. Está en la URL del dashboard de Clover (.../m/XXXXXXXXXXXXX/...).");
 
         var c = await _db.IntegrationConnections.FirstOrDefaultAsync(x => x.AffiliateId == affiliateId && x.Provider == Provider);
@@ -195,7 +195,12 @@ public class CloverService : ICloverService
         using (res)
         {
             if (res.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
-                throw new ArgumentException("Clover rechazó el token. Revisa que sea de este comercio y tenga lectura de Inventory, Merchant, Orders y Payments.");
+            {
+                // Sin el token ni nada sensible: solo el código y el mensaje corto que devuelve Clover, para poder diagnosticar.
+                var body = (await res.Content.ReadAsStringAsync()).Trim();
+                if (body.Length > 160) body = body[..160];
+                throw new ArgumentException($"Clover rechazó el token ({(int)res.StatusCode}: {body}). Revisa que sea de este comercio ({merchantId}) y tenga lectura de Inventory, Merchant, Orders y Payments.");
+            }
             if (res.StatusCode == HttpStatusCode.NotFound)
                 throw new ArgumentException("Clover no encontró ese Merchant ID.");
             if (!res.IsSuccessStatusCode)
