@@ -108,7 +108,7 @@ public class CloverService : ICloverService
         {
             for (var page = 0; page < MaxPages; page++)
             {
-                var q = $"orders?expand=lineItems,payments&limit={PageSize}&offset={page * PageSize}"
+                var q = $"orders?expand=lineItems,payments,payments.tender&limit={PageSize}&offset={page * PageSize}"
                       + $"&filter={Uri.EscapeDataString($"createdTime>={startMs}")}&filter={Uri.EscapeDataString($"createdTime<{endMs}")}";
                 using var doc = await GetAsync(c.ExternalId, token, q);
                 if (!doc.RootElement.TryGetProperty("elements", out var els) || els.ValueKind != JsonValueKind.Array) break;
