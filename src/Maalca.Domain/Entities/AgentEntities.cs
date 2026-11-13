@@ -142,3 +142,55 @@ public class AgentAffiliatePlan : AuditableEntity
     /// <summary>Tope duro de tokens (entrada + salida) por mes para los agentes de cliente. 0 = sin cupo.</summary>
     public long MonthlyTokenCap { get; set; }
 }
+
+// ---------- Fase 3: estudio de contenido ----------
+
+public static class ContentStatus
+{
+    /// <summary>Lo escribió el agente o el staff y espera revisión humana.</summary>
+    public const string Draft = "draft";
+    /// <summary>El staff pidió cambios; vuelve a edición con su nota.</summary>
+    public const string ChangesRequested = "changes_requested";
+    /// <summary>Aprobado por un humano: listo para la fase 4 (publicar).</summary>
+    public const string Approved = "approved";
+    public const string Rejected = "rejected";
+    /// <summary>Lo usa la fase 4 cuando alguien confirma que ya salió.</summary>
+    public const string Published = "published";
+
+    public static readonly string[] All = { Draft, ChangesRequested, Approved, Rejected, Published };
+}
+
+/// <summary>
+/// Una pieza de contenido para una red social de un negocio. La crea el agente planificador o el staff;
+/// nada sale a una red sin pasar por Approved, que solo un humano puede poner.
+/// </summary>
+public class ContentItem : AuditableEntity
+{
+    public Guid AffiliateId { get; set; }
+    /// <summary>Mes del plan, "yyyy-MM". Es contra lo que se cuenta la cuota.</summary>
+    public string PlanMonth { get; set; } = string.Empty;
+    public DateTime ScheduledFor { get; set; }
+    /// <summary>facebook, instagram, tiktok o youtube.</summary>
+    public string Network { get; set; } = string.Empty;
+    /// <summary>Fecha o temporada que motiva la pieza (p. ej. "Día de los Muertos").</summary>
+    public string? Occasion { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string Caption { get; set; } = string.Empty;
+    public string? Hashtags { get; set; }
+    /// <summary>"none", "image" o "video".</summary>
+    public string MediaKind { get; set; } = "none";
+    /// <summary>Qué imagen o video hace falta (instrucciones para quien lo produce).</summary>
+    public string? MediaBrief { get; set; }
+    public string? MediaUrl { get; set; }
+    public string Status { get; set; } = ContentStatus.Draft;
+    /// <summary>"agent" o "manual".</summary>
+    public string Source { get; set; } = "agent";
+    /// <summary>Veredicto del revisor automático: pass, warn o fail. Es una ayuda; decide el humano.</summary>
+    public string? ReviewVerdict { get; set; }
+    public string? ReviewNotes { get; set; }
+    public DateTime? ReviewedAt { get; set; }
+    /// <summary>Nota del staff al pedir cambios o rechazar.</summary>
+    public string? StaffNote { get; set; }
+    public string? DecidedBy { get; set; }
+    public DateTime? DecidedAt { get; set; }
+}

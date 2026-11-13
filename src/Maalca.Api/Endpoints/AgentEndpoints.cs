@@ -26,6 +26,11 @@ public static class AgentEndpoints
         services.AddScoped<IAgentTool, BusinessCatalogTool>();
         services.AddScoped<IKnowledgeSource, BrandKnowledgeSource>();
         services.AddScoped<IBrandService, BrandService>();
+        services.AddScoped<IAgentTool, ContentPlanStatusTool>();
+        services.AddScoped<IAgentTool, ContentSaveDraftsTool>();
+        services.AddScoped<IAgentTool, ContentListDraftsTool>();
+        services.AddScoped<IAgentTool, ContentRecordReviewsTool>();
+        services.AddScoped<IContentStudioService, ContentStudioService>();
 
         services.AddScoped<IAgentRunner, AgentRunner>();
         services.AddScoped<IAgentAdminService, AgentAdminService>();
@@ -103,6 +108,51 @@ public static class AgentEndpoints
             {
                 return Invalid(ex);
             }
+        });
+
+        // ---- Fase 3: estudio de contenido (bandeja del staff) ----
+        // Cualquier admin del staff puede generar, editar y decidir: es el trabajo diario de marketing.
+        app.MapGet("/api/ops/content", async (HttpContext ctx, IContentStudioService content, Guid? affiliateId, string? month, string? status, int? limit) =>
+        {
+            if (!IsAdmin(ctx)) return Results.Forbid();
+            return await Guard(() => content.ListAsync(affiliateId, month, status, limit ?? 100));
+        });
+
+        app.MapGet("/api/ops/content/quota", async (HttpContext ctx, IContentStudioService content, Guid affiliateId, string month) =>
+        {
+            if (!IsAdmin(ctx)) return Results.Forbid();
+            return await Guard(() => content.GetQuotaAsync(affiliateId, month));
+        });
+
+        app.MapPost("/api/ops/content", async (HttpContext ctx, IContentStudioService content, CreateContentItemRequest request) =>
+        {
+            if (!IsAdmin(ctx)) return Results.Forbid();
+            return await Guard(() => content.CreateAsync(request, Email(ctx)));
+        });
+
+        app.MapPut("/api/ops/content/{id:guid}", async (HttpContext ctx, IContentStudioService content, Guid id, UpdateContentItemRequest request) =>
+        {
+            if (!IsAdmin(ctx)) return Results.Forbid();
+            return await Guard(() => content.UpdateAsync(id, request, Email(ctx)));
+        });
+
+        app.MapPost("/api/ops/content/{id:guid}/decision", async (HttpContext ctx, IContentStudioService content, Guid id, ContentDecisionRequest request) =>
+        {
+            if (!IsAdmin(ctx)) return Results.Forbid();
+            return await Guard(() => content.DecideAsync(id, request, Email(ctx)));
+        });
+
+        // Encola el trabajo; el AgentJobWorker lo toma en segundos y los borradores aparecen en la bandeja.
+        app.MapPost("/api/ops/content/plan", async (HttpContext ctx, IContentStudioService content, RequestPlanRequest request) =>
+        {
+            if (!IsAdmin(ctx)) return Results.Forbid();
+            return await Guard(() => content.RequestPlanAsync(request, Email(ctx)));
+        });
+
+        app.MapPost("/api/ops/content/review", async (HttpContext ctx, IContentStudioService content, RequestReviewRequest request) =>
+        {
+            if (!IsAdmin(ctx)) return Results.Forbid();
+            return await Guard(() => content.RequestReviewAsync(request, Email(ctx)));
         });
 
         // ---- Fase 2: marca y plan por negocio ----

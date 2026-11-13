@@ -80,6 +80,7 @@ public class AppDbContext : DbContext
     public DbSet<AgentControl> AgentControls => Set<AgentControl>();
     public DbSet<BrandProfile> BrandProfiles => Set<BrandProfile>();
     public DbSet<AgentAffiliatePlan> AgentAffiliatePlans => Set<AgentAffiliatePlan>();
+    public DbSet<ContentItem> ContentItems => Set<ContentItem>();
     public DbSet<StoreCustomer> StoreCustomers => Set<StoreCustomer>();
     public DbSet<Contract> Contracts => Set<Contract>();
     public DbSet<Expense> Expenses => Set<Expense>();
@@ -352,6 +353,25 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Networks).HasMaxLength(200).IsRequired();
             entity.Property(e => e.UpdatedBy).HasMaxLength(255);
             entity.HasIndex(e => e.AffiliateId).IsUnique();
+        });
+
+        modelBuilder.Entity<ContentItem>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.PlanMonth).HasMaxLength(7).IsRequired();
+            entity.Property(e => e.Network).HasMaxLength(20).IsRequired();
+            entity.Property(e => e.Occasion).HasMaxLength(120);
+            entity.Property(e => e.Title).HasMaxLength(160).IsRequired();
+            entity.Property(e => e.Caption).IsRequired();
+            entity.Property(e => e.MediaKind).HasMaxLength(10).IsRequired();
+            entity.Property(e => e.MediaUrl).HasMaxLength(1000);
+            entity.Property(e => e.Status).HasMaxLength(24).IsRequired();
+            entity.Property(e => e.Source).HasMaxLength(10).IsRequired();
+            entity.Property(e => e.ReviewVerdict).HasMaxLength(10);
+            entity.Property(e => e.DecidedBy).HasMaxLength(255);
+            entity.Property(e => e.UpdatedBy).HasMaxLength(255);
+            entity.HasIndex(e => new { e.AffiliateId, e.PlanMonth });
+            entity.HasIndex(e => new { e.Status, e.ScheduledFor });
         });
 
         // ModulePlanRule — plan mínimo por módulo, editable desde /ops/modulos
