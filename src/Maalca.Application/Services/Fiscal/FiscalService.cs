@@ -78,6 +78,8 @@ public class FiscalService : IFiscalService
         if (rnc.Length is not (9 or 11)) throw new ArgumentException("El RNC debe tener 9 dígitos (o 11 si es cédula).");
         if (string.IsNullOrWhiteSpace(r.LegalName)) throw new ArgumentException("Falta la razón social tal como figura en la DGII.");
         if (string.IsNullOrWhiteSpace(r.Address)) throw new ArgumentException("Falta la dirección fiscal.");
+        if (r.Address.Trim().Length > 100) throw new ArgumentException("La dirección fiscal admite hasta 100 caracteres.");
+        if (r.Email is { Length: > 80 }) throw new ArgumentException("El correo admite hasta 80 caracteres.");
 
         var env = (r.Environment ?? profile.Environment).Trim().ToLowerInvariant();
         if (env is not ("sandbox" or "production")) throw new ArgumentException("El ambiente debe ser sandbox o production.");
@@ -315,6 +317,8 @@ public class FiscalService : IFiscalService
 
     public async Task<bool> HandleWebhookAsync(Guid affiliateId, string payload, string? apiKey)
     {
+        // Alanube prueba la URL al registrar la empresa con {"message":"Test message"}: se responde 200 sin tocar nada.
+        if (IsProviderTestMessage(payload)) return true;
         if (!SecretsEqual(apiKey, WebhookSecret(affiliateId))) return false;
 
         var evt = new FiscalWebhookEvent { AffiliateId = affiliateId, Payload = payload.Length > 20000 ? payload[..20000] : payload };
@@ -500,6 +504,18 @@ RETURNING ""NextNumber"" - 1;";
         if (method == "cash") return 1;
         if (method == "card" || !string.IsNullOrEmpty(order.StripePaymentIntentId)) return 3;
         return 8;
+    }
+
+    private static bool IsProviderTestMessage(string payload)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(payload);
+            return doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("message", out var m)
+                && m.ValueKind == JsonValueKind.String && m.GetString() == "Test message";
+        }
+        catch (JsonException) { return false; }
     }
 
     private string WebhookSecret(Guid affiliateId) =>
