@@ -73,6 +73,11 @@ public class AppDbContext : DbContext
     public DbSet<ShippingMethod> ShippingMethods => Set<ShippingMethod>();
     public DbSet<CarrierAccount> CarrierAccounts => Set<CarrierAccount>();
     public DbSet<IntegrationConnection> IntegrationConnections => Set<IntegrationConnection>();
+    public DbSet<AgentDefinition> AgentDefinitions => Set<AgentDefinition>();
+    public DbSet<AgentProvider> AgentProviders => Set<AgentProvider>();
+    public DbSet<AgentModel> AgentModels => Set<AgentModel>();
+    public DbSet<AgentJob> AgentJobs => Set<AgentJob>();
+    public DbSet<AgentControl> AgentControls => Set<AgentControl>();
     public DbSet<StoreCustomer> StoreCustomers => Set<StoreCustomer>();
     public DbSet<Contract> Contracts => Set<Contract>();
     public DbSet<Expense> Expenses => Set<Expense>();
@@ -275,6 +280,60 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Status).HasMaxLength(20).IsRequired();
             entity.HasOne<Affiliate>().WithMany().HasForeignKey(e => e.AffiliateId).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.AffiliateId, e.Provider }).IsUnique();
+        });
+
+        // Orquestador de agentes (fase 1) — tablas creadas por la migración AddAgentCore
+        modelBuilder.Entity<AgentDefinition>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Key).HasMaxLength(60).IsRequired();
+            entity.Property(e => e.Name).HasMaxLength(120).IsRequired();
+            entity.Property(e => e.ModelTier).HasMaxLength(60).IsRequired();
+            entity.Property(e => e.Visibility).HasMaxLength(20).IsRequired();
+            entity.HasIndex(e => e.Key).IsUnique();
+        });
+
+        modelBuilder.Entity<AgentProvider>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Key).HasMaxLength(60).IsRequired();
+            entity.Property(e => e.Kind).HasMaxLength(30).IsRequired();
+            entity.Property(e => e.BaseUrl).HasMaxLength(300).IsRequired();
+            entity.Property(e => e.ApiKeyLast4).HasMaxLength(8);
+            entity.HasIndex(e => e.Key).IsUnique();
+        });
+
+        modelBuilder.Entity<AgentModel>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Tier).HasMaxLength(60).IsRequired();
+            entity.Property(e => e.ProviderKey).HasMaxLength(60).IsRequired();
+            entity.Property(e => e.ModelId).HasMaxLength(120).IsRequired();
+            entity.Property(e => e.InputPricePerMTok).HasPrecision(12, 4);
+            entity.Property(e => e.OutputPricePerMTok).HasPrecision(12, 4);
+            entity.HasIndex(e => e.Tier).IsUnique();
+        });
+
+        modelBuilder.Entity<AgentJob>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.AgentKey).HasMaxLength(60).IsRequired();
+            entity.Property(e => e.Kind).HasMaxLength(20).IsRequired();
+            entity.Property(e => e.Status).HasMaxLength(20).IsRequired();
+            entity.Property(e => e.ErrorCode).HasMaxLength(40);
+            entity.Property(e => e.ModelId).HasMaxLength(120);
+            entity.Property(e => e.RequestedBy).HasMaxLength(255);
+            entity.Property(e => e.CostUsd).HasPrecision(14, 6);
+            entity.HasIndex(e => new { e.Status, e.RunAfter });
+            entity.HasIndex(e => e.CreatedAt);
+        });
+
+        modelBuilder.Entity<AgentControl>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Scope).HasMaxLength(60).IsRequired();
+            entity.Property(e => e.UpdatedBy).HasMaxLength(255);
+            entity.HasIndex(e => e.Scope).IsUnique();
         });
 
         // ModulePlanRule — plan mínimo por módulo, editable desde /ops/modulos
