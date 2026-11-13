@@ -71,6 +71,7 @@ public static class AccessProfiles
             ["receivables"] = Level.Full,
             ["receivables-settings"] = Level.Read,
             ["expenses"] = Level.Full,
+            ["fiscal"] = Level.Full,
             ["reports"] = Level.Read,
             ["customers-report"] = Level.Read,
             ["customers"] = Level.ReadCreate,

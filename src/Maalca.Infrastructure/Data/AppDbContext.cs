@@ -73,6 +73,12 @@ public class AppDbContext : DbContext
     public DbSet<ShippingMethod> ShippingMethods => Set<ShippingMethod>();
     public DbSet<CarrierAccount> CarrierAccounts => Set<CarrierAccount>();
     public DbSet<IntegrationConnection> IntegrationConnections => Set<IntegrationConnection>();
+    public DbSet<FiscalProfile> FiscalProfiles => Set<FiscalProfile>();
+    public DbSet<FiscalSequence> FiscalSequences => Set<FiscalSequence>();
+    public DbSet<ElectronicInvoice> ElectronicInvoices => Set<ElectronicInvoice>();
+    public DbSet<ElectronicInvoiceItem> ElectronicInvoiceItems => Set<ElectronicInvoiceItem>();
+    public DbSet<ElectronicInvoiceEvent> ElectronicInvoiceEvents => Set<ElectronicInvoiceEvent>();
+    public DbSet<FiscalWebhookEvent> FiscalWebhookEvents => Set<FiscalWebhookEvent>();
     public DbSet<AgentDefinition> AgentDefinitions => Set<AgentDefinition>();
     public DbSet<AgentProvider> AgentProviders => Set<AgentProvider>();
     public DbSet<AgentModel> AgentModels => Set<AgentModel>();
@@ -283,6 +289,84 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Status).HasMaxLength(20).IsRequired();
             entity.HasOne<Affiliate>().WithMany().HasForeignKey(e => e.AffiliateId).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.AffiliateId, e.Provider }).IsUnique();
+        });
+
+        // Facturación electrónica (e-CF) — tablas creadas por la migración AddFiscalCore (escrita a mano).
+        modelBuilder.Entity<FiscalProfile>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Rnc).HasMaxLength(11).IsRequired();
+            entity.Property(e => e.LegalName).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.TradeName).HasMaxLength(200);
+            entity.Property(e => e.Address).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Province).HasMaxLength(80);
+            entity.Property(e => e.Municipality).HasMaxLength(80);
+            entity.Property(e => e.Email).HasMaxLength(80);
+            entity.Property(e => e.Environment).HasMaxLength(12).IsRequired();
+            entity.Property(e => e.Status).HasMaxLength(20).IsRequired();
+            entity.Property(e => e.ProviderCompanyId).HasMaxLength(80);
+            entity.Property(e => e.CertificateIssuer).HasMaxLength(200);
+            entity.HasOne<Affiliate>().WithMany().HasForeignKey(e => e.AffiliateId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => e.AffiliateId).IsUnique();
+        });
+
+        modelBuilder.Entity<FiscalSequence>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasOne<Affiliate>().WithMany().HasForeignKey(e => e.AffiliateId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.AffiliateId, e.DocType });
+        });
+
+        modelBuilder.Entity<ElectronicInvoice>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Encf).HasMaxLength(13).IsRequired();
+            entity.Property(e => e.Status).HasMaxLength(20).IsRequired();
+            entity.Property(e => e.LegalStatus).HasMaxLength(40);
+            entity.Property(e => e.ProviderId).HasMaxLength(80);
+            entity.Property(e => e.BuyerRnc).HasMaxLength(11);
+            entity.Property(e => e.BuyerName).HasMaxLength(200);
+            entity.Property(e => e.Currency).HasMaxLength(3).IsRequired();
+            entity.Property(e => e.SecurityCode).HasMaxLength(40);
+            entity.Property(e => e.ErrorCode).HasMaxLength(40);
+            entity.Property(e => e.Subtotal).HasPrecision(18, 2);
+            entity.Property(e => e.Tax).HasPrecision(18, 2);
+            entity.Property(e => e.NonBillable).HasPrecision(18, 2);
+            entity.Property(e => e.Total).HasPrecision(18, 2);
+            entity.HasOne<Affiliate>().WithMany().HasForeignKey(e => e.AffiliateId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasMany(e => e.Items).WithOne().HasForeignKey(i => i.InvoiceId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.AffiliateId, e.Encf }).IsUnique();
+            entity.HasIndex(e => new { e.AffiliateId, e.CreatedAt });
+            entity.HasIndex(e => e.ProviderId);
+            // Una venta no se factura dos veces (mismo tipo), salvo que el comprobante anterior haya sido rechazado.
+            entity.HasIndex(e => new { e.AffiliateId, e.OrderId, e.DocType }).IsUnique()
+                  .HasFilter("\"OrderId\" IS NOT NULL AND \"Status\" <> 'rejected'");
+        });
+
+        modelBuilder.Entity<ElectronicInvoiceItem>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Quantity).HasPrecision(18, 4);
+            entity.Property(e => e.UnitPrice).HasPrecision(18, 4);
+            entity.Property(e => e.Amount).HasPrecision(18, 2);
+        });
+
+        modelBuilder.Entity<ElectronicInvoiceEvent>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Source).HasMaxLength(12).IsRequired();
+            entity.Property(e => e.Status).HasMaxLength(20).IsRequired();
+            entity.Property(e => e.LegalStatus).HasMaxLength(40);
+            entity.HasOne<ElectronicInvoice>().WithMany().HasForeignKey(e => e.InvoiceId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => e.InvoiceId);
+        });
+
+        modelBuilder.Entity<FiscalWebhookEvent>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasOne<Affiliate>().WithMany().HasForeignKey(e => e.AffiliateId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.AffiliateId, e.CreatedAt });
         });
 
         // Orquestador de agentes (fase 1) — tablas creadas por la migración AddAgentCore

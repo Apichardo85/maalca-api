@@ -86,6 +86,10 @@ public static class ModuleCatalog
         new ModuleDefinition("invoices", "Facturas", "Invoices",
             "Factura a tus clientes por el trabajo realizado.", "Invoice your customers for completed work.",
             null, new[] { "community" }, PlanTier.Professional),
+        // Facturación electrónica (e-CF, DGII). Opt-in: el negocio la prende y completa su configuración fiscal.
+        new ModuleDefinition("fiscal", "Factura electrónica", "E-invoicing",
+            "Comprobantes fiscales electrónicos (e-CF) de la DGII desde tus ventas.", "Electronic tax receipts (e-CF) for the Dominican DGII from your sales.",
+            new[] { "restaurant", "retail", "dealer" }, null, PlanTier.Professional),
         new ModuleDefinition("proposals", "Propuestas", "Proposals",
             "Envía cotizaciones y deja que el cliente firme y acepte en línea.", "Send quotes and let clients sign and accept online.",
             null, new[] { "community" }, PlanTier.Professional),
