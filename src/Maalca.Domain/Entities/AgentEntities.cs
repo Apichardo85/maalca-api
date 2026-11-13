@@ -96,3 +96,49 @@ public class AgentControl : BaseEntity
     public string? Reason { get; set; }
     public string? UpdatedBy { get; set; }
 }
+
+// ---------- Fase 2: marca y plan por negocio ----------
+
+/// <summary>
+/// Perfil de marca de un negocio: lo que un agente de marketing necesita saber para escribir "como ellos".
+/// Un registro por negocio. Se edita desde /ops/negocios/{id}/marca; el dueño lo verá cuando abramos el add-on.
+/// Los datos que cambian (precios, menú, horario) NO van aquí: el agente los lee de la base con herramientas.
+/// </summary>
+public class BrandProfile : AuditableEntity
+{
+    public Guid AffiliateId { get; set; }
+    /// <summary>Cómo habla la marca (tono, palabras que usa, nivel de formalidad).</summary>
+    public string? Voice { get; set; }
+    /// <summary>A quién le habla.</summary>
+    public string? Audience { get; set; }
+    /// <summary>Qué vende y qué lo hace distinto.</summary>
+    public string? Offer { get; set; }
+    /// <summary>Qué sí hacer en sus publicaciones.</summary>
+    public string? Dos { get; set; }
+    /// <summary>Qué nunca decir o mostrar.</summary>
+    public string? Donts { get; set; }
+    /// <summary>Fechas y temporadas que le importan al negocio (texto libre, una por línea).</summary>
+    public string? SpecialDates { get; set; }
+    public string? Hashtags { get; set; }
+    /// <summary>"es", "en" o "es,en".</summary>
+    public string Language { get; set; } = "es";
+    public string? Notes { get; set; }
+}
+
+/// <summary>
+/// Lo que un negocio tiene contratado en agentes: cuota de marketing y, si se activa el add-on,
+/// el asistente del dueño con su tope mensual de tokens. Sin fila = no tiene nada.
+/// El código hace cumplir estos números; no dependen de que el modelo "se acuerde".
+/// </summary>
+public class AgentAffiliatePlan : AuditableEntity
+{
+    public Guid AffiliateId { get; set; }
+    /// <summary>Publicaciones incluidas por mes (p. ej. 8).</summary>
+    public int PostsPerMonth { get; set; }
+    /// <summary>Redes incluidas, separadas por coma: facebook, instagram, tiktok, youtube.</summary>
+    public string Networks { get; set; } = string.Empty;
+    /// <summary>Add-on del asistente para el dueño.</summary>
+    public bool AssistantEnabled { get; set; }
+    /// <summary>Tope duro de tokens (entrada + salida) por mes para los agentes de cliente. 0 = sin cupo.</summary>
+    public long MonthlyTokenCap { get; set; }
+}

@@ -23,6 +23,9 @@ public static class AgentEndpoints
         // Contrato de herramienta
         services.AddScoped<IAgentTool, OpsOverviewTool>();
         services.AddScoped<IAgentTool, OpsAffiliatesTool>();
+        services.AddScoped<IAgentTool, BusinessCatalogTool>();
+        services.AddScoped<IKnowledgeSource, BrandKnowledgeSource>();
+        services.AddScoped<IBrandService, BrandService>();
 
         services.AddScoped<IAgentRunner, AgentRunner>();
         services.AddScoped<IAgentAdminService, AgentAdminService>();
@@ -102,6 +105,33 @@ public static class AgentEndpoints
             }
         });
 
+        // ---- Fase 2: marca y plan por negocio ----
+        // La marca la edita cualquier admin (el equipo de marketing no es Owner); el plan y el tope de tokens son dinero: solo Owner.
+        app.MapGet("/api/ops/agents/affiliates/{affiliateId:guid}/brand", async (HttpContext ctx, IBrandService brand, Guid affiliateId) =>
+        {
+            if (!IsAdmin(ctx)) return Results.Forbid();
+            return await Guard(() => brand.GetBrandAsync(affiliateId));
+        });
+
+        app.MapPut("/api/ops/agents/affiliates/{affiliateId:guid}/brand", async (HttpContext ctx, IBrandService brand, Guid affiliateId, UpsertBrandProfileRequest request) =>
+        {
+            if (!IsAdmin(ctx)) return Results.Forbid();
+            return await Guard(() => brand.UpsertBrandAsync(affiliateId, request, Email(ctx)));
+        });
+
+        app.MapGet("/api/ops/agents/affiliates/{affiliateId:guid}/plan", async (HttpContext ctx, IBrandService brand, Guid affiliateId) =>
+        {
+            if (!IsAdmin(ctx)) return Results.Forbid();
+            return await Guard(() => brand.GetPlanAsync(affiliateId));
+        });
+
+        app.MapPut("/api/ops/agents/affiliates/{affiliateId:guid}/plan", async (HttpContext ctx, IBrandService brand, Guid affiliateId, UpsertAgentAffiliatePlanRequest request) =>
+        {
+            if (!IsAdmin(ctx)) return Results.Forbid();
+            if (!IsOwner(ctx)) return OwnerOnly();
+            return await Guard(() => brand.UpsertPlanAsync(affiliateId, request, Email(ctx)));
+        });
+
         // Chat con un agente interno. Reemplaza a la llamada directa a Anthropic que hacía
         // maalca-web en /api/ops/assistant: misma entrada ({ messages }) y misma salida ({ reply }).
         app.MapPost("/api/ops/agents/{key}/chat", async (HttpContext ctx, IAgentRunner runner, string key, AgentChatRequest request) =>
@@ -122,6 +152,8 @@ public static class AgentEndpoints
             {
                 "AGENT_NOT_FOUND" => 404,
                 "PAUSED" => 409,
+                "NOT_ENABLED" => 403,
+                "QUOTA_EXCEEDED" => 429,
                 "INVALID_INPUT" => 400,
                 "NOT_CONFIGURED" or "MODEL_NOT_CONFIGURED" => 503,
                 _ => 502,
@@ -132,6 +164,22 @@ public static class AgentEndpoints
                 : job.Error ?? "El asistente no pudo responder.";
             return Results.Json(new { error = new { code = job.ErrorCode ?? "ERROR", message }, jobId = job.Id }, statusCode: statusCode);
         });
+    }
+
+    private static async Task<IResult> Guard<T>(Func<Task<T>> action)
+    {
+        try
+        {
+            return Results.Ok(await action());
+        }
+        catch (ArgumentException ex)
+        {
+            return Invalid(ex);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return Results.NotFound(new { error = new { code = "NOT_FOUND", message = ex.Message } });
+        }
     }
 
     private static bool IsAdmin(HttpContext ctx) => ctx.User.FindFirst("platform_admin")?.Value == "true";

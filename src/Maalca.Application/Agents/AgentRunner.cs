@@ -51,16 +51,18 @@ public class AgentRunner : IAgentRunner
     private readonly AppDbContext _db;
     private readonly IEnumerable<IAgentModelClient> _clients;
     private readonly IEnumerable<IAgentTool> _tools;
+    private readonly IEnumerable<IKnowledgeSource> _knowledge;
     private readonly IConfiguration _config;
     private readonly ILogger<AgentRunner> _logger;
     private readonly string _secret;
 
     public AgentRunner(AppDbContext db, IEnumerable<IAgentModelClient> clients, IEnumerable<IAgentTool> tools,
-        IConfiguration config, ILogger<AgentRunner> logger)
+        IEnumerable<IKnowledgeSource> knowledge, IConfiguration config, ILogger<AgentRunner> logger)
     {
         _db = db;
         _clients = clients;
         _tools = tools;
+        _knowledge = knowledge;
         _config = config;
         _logger = logger;
         _secret = config["Jwt:Key"] ?? "MaalcaSecretKey12345678901234567890";
@@ -140,6 +142,33 @@ public class AgentRunner : IAgentRunner
                 return;
             }
 
+            // Agentes de cliente (asistente del dueño): solo con el add-on activo y dentro del tope mensual de tokens.
+            if (def.Visibility == "client")
+            {
+                if (job.AffiliateId is not Guid clientAffiliate)
+                {
+                    Fail(job, "INVALID_INPUT", "Este agente necesita un negocio.");
+                    return;
+                }
+                var plan = await _db.AgentAffiliatePlans.AsNoTracking().FirstOrDefaultAsync(p => p.AffiliateId == clientAffiliate, ct);
+                if (plan is null || !plan.AssistantEnabled)
+                {
+                    job.Status = AgentJobStatus.Blocked;
+                    job.ErrorCode = "NOT_ENABLED";
+                    job.Error = "El asistente no está activo para este negocio.";
+                    return;
+                }
+                var monthStart = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+                var used = await AgentQuota.TokensUsedSinceAsync(_db, clientAffiliate, monthStart);
+                if (used >= plan.MonthlyTokenCap)
+                {
+                    job.Status = AgentJobStatus.Blocked;
+                    job.ErrorCode = "QUOTA_EXCEEDED";
+                    job.Error = "Este negocio llegó al tope mensual de uso del asistente.";
+                    return;
+                }
+            }
+
             model = await _db.AgentModels.AsNoTracking().FirstOrDefaultAsync(m => m.Tier == def.ModelTier && m.IsActive, ct);
             if (model is null)
             {
@@ -185,11 +214,33 @@ public class AgentRunner : IAgentRunner
                 return;
             }
 
+            // Conocimiento del negocio (perfil de marca, etc.) se suma al prompt solo si el trabajo trae un negocio.
+            var systemPrompt = def.SystemPrompt;
+            if (job.AffiliateId is Guid knowledgeAffiliate)
+            {
+                var lastUserText = messages.LastOrDefault(m => m.Role == "user")?.Text ?? string.Empty;
+                var blocks = new List<string>();
+                foreach (var source in _knowledge)
+                {
+                    try
+                    {
+                        var block = await source.GetContextAsync(knowledgeAffiliate, lastUserText, ct);
+                        if (!string.IsNullOrWhiteSpace(block)) blocks.Add(block);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        _logger.LogWarning(ex, "La fuente de conocimiento {Source} falló; el agente sigue sin ella.", source.Name);
+                    }
+                }
+                if (blocks.Count > 0)
+                    systemPrompt += "\n\n# Contexto del negocio (datos de MaalCa; no lo contradigas)\n" + string.Join("\n\n", blocks);
+            }
+
             string? finalText = null;
             for (var turn = 0; turn < MaxTurns; turn++)
             {
                 var response = await client.CompleteAsync(
-                    new ModelRequest(provider.BaseUrl, apiKey, model.ModelId, def.SystemPrompt, messages, toolSpecs, def.MaxOutputTokens),
+                    new ModelRequest(provider.BaseUrl, apiKey, model.ModelId, systemPrompt, messages, toolSpecs, def.MaxOutputTokens),
                     ct);
                 job.TokensInput += response.TokensInput;
                 job.TokensOutput += response.TokensOutput;

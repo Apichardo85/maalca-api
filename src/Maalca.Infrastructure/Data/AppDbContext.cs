@@ -78,6 +78,8 @@ public class AppDbContext : DbContext
     public DbSet<AgentModel> AgentModels => Set<AgentModel>();
     public DbSet<AgentJob> AgentJobs => Set<AgentJob>();
     public DbSet<AgentControl> AgentControls => Set<AgentControl>();
+    public DbSet<BrandProfile> BrandProfiles => Set<BrandProfile>();
+    public DbSet<AgentAffiliatePlan> AgentAffiliatePlans => Set<AgentAffiliatePlan>();
     public DbSet<StoreCustomer> StoreCustomers => Set<StoreCustomer>();
     public DbSet<Contract> Contracts => Set<Contract>();
     public DbSet<Expense> Expenses => Set<Expense>();
@@ -334,6 +336,22 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Scope).HasMaxLength(60).IsRequired();
             entity.Property(e => e.UpdatedBy).HasMaxLength(255);
             entity.HasIndex(e => e.Scope).IsUnique();
+        });
+
+        modelBuilder.Entity<BrandProfile>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Language).HasMaxLength(10).IsRequired();
+            entity.Property(e => e.UpdatedBy).HasMaxLength(255);
+            entity.HasIndex(e => e.AffiliateId).IsUnique();
+        });
+
+        modelBuilder.Entity<AgentAffiliatePlan>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Networks).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.UpdatedBy).HasMaxLength(255);
+            entity.HasIndex(e => e.AffiliateId).IsUnique();
         });
 
         // ModulePlanRule — plan mínimo por módulo, editable desde /ops/modulos
