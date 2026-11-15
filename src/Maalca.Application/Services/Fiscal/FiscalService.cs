@@ -26,6 +26,7 @@ public interface IFiscalService
     Task<ElectronicInvoiceDto> EmitFromOrderAsync(Guid affiliateId, EmitInvoiceRequest request);
     Task<ElectronicInvoiceDto> RetryAsync(Guid affiliateId, Guid invoiceId);
     Task<ElectronicInvoiceDto> RefreshAsync(Guid affiliateId, Guid invoiceId);
+    Task<string> GetFileUrlAsync(Guid affiliateId, Guid invoiceId, string kind);
     /// <summary>Notificación del proveedor. Devuelve false si la llave no corresponde a este negocio.</summary>
     Task<bool> HandleWebhookAsync(Guid affiliateId, string payload, string? apiKey);
     /// <summary>Consulta al proveedor los comprobantes que siguen en proceso. Lo llama el worker.</summary>
@@ -80,6 +81,7 @@ public class FiscalService : IFiscalService
         if (string.IsNullOrWhiteSpace(r.Address)) throw new ArgumentException("Falta la dirección fiscal.");
         if (r.Address.Trim().Length > 100) throw new ArgumentException("La dirección fiscal admite hasta 100 caracteres.");
         if (r.Email is { Length: > 80 }) throw new ArgumentException("El correo admite hasta 80 caracteres.");
+        ValidateGeo(Clean(r.Province), Clean(r.Municipality));
 
         var env = (r.Environment ?? profile.Environment).Trim().ToLowerInvariant();
         if (env is not ("sandbox" or "production")) throw new ArgumentException("El ambiente debe ser sandbox o production.");
@@ -115,6 +117,7 @@ public class FiscalService : IFiscalService
             ?? throw new ArgumentException("Primero guarda los datos fiscales del negocio.");
         if (!_provider.IsConfigured(profile.Environment))
             throw new ArgumentException("La facturación electrónica todavía no está habilitada en la plataforma para este ambiente.");
+        ValidateGeo(profile.Province, profile.Municipality);
         if (string.IsNullOrWhiteSpace(r.CertificateBase64) || string.IsNullOrWhiteSpace(r.CertificateFileName))
             throw new ArgumentException("Sube el certificado digital (.p12).");
         if (string.IsNullOrEmpty(r.CertificatePassword))
@@ -311,6 +314,20 @@ public class FiscalService : IFiscalService
             ?? throw new ArgumentException("Falta la configuración fiscal.");
         await PullAsync(invoice, profile, "manual");
         return await GetInvoiceAsync(affiliateId, invoiceId);
+    }
+
+    // Los enlaces de PDF/XML que entrega el proveedor son firmados y vencen: se pide uno nuevo cada vez que se abre.
+    public async Task<string> GetFileUrlAsync(Guid affiliateId, Guid invoiceId, string kind)
+    {
+        if (kind is not ("pdf" or "xml")) throw new ArgumentException("El archivo debe ser pdf o xml.");
+        var invoice = await _db.ElectronicInvoices.FirstOrDefaultAsync(i => i.Id == invoiceId && i.AffiliateId == affiliateId)
+            ?? throw new KeyNotFoundException("Comprobante no encontrado.");
+        if (string.IsNullOrEmpty(invoice.ProviderId)) throw new ArgumentException("El comprobante todavía no llegó al proveedor.");
+        var profile = await _db.FiscalProfiles.AsNoTracking().FirstOrDefaultAsync(p => p.AffiliateId == affiliateId)
+            ?? throw new ArgumentException("Falta la configuración fiscal.");
+        await PullAsync(invoice, profile, "manual");
+        var url = kind == "pdf" ? invoice.PdfUrl : invoice.XmlUrl;
+        return string.IsNullOrWhiteSpace(url) ? throw new ArgumentException("El archivo todavía no está disponible.") : url;
     }
 
     // ── Webhook y worker ────────────────────────────────────────────────────────────────────────────────────────
@@ -527,6 +544,18 @@ RETURNING ""NextNumber"" - 1;";
     private static string WebhookUrl(string baseUrl, Guid affiliateId) => $"{baseUrl.TrimEnd('/')}/api/webhooks/alanube/{affiliateId}";
 
     private static string Digits(string? s) => new((s ?? string.Empty).Where(char.IsDigit).ToArray());
+    // Provincia (PP0000) y municipio (PPMM00) como códigos del catálogo de Alanube/DGII; el catálogo completo vive en la web.
+    private static void ValidateGeo(string? province, string? municipality)
+    {
+        static bool IsCode(string? v) => v is { Length: 6 } && v.All(char.IsAsciiDigit);
+        var prov = province ?? "";
+        var mun = municipality ?? "";
+        if (!IsCode(prov) || prov[2..] != "0000")
+            throw new ArgumentException("Elige la provincia del negocio de la lista.");
+        if (!IsCode(mun) || mun[..2] != prov[..2] || mun[2..] == "0000")
+            throw new ArgumentException("Elige un municipio que pertenezca a la provincia seleccionada.");
+    }
+
     private static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 
     private static FiscalProfileDto ToDto(FiscalProfile p) => new(
