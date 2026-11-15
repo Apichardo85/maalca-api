@@ -51,6 +51,9 @@ public static class FiscalEndpoints
         app.MapPost($"{g}/invoices/{{invoiceId:guid}}/refresh", (HttpContext ctx, IFiscalService svc, Guid id, Guid invoiceId) =>
             Run(ctx, id, () => svc.RefreshAsync(id, invoiceId)));
 
+        app.MapGet($"{g}/invoices/{{invoiceId:guid}}/files/{{kind}}", (HttpContext ctx, IFiscalService svc, Guid id, Guid invoiceId, string kind) =>
+            Run(ctx, id, async () => new { url = await svc.GetFileUrlAsync(id, invoiceId, kind) }));
+
         // Webhook de Alanube (documents.emissionFinished). Se configura solo al dar de alta la empresa; la llave
         // llega en x-api-key y se deriva por negocio, así que no hay nada que guardar ni rotar. El mensaje de prueba
         // del proveedor también responde 200.
