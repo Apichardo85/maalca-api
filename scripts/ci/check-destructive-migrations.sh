@@ -34,7 +34,9 @@ if [[ ${#FILES[@]} -eq 0 ]]; then
   exit 0
 fi
 
-PATTERN='\.(DropTable|DropColumn|RenameTable|RenameColumn)\(|Sql\(.*(DROP[[:space:]]+(TABLE|COLUMN)|TRUNCATE|DELETE[[:space:]]+FROM)'
+# SQL crudo: las migraciones escritas a mano meten el SQL en varias líneas, así que se busca línea por línea
+# dentro de Up(), no solo junto a Sql(.
+PATTERN='\.(DropTable|DropColumn|RenameTable|RenameColumn)\(|DROP[[:space:]]+(TABLE|COLUMN)|TRUNCATE|DELETE[[:space:]]+FROM|RENAME[[:space:]]+(TO|COLUMN)'
 FOUND=0
 for f in "${FILES[@]}"; do
   [[ -f "$f" ]] || continue

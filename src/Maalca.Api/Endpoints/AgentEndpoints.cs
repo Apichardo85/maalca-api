@@ -32,6 +32,13 @@ public static class AgentEndpoints
         services.AddScoped<IAgentTool, ContentRecordReviewsTool>();
         services.AddScoped<IContentStudioService, ContentStudioService>();
 
+        // Fase 4: publicación en redes (Facebook primero). Llaves de la app de Meta en Meta__AppId / Meta__AppSecret / Meta__RedirectUri.
+        services.AddSingleton<MetaSettings>();
+        services.AddHttpClient(MetaSettings.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(60));
+        services.AddScoped<ISocialConnectService, SocialConnectService>();
+        services.AddScoped<ISocialPublisher, SocialPublisher>();
+        services.AddHostedService<Maalca.Api.Workers.SocialPublishWorker>();
+
         services.AddScoped<IAgentRunner, AgentRunner>();
         services.AddScoped<IAgentAdminService, AgentAdminService>();
         services.AddHostedService<Maalca.Api.Workers.AgentJobWorker>();
@@ -155,6 +162,54 @@ public static class AgentEndpoints
             return await Guard(() => content.RequestReviewAsync(request, Email(ctx)));
         });
 
+        // ---- Fase 4: publicación en redes ----
+        // Publicar sin esperar la fecha (o reintentar cuando el worker se rindió). Solo piezas aprobadas.
+        app.MapPost("/api/ops/content/{id:guid}/publish", async (HttpContext ctx, ISocialPublisher publisher, Guid id, CancellationToken ct) =>
+        {
+            if (!IsAdmin(ctx)) return Results.Forbid();
+            return await Guard(() => publisher.PublishNowAsync(id, Email(ctx), ct));
+        });
+
+        // Conexión de la página de Facebook de un negocio. El token nunca sale del API.
+        app.MapGet("/api/ops/agents/affiliates/{affiliateId:guid}/social/facebook", async (HttpContext ctx, ISocialConnectService social, Guid affiliateId) =>
+        {
+            if (!IsAdmin(ctx)) return Results.Forbid();
+            return await Guard(() => social.GetFacebookAsync(affiliateId));
+        });
+
+        app.MapPost("/api/ops/agents/affiliates/{affiliateId:guid}/social/facebook/authorize", async (HttpContext ctx, ISocialConnectService social, Guid affiliateId) =>
+        {
+            if (!IsAdmin(ctx)) return Results.Forbid();
+            return await Guard(() => social.BuildFacebookAuthorizeUrlAsync(affiliateId));
+        });
+
+        app.MapGet("/api/ops/agents/affiliates/{affiliateId:guid}/social/facebook/pages", async (HttpContext ctx, ISocialConnectService social, Guid affiliateId) =>
+        {
+            if (!IsAdmin(ctx)) return Results.Forbid();
+            return await GuardMeta(() => social.ListFacebookPagesAsync(affiliateId));
+        });
+
+        app.MapPut("/api/ops/agents/affiliates/{affiliateId:guid}/social/facebook/page", async (HttpContext ctx, ISocialConnectService social, Guid affiliateId, SelectPageRequest request) =>
+        {
+            if (!IsAdmin(ctx)) return Results.Forbid();
+            return await GuardMeta(() => social.SelectFacebookPageAsync(affiliateId, request, Email(ctx)));
+        });
+
+        app.MapDelete("/api/ops/agents/affiliates/{affiliateId:guid}/social/facebook", async (HttpContext ctx, ISocialConnectService social, Guid affiliateId) =>
+        {
+            if (!IsAdmin(ctx)) return Results.Forbid();
+            await social.DisconnectFacebookAsync(affiliateId);
+            return Results.NoContent();
+        });
+
+        // Regreso de Meta: lo abre el navegador del staff, sin token de MaalCa. La identidad del negocio viaja en el
+        // "state" firmado con HMAC y con 20 minutos de vida; sin state válido no se guarda nada.
+        app.MapGet("/api/integrations/meta/callback", async (ISocialConnectService social, string? code, string? state, string? error) =>
+        {
+            var target = await social.HandleFacebookCallbackAsync(code, state, error);
+            return Results.Redirect(target);
+        });
+
         // ---- Fase 2: marca y plan por negocio ----
         // La marca la edita cualquier admin (el equipo de marketing no es Owner); el plan y el tope de tokens son dinero: solo Owner.
         app.MapGet("/api/ops/agents/affiliates/{affiliateId:guid}/brand", async (HttpContext ctx, IBrandService brand, Guid affiliateId) =>
@@ -229,6 +284,19 @@ public static class AgentEndpoints
         catch (KeyNotFoundException ex)
         {
             return Results.NotFound(new { error = new { code = "NOT_FOUND", message = ex.Message } });
+        }
+    }
+
+    /// <summary>Como Guard, pero un error de Meta se devuelve como 502 con su mensaje (el problema está del otro lado).</summary>
+    private static async Task<IResult> GuardMeta<T>(Func<Task<T>> action)
+    {
+        try
+        {
+            return await Guard(action);
+        }
+        catch (MetaApiException ex)
+        {
+            return Results.Json(new { error = new { code = "META_ERROR", message = ex.Message } }, statusCode: 502);
         }
     }
 

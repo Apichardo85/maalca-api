@@ -456,6 +456,8 @@ public class AppDbContext : DbContext
             entity.Property(e => e.UpdatedBy).HasMaxLength(255);
             entity.HasIndex(e => new { e.AffiliateId, e.PlanMonth });
             entity.HasIndex(e => new { e.Status, e.ScheduledFor });
+            entity.Property(e => e.ExternalPostId).HasMaxLength(120);
+            entity.Property(e => e.ExternalUrl).HasMaxLength(500);
         });
 
         // ModulePlanRule — plan mínimo por módulo, editable desde /ops/modulos

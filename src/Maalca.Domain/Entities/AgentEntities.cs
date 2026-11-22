@@ -193,4 +193,19 @@ public class ContentItem : AuditableEntity
     public string? StaffNote { get; set; }
     public string? DecidedBy { get; set; }
     public DateTime? DecidedAt { get; set; }
+
+    // ---------- Fase 4: publicación ----------
+    // Solo el sistema pone Status = Published, cuando la red confirma el post. Nadie lo marca a mano.
+
+    /// <summary>Cuándo la red confirmó la publicación.</summary>
+    public DateTime? PublishedAt { get; set; }
+    /// <summary>Id del post en la red (Facebook: "{pageId}_{postId}").</summary>
+    public string? ExternalPostId { get; set; }
+    /// <summary>Enlace público al post, para abrirlo desde /ops.</summary>
+    public string? ExternalUrl { get; set; }
+    /// <summary>Último error al publicar, en palabras para el staff. Se limpia al publicar.</summary>
+    public string? PublishError { get; set; }
+    /// <summary>Intentos fallidos. Al llegar al tope, el publicador deja de reintentar hasta que alguien lo pida.</summary>
+    public int PublishAttempts { get; set; }
+    public DateTime? LastPublishAttemptAt { get; set; }
 }

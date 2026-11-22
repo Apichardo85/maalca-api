@@ -11,7 +11,8 @@ namespace Maalca.Application.Agents;
 public record ContentItemDto(Guid Id, Guid AffiliateId, string AffiliateName, string PlanMonth, DateTime ScheduledFor,
     string Network, string? Occasion, string Title, string Caption, string? Hashtags, string MediaKind, string? MediaBrief,
     string? MediaUrl, string Status, string Source, string? ReviewVerdict, string? ReviewNotes, DateTime? ReviewedAt,
-    string? StaffNote, string? DecidedBy, DateTime? DecidedAt, DateTime CreatedAt);
+    string? StaffNote, string? DecidedBy, DateTime? DecidedAt, DateTime CreatedAt,
+    DateTime? PublishedAt = null, string? ExternalUrl = null, string? PublishError = null, int PublishAttempts = 0);
 
 public record ContentQuotaDto(Guid AffiliateId, string PlanMonth, int PostsPerMonth, List<string> Networks, int Used, int Remaining,
     int Drafts, int Approved, int Published);
@@ -245,6 +246,9 @@ public class ContentStudioService : IContentStudioService
                 if (item.ReviewVerdict == "fail" && note is null)
                     throw new ArgumentException("El revisor marcó un fallo en esta pieza. Corrígela, o escribe una nota explicando por qué la apruebas igual.");
                 item.Status = ContentStatus.Approved;
+                // Una aprobación nueva le da al publicador intentos limpios.
+                item.PublishAttempts = 0;
+                item.PublishError = null;
                 break;
             case "reject":
                 if (note is null) throw new ArgumentException("Escribe el motivo del rechazo.");
@@ -316,7 +320,11 @@ public class ContentStudioService : IContentStudioService
         return string.IsNullOrEmpty(v) ? null : v;
     }
 
+    /// <summary>Lo usa también el publicador (fase 4) para devolver la pieza con el mismo formato.</summary>
+    internal static ContentItemDto ToDtoPublic(ContentItem c, string affiliateName) => ToDto(c, affiliateName);
+
     private static ContentItemDto ToDto(ContentItem c, string affiliateName) => new(c.Id, c.AffiliateId, affiliateName, c.PlanMonth,
         c.ScheduledFor, c.Network, c.Occasion, c.Title, c.Caption, c.Hashtags, c.MediaKind, c.MediaBrief, c.MediaUrl, c.Status,
-        c.Source, c.ReviewVerdict, c.ReviewNotes, c.ReviewedAt, c.StaffNote, c.DecidedBy, c.DecidedAt, c.CreatedAt);
+        c.Source, c.ReviewVerdict, c.ReviewNotes, c.ReviewedAt, c.StaffNote, c.DecidedBy, c.DecidedAt, c.CreatedAt,
+        c.PublishedAt, c.ExternalUrl, c.PublishError, c.PublishAttempts);
 }
