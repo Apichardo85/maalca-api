@@ -1,17 +1,79 @@
 name: build
 
+# Candado del pipeline: corre en cada push a develop y main. Railway despliega develop en staging
+# y main en producción; este CI es el semáforo que dice si el commit es sano.
 on:
   push:
     branches: [develop, main]
   pull_request:
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    # Postgres desechable: la misma versión mayor que usa Railway. Existe solo durante este job.
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: maalca_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Historia suficiente para comparar con el commit anterior del push.
+          fetch-depth: 50
+
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+
       - run: dotnet restore Maalca.sln
       - run: dotnet build Maalca.sln -c Release --no-restore
+
+      # Producción migra sola al arrancar: una migración que borra o renombra se ejecuta contra
+      # datos reales. Ver scripts/ci/check-destructive-migrations.sh.
+      - name: Guardia de migraciones destructivas
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: bash scripts/ci/check-destructive-migrations.sh "${{ github.event.before }}" "${{ github.sha }}"
+
+      # Arranque en frío: levanta el API exactamente como Railway (Migrate() + siembra al iniciar)
+      # contra una base vacía, y espera a que /health responda. Si una migración no aplica o el
+      # arranque revienta, el CI se pone rojo antes de que el commit llegue a producción.
+      - name: Arranque en frío (migraciones + /health)
+        env:
+          ASPNETCORE_ENVIRONMENT: Production
+          ASPNETCORE_URLS: http://127.0.0.1:8080
+          ConnectionStrings__DefaultConnection: Host=127.0.0.1;Port=5432;Database=maalca_ci;Username=postgres;Password=ci
+        run: |
+          dotnet run --project src/Maalca.Api -c Release --no-build > api.log 2>&1 &
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:8080/health > /dev/null 2>&1; then
+              echo "API arriba y migrada en ~$((i * 2)) s."
+              exit 0
+            fi
+            if ! kill -0 $! 2>/dev/null; then
+              echo "El API se cayó al arrancar:"; tail -n 80 api.log; exit 1
+            fi
+            sleep 2
+          done
+          echo "El API no respondió /health en 180 s:"; tail -n 80 api.log; exit 1
+
+      - name: Log del arranque
+        if: always()
+        run: test -f api.log && tail -n 40 api.log || true
