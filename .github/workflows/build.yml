@@ -61,7 +61,8 @@ jobs:
           ASPNETCORE_URLS: http://127.0.0.1:8080
           ConnectionStrings__DefaultConnection: Host=127.0.0.1;Port=5432;Database=maalca_ci;Username=postgres;Password=ci
         run: |
-          dotnet run --project src/Maalca.Api -c Release --no-build > api.log 2>&1 &
+          # --no-launch-profile: sin esto dotnet run usa launchSettings.json (Development, otro puerto) e ignora estas variables.
+          dotnet run --project src/Maalca.Api -c Release --no-build --no-launch-profile > api.log 2>&1 &
           for i in $(seq 1 90); do
             if curl -fsS http://127.0.0.1:8080/health > /dev/null 2>&1; then
               echo "API arriba y migrada en ~$((i * 2)) s."
