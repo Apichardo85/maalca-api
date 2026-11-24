@@ -105,7 +105,10 @@ public static class ModuleAccess
         if (courtesy.Contains(CourtesyAll)) return selected;
 
         var tier = GetEffectiveTier(a);
-        var byPlan = selected.Where(t => tier >= rules.GetValueOrDefault(t, PlanTier.Growth));
+        // La pantalla no depende del plan: se paga aparte por pantalla (ver GetIncludedScreens).
+        // Prendida para su rubro = activa; si no tiene pantallas pagadas, el board sale en pausa.
+        var byPlan = selected.Where(t => t.Equals(BoardToken, StringComparison.OrdinalIgnoreCase)
+            || tier >= rules.GetValueOrDefault(t, PlanTier.Growth));
         return byPlan.Concat(courtesy).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
@@ -120,16 +123,27 @@ public static class ModuleAccess
             .ToList();
     }
 
+    public const string BoardToken = "board";
+
     /// <summary>
-    /// Pantallas incluidas: trial vigente 1 · Starter vencido 0 (salvo cortesía de pantalla) ·
-    /// Growth 1 · Professional 2. Las extra pagadas (ExtraScreens) se suman aparte.
+    /// Pantallas sin cobro: ningún plan incluye pantallas (decisión 2026-11-24: la pantalla se
+    /// cobra siempre aparte, también en el trial). Solo la cortesía de pantalla que se da a mano
+    /// desde /ops (ModulosCortesia "board" o "*") cuenta 1. Las pagadas viven en ExtraScreens.
     /// </summary>
     public static int GetIncludedScreens(Affiliate a)
     {
-        if (a.Plan == Plan.Enterprise) return 2;
-        if (a.Plan == Plan.Entrepreneur) return 1;
-        if (!IsTrialExpired(a)) return 1;
         var courtesy = ParseCourtesy(a.ModulosCortesia);
-        return courtesy.Contains(CourtesyAll) || courtesy.Contains("board", StringComparer.OrdinalIgnoreCase) ? 1 : 0;
+        return courtesy.Contains(CourtesyAll) || courtesy.Contains(BoardToken, StringComparer.OrdinalIgnoreCase) ? 1 : 0;
     }
+
+    /// <summary>Pantallas que el negocio puede tener encendidas: cortesía + pagadas.</summary>
+    public static int GetScreenAllowance(Affiliate a) => GetIncludedScreens(a) + Math.Max(0, a.ExtraScreens);
+
+    /// <summary>
+    /// Pantallas en uso: la base (/{slug}/board) cuenta como la 1.ª cuando el módulo Pantalla está
+    /// prendido, más cada pantalla adicional (tabla Screens). La base es la que se enciende primero.
+    /// </summary>
+    public static int CountScreensInUse(Affiliate a, int extraScreenRows) =>
+        (ModuleCatalog.FilterActive(a.ModulosActivos, a.BusinessType.ToString())
+            .Contains(BoardToken, StringComparer.OrdinalIgnoreCase) ? 1 : 0) + extraScreenRows;
 }

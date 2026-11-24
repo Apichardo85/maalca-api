@@ -5321,7 +5321,7 @@ app.MapGet("/api/space/{slug}", async (
             PublicCatalogService.ParseSpanishFlag(affiliate.Settings),
             ModuleAccess.PublicTierName(ModuleAccess.GetEffectiveTier(affiliate)),
             await ModuleAccess.GetLockedModulesAsync(db, affiliate),
-            ModuleAccess.GetIncludedScreens(affiliate) + Math.Max(0, affiliate.ExtraScreens),
+            ModuleAccess.GetScreenAllowance(affiliate),
             affiliate.StoreLayout == "marketplace" ? "marketplace" : "boutique"),
         items, realCount,
         new ProgressDto(

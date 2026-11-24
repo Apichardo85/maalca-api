@@ -63,24 +63,19 @@ public class PlanLimitService : IPlanLimitService
     }
 
     // ── Pantallas (Menu Board / muros) ──────────────────────────────────
-    // Por plan de pago (para cotizar en Stripe): Growth 1 · Professional 2.
-    public int GetIncludedScreens(Plan plan) => plan switch
-    {
-        Plan.Enterprise => 2,
-        _ => 1
-    };
+    // Ningún plan incluye pantallas: se cobran aparte (decisión 2026-11-24).
+    public int GetIncludedScreens(Plan plan) => 0;
 
-    // Las que tiene HOY el negocio: trial vigente 1 · Starter vencido 0 (salvo cortesía) ·
-    // Growth 1 · Professional 2 (ModuleAccess.GetIncludedScreens), más las extra pagadas.
-    public int GetScreenAllowance(Affiliate affiliate)
-        => ModuleAccess.GetIncludedScreens(affiliate) + Math.Max(0, affiliate.ExtraScreens);
+    // Las que puede tener encendidas HOY: cortesía de /ops + pagadas (ModuleAccess).
+    public int GetScreenAllowance(Affiliate affiliate) => ModuleAccess.GetScreenAllowance(affiliate);
 
     public async Task EnsureScreenCapacityAsync(Guid affiliateId, int adding)
     {
         if (adding <= 0) return;
         var affiliate = await _db.Affiliates.FindAsync(affiliateId)
             ?? throw new KeyNotFoundException("Affiliate not found");
-        var used = await _db.Screens.CountAsync(s => s.AffiliateId == affiliateId);
+        // Crear pantallas adicionales implica usar también la base (/{slug}/board): cuenta como la 1.ª.
+        var used = 1 + await _db.Screens.CountAsync(s => s.AffiliateId == affiliateId);
         var allowance = GetScreenAllowance(affiliate);
         if (used + adding > allowance)
             throw new ScreenLimitException(allowance, used, adding);

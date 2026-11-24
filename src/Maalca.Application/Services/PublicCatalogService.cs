@@ -196,11 +196,11 @@ public class PublicCatalogService : IPublicCatalogService
             .Select(a => new ScreenAdDto(a.Id, a.MediaUrl, a.MediaType.ToString(), a.DurationSeconds, a.SortOrder, a.Active, a.StartsAt, a.EndsAt, a.Fit.ToString()))
             .ToList();
 
-        // Pantalla en pausa: sin el módulo board activo (plan vencido, apagado en ops) o, si es
-        // una pantalla extra, fuera de la cuota de su plan (ordenadas por SortOrder). El board
-        // muestra "Esta pantalla está en pausa" en vez del menú.
+        // Pantalla en pausa: sin el módulo board activo (apagado en ops) o sin pantalla pagada para
+        // ella. La base (/{slug}/board) usa la 1.ª pagada; cada adicional (ordenadas por SortOrder)
+        // la siguiente. El board muestra "Esta pantalla está en pausa" en vez del menú.
         var activeModules = await ModuleAccess.GetActiveModulesAsync(_db, affiliate);
-        var allowance = ModuleAccess.GetIncludedScreens(affiliate) + Math.Max(0, affiliate.ExtraScreens);
+        var allowance = ModuleAccess.GetScreenAllowance(affiliate);
         var boardOn = activeModules.Contains("board", StringComparer.OrdinalIgnoreCase) && allowance > 0;
         if (boardOn && screenId.HasValue)
         {
@@ -209,7 +209,7 @@ public class PublicCatalogService : IPublicCatalogService
                 .OrderBy(s => s.SortOrder).ThenBy(s => s.CreatedAt)
                 .Select(s => s.Id)
                 .ToListAsync();
-            boardOn = order.IndexOf(screenId.Value) < allowance;
+            boardOn = order.IndexOf(screenId.Value) < allowance - 1; // la base ya usa una
         }
 
         // Envío a domicilio: solo con el módulo "shipping" activo; sin métodos activos la lista va vacía y el

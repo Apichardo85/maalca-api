@@ -31,8 +31,15 @@ public class StripeBillingService : IStripeBillingService
     public const string ProfessionalMonthly = "maalca_professional_monthly";
     public const string ProfessionalYearly = "maalca_professional_yearly";
     public const string SetupFee = "maalca_setup_fee";
+    // Pantallas: se cobran siempre aparte, ningún plan las incluye (2026-11-24). Precio escalonado
+    // graduado en Stripe: 1.ª $39 · 2.ª $15 · desde la 3.ª $10 al mes (anual: $390 · $150 · $100).
+    public const string ScreenMonthly = "maalca_screen_monthly";
+    public const string ScreenYearly = "maalca_screen_yearly";
+    // Precios viejos de "pantalla extra" ($15/$10): solo se reconocen en suscripciones existentes;
+    // al cambiar la cantidad se pasan al precio nuevo.
     public const string ExtraScreenMonthly = "maalca_extra_screen_monthly";
     public const string ExtraScreenYearly = "maalca_extra_screen_yearly";
+    public const string ScreensOnlyPlan = "None";
 
     // Nivel 2 de precio (RD y Latinoamérica): mismos planes en USD con el factor del nivel aplicado.
     // Si el precio _t2 no existe en Stripe, el checkout cae al precio normal (falla abierto).
@@ -44,13 +51,13 @@ public class StripeBillingService : IStripeBillingService
     public const string SetupFeeT2 = SetupFee + T2Suffix;
 
     public const string AlreadySubscribedMessage = "Este negocio ya tiene una suscripción activa. Cambia el plan desde \"Administrar suscripción\".";
-    public const string NoSubscriptionMessage = "Primero activa un plan; las pantallas extra se agregan a esa suscripción.";
+    public const string NoSubscriptionMessage = "Todavía no tienes pantallas contratadas: contrátalas primero.";
     public const int MaxExtraScreens = 20;
 
     private static readonly string[] AllLookupKeys =
     {
         GrowthMonthly, GrowthYearly, ProfessionalMonthly, ProfessionalYearly,
-        SetupFee, ExtraScreenMonthly, ExtraScreenYearly,
+        SetupFee, ScreenMonthly, ScreenYearly, ExtraScreenMonthly, ExtraScreenYearly,
         GrowthMonthlyT2, GrowthYearlyT2, ProfessionalMonthlyT2, ProfessionalYearlyT2, SetupFeeT2,
     };
 
@@ -98,7 +105,7 @@ public class StripeBillingService : IStripeBillingService
         _ => GrowthMonthly,
     };
 
-    private static string ExtraScreenKey(string interval) => interval == "year" ? ExtraScreenYearly : ExtraScreenMonthly;
+    private static string ScreenKey(string interval) => interval == "year" ? ScreenYearly : ScreenMonthly;
 
     private static Plan? PlanFromLookupKey(string? key) => key switch
     {
@@ -107,7 +114,12 @@ public class StripeBillingService : IStripeBillingService
         _ => null,
     };
 
-    private static bool IsExtraScreenKey(string? key) => key is ExtraScreenMonthly or ExtraScreenYearly;
+    private static bool IsScreenKey(string? key) => key is ScreenMonthly or ScreenYearly or ExtraScreenMonthly or ExtraScreenYearly;
+    private static bool IsLegacyScreenKey(string? key) => key is ExtraScreenMonthly or ExtraScreenYearly;
+
+    /// <summary>"none" / "screens" = suscripción solo de pantallas (sin plan; el negocio sigue en Starter).</summary>
+    private static bool IsScreensOnlyRequest(string? plan) =>
+        plan?.Trim().ToLowerInvariant() is "none" or "screens" or "screensonly";
 
     /// <summary>Precio plano → Amount = UnitAmount. Escalonado → Amount = primer tramo y Tiers con
     /// todos (sin esto el panel mostraría $0 para la pantalla extra).</summary>
@@ -188,8 +200,9 @@ public class StripeBillingService : IStripeBillingService
             : throw new KeyNotFoundException($"El cobro de este plan todavía no está configurado en la plataforma (falta el precio \"{lookupKey}\" en Stripe).");
     }
 
+    // Plan o solo pantallas: cualquier suscripción viva cuenta (una de solo pantallas deja Plan = Free).
     private static bool HasLiveSubscription(Affiliate a) =>
-        !string.IsNullOrEmpty(a.StripeSubscriptionId) && a.Plan != Plan.Free
+        !string.IsNullOrEmpty(a.StripeSubscriptionId)
         && a.PlanStatus is PlanStatus.Active or PlanStatus.PastDue;
 
     // ─────────────────────────────── Checkout ───────────────────────────────
@@ -204,27 +217,30 @@ public class StripeBillingService : IStripeBillingService
         if (HasLiveSubscription(affiliate))
             throw new InvalidOperationException(AlreadySubscribedMessage);
 
+        var screensOnly = IsScreensOnlyRequest(request.Plan);
         var plan = ParsePlan(request.Plan);
         var interval = ParseInterval(request.Interval);
         var extras = Math.Clamp(request.ExtraScreens, 0, MaxExtraScreens);
-        // Modo "Solo pantallas": no se cobra setup, el Kit de pantalla ya cubre ese trabajo.
-        var chargeSetup = affiliate.SetupFeePaidAt is null && !affiliate.ScreensOnly;
+        if (screensOnly && extras < 1)
+            throw new ArgumentException("Elige al menos 1 pantalla.");
+        // Sin setup al comprar solo pantallas o en modo "Solo pantallas": el Kit de pantalla cubre ese trabajo.
+        var chargeSetup = !screensOnly && affiliate.SetupFeePaidAt is null && !affiliate.ScreensOnly;
         var priceTier = await TierOfAsync(affiliate.Country);
 
-        var lineItems = new List<SessionLineItemOptions>
-        {
-            new() { Price = (await RequireTierPriceAsync(PlanKey(plan, interval), priceTier)).Id, Quantity = 1 },
-        };
+        var lineItems = new List<SessionLineItemOptions>();
+        if (!screensOnly)
+            lineItems.Add(new() { Price = (await RequireTierPriceAsync(PlanKey(plan, interval), priceTier)).Id, Quantity = 1 });
         if (extras > 0)
-            lineItems.Add(new() { Price = (await RequirePriceAsync(ExtraScreenKey(interval))).Id, Quantity = extras });
+            lineItems.Add(new() { Price = (await RequirePriceAsync(ScreenKey(interval))).Id, Quantity = extras });
         // Precio one_time dentro de un Checkout de suscripción: Stripe lo agrega solo a la
         // primera factura.
         if (chargeSetup)
             lineItems.Add(new() { Price = (await RequireTierPriceAsync(SetupFee, priceTier)).Id, Quantity = 1 });
 
+        var planMeta = screensOnly ? ScreensOnlyPlan : plan.ToString();
         var metadata = new Dictionary<string, string>
         {
-            ["plan"] = plan.ToString(),
+            ["plan"] = planMeta,
             ["interval"] = interval,
             ["affiliateId"] = affiliateId.ToString(),
             ["setup"] = chargeSetup ? "1" : "0",
@@ -245,7 +261,7 @@ public class StripeBillingService : IStripeBillingService
                 // ANTES que checkout.session.completed, cuando todavía no conocemos el customer.
                 Metadata = new Dictionary<string, string>
                 {
-                    ["plan"] = plan.ToString(),
+                    ["plan"] = planMeta,
                     ["affiliateId"] = affiliateId.ToString(),
                 },
             },
@@ -331,7 +347,8 @@ public class StripeBillingService : IStripeBillingService
 
     private async Task<BillingSummaryDto> BuildSummaryAsync(Affiliate affiliate)
     {
-        var used = await _db.Screens.CountAsync(s => s.AffiliateId == affiliate.Id);
+        var used = Maalca.Application.Common.ModuleAccess.CountScreensInUse(affiliate,
+            await _db.Screens.CountAsync(s => s.AffiliateId == affiliate.Id));
 
         IReadOnlyList<BillingPriceDto> prices;
         try
@@ -375,27 +392,52 @@ public class StripeBillingService : IStripeBillingService
             throw new InvalidOperationException(NoSubscriptionMessage);
 
         var qty = Math.Clamp(extraScreens, 0, MaxExtraScreens);
-        var used = await _db.Screens.CountAsync(s => s.AffiliateId == affiliateId);
-        var included = _planLimit.GetIncludedScreens(affiliate.Plan);
+        var used = Maalca.Application.Common.ModuleAccess.CountScreensInUse(affiliate,
+            await _db.Screens.CountAsync(s => s.AffiliateId == affiliateId));
+        var included = Maalca.Application.Common.ModuleAccess.GetIncludedScreens(affiliate);
         if (used > included + qty)
-            throw new ArgumentException($"Usas {used} pantallas: borra {used - included - qty} antes de bajar a {qty} extra.");
+            throw new ArgumentException($"Usas {used} pantallas: borra {used - included - qty} antes de bajar a {qty}.");
 
         UseApiKey();
         var subscription = await new SubscriptionService().GetAsync(affiliate.StripeSubscriptionId);
         var items = subscription.Items?.Data ?? new List<SubscriptionItem>();
         var planItem = items.FirstOrDefault(i => PlanFromLookupKey(i.Price?.LookupKey) is not null);
-        var interval = planItem?.Price?.Recurring?.Interval ?? affiliate.BillingInterval ?? "month";
-        var extraItem = items.FirstOrDefault(i => IsExtraScreenKey(i.Price?.LookupKey));
+        var extraItem = items.FirstOrDefault(i => IsScreenKey(i.Price?.LookupKey));
+        var interval = planItem?.Price?.Recurring?.Interval
+            ?? extraItem?.Price?.Recurring?.Interval ?? affiliate.BillingInterval ?? "month";
 
         // always_invoice: el prorrateo se cobra ya — la pantalla nueva queda pagada al crearla.
         const string proration = "always_invoice";
         var itemService = new SubscriptionItemService();
-        if (extraItem is null && qty > 0)
+
+        // Suscripción solo de pantallas que baja a 0: Stripe no deja una suscripción sin items,
+        // así que se cancela (el webhook customer.subscription.deleted deja todo en Starter).
+        if (planItem is null && qty == 0)
+        {
+            await new SubscriptionService().CancelAsync(subscription.Id, new SubscriptionCancelOptions { Prorate = true });
+            affiliate.ExtraScreens = 0;
+            await _db.SaveChangesAsync();
+            return await BuildSummaryAsync(affiliate);
+        }
+
+        // Item con el precio viejo de "pantalla extra": se pasa al precio nuevo por pantalla.
+        if (extraItem is not null && IsLegacyScreenKey(extraItem.Price?.LookupKey) && qty > 0)
         {
             await itemService.CreateAsync(new SubscriptionItemCreateOptions
             {
                 Subscription = subscription.Id,
-                Price = (await RequirePriceAsync(ExtraScreenKey(interval))).Id,
+                Price = (await RequirePriceAsync(ScreenKey(interval))).Id,
+                Quantity = qty,
+                ProrationBehavior = proration,
+            });
+            await itemService.DeleteAsync(extraItem.Id, new SubscriptionItemDeleteOptions { ProrationBehavior = proration });
+        }
+        else if (extraItem is null && qty > 0)
+        {
+            await itemService.CreateAsync(new SubscriptionItemCreateOptions
+            {
+                Subscription = subscription.Id,
+                Price = (await RequirePriceAsync(ScreenKey(interval))).Id,
                 Quantity = qty,
                 ProrationBehavior = proration,
             });
@@ -490,7 +532,9 @@ public class StripeBillingService : IStripeBillingService
         if (affiliate is null) return;
 
         var meta = session.Metadata ?? new Dictionary<string, string>();
-        affiliate.Plan = ParsePlan(meta.GetValueOrDefault("plan"));
+        // Solo pantallas: el negocio sigue en Starter; las pantallas las cuenta el webhook de la suscripción.
+        if (meta.GetValueOrDefault("plan") != ScreensOnlyPlan)
+            affiliate.Plan = ParsePlan(meta.GetValueOrDefault("plan"));
         affiliate.BillingInterval = ParseInterval(meta.GetValueOrDefault("interval"));
         affiliate.PlanStatus = PlanStatus.Active;
         affiliate.PlanStartedAt ??= DateTime.UtcNow;
@@ -517,19 +561,25 @@ public class StripeBillingService : IStripeBillingService
             affiliate.StripeCustomerId = subscription.CustomerId;
 
         var extras = 0;
+        var hasPlanItem = false;
         foreach (var item in subscription.Items?.Data ?? new List<SubscriptionItem>())
         {
             var key = item.Price?.LookupKey;
             if (PlanFromLookupKey(key) is { } plan)
             {
+                hasPlanItem = true;
                 affiliate.Plan = plan;
                 affiliate.BillingInterval = item.Price?.Recurring?.Interval ?? affiliate.BillingInterval;
             }
-            else if (IsExtraScreenKey(key))
+            else if (IsScreenKey(key))
             {
                 extras += (int)item.Quantity;
+                affiliate.BillingInterval ??= item.Price?.Recurring?.Interval;
             }
         }
+        // Suscripción solo de pantallas: sin item de plan el negocio queda en Starter.
+        if (!hasPlanItem && extras > 0)
+            affiliate.Plan = Plan.Free;
         affiliate.ExtraScreens = extras;
 
         affiliate.PlanStatus = subscription.Status switch
@@ -568,7 +618,8 @@ public class StripeBillingService : IStripeBillingService
         if (stripeEvent.Data.Object is not StripeInvoice invoice || string.IsNullOrEmpty(invoice.CustomerId)) return;
 
         var affiliate = await _db.Affiliates.FirstOrDefaultAsync(a => a.StripeCustomerId == invoice.CustomerId);
-        if (affiliate is null || affiliate.Plan == Plan.Free) return;
+        // Sin suscripción no hay nada que marcar (una de solo pantallas deja Plan = Free y sí cuenta).
+        if (affiliate is null || string.IsNullOrEmpty(affiliate.StripeSubscriptionId)) return;
 
         if (!paid && affiliate.PlanStatus == PlanStatus.Active)
             affiliate.PlanStatus = PlanStatus.PastDue;
