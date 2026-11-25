@@ -8,6 +8,7 @@ using Maalca.Application.Common.Interfaces;
 using Maalca.Domain.Entities;
 using Maalca.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 
 namespace Maalca.Application.Services;
@@ -24,15 +25,21 @@ public class CloverService : ICloverService
     private const int PageSize = 500;
     private const int MaxPages = 20; // tope: 10 000 órdenes por consulta
     private static readonly Regex MerchantIdRx = new("^[A-Za-z0-9]{8,20}$", RegexOptions.Compiled);
+    // Artículos genéricos de caja ("GENERAL ITEMS", "Custom Item"…): una línea sin producto del catálogo.
+    private static readonly Regex GenericNameRx = new(@"^\s*(general|misc(ellaneous)?|custom|open)\s+items?\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    // "Operación hoy" refresca cada 60 s: con esto Clover recibe como mucho 1 consulta por minuto y rango, sin importar cuántas pestañas haya abiertas.
+    private static readonly TimeSpan ReportTtl = TimeSpan.FromSeconds(60);
 
     private readonly AppDbContext _db;
     private readonly IHttpClientFactory _http;
+    private readonly IMemoryCache _cache;
     private readonly string _secret;
 
-    public CloverService(AppDbContext db, IHttpClientFactory http, IConfiguration config)
+    public CloverService(AppDbContext db, IHttpClientFactory http, IConfiguration config, IMemoryCache cache)
     {
         _db = db;
         _http = http;
+        _cache = cache;
         _secret = config["Jwt:Key"] ?? "MaalcaSecretKey12345678901234567890";
     }
 
@@ -88,6 +95,9 @@ public class CloverService : ICloverService
         var token = SecretBox.Unprotect(c?.CredentialsEnc, _secret);
         if (c is null || string.IsNullOrEmpty(token) || string.IsNullOrEmpty(c.ExternalId)) throw new ArgumentException("Clover no está conectado.");
 
+        var cacheKey = $"clover:sales:{affiliateId}:{c.ExternalId}:{from:yyyyMMdd}:{to:yyyyMMdd}";
+        if (_cache.TryGetValue(cacheKey, out CloverSalesReportDto? cached) && cached is not null) return cached;
+
         var tzId = await _db.Affiliates.AsNoTracking().Where(a => a.Id == affiliateId).Select(a => a.Timezone).FirstOrDefaultAsync();
         TimeZoneInfo tz;
         try { tz = TimeZoneInfo.FindSystemTimeZoneById(string.IsNullOrWhiteSpace(tzId) ? "America/New_York" : tzId); }
@@ -101,6 +111,8 @@ public class CloverService : ICloverService
         var byTender = new Dictionary<string, (decimal total, int count)>();
         var items = new Dictionary<string, (int qty, decimal total)>();
         decimal gross = 0, tax = 0, tips = 0;
+        var unlistedQty = 0;
+        decimal unlistedTotal = 0;
         var orders = 0;
         var truncated = false;
 
@@ -147,8 +159,18 @@ public class CloverService : ICloverService
                         foreach (var li in le.EnumerateArray())
                         {
                             var name = li.TryGetProperty("name", out var nm) ? (nm.GetString() ?? "(sin nombre)") : "(sin nombre)";
+                            var price = Cents(li, "price");
+                            // Con producto del catálogo la línea trae item.id; las de cobro libre no.
+                            var hasCatalogItem = li.TryGetProperty("item", out var it) && it.ValueKind == JsonValueKind.Object
+                                                 && it.TryGetProperty("id", out var iid) && !string.IsNullOrEmpty(iid.GetString());
+                            if (!hasCatalogItem || GenericNameRx.IsMatch(name))
+                            {
+                                unlistedQty++;
+                                unlistedTotal += price;
+                                continue;
+                            }
                             var cur = items.GetValueOrDefault(name);
-                            items[name] = (cur.qty + 1, cur.total + Cents(li, "price"));
+                            items[name] = (cur.qty + 1, cur.total + price);
                         }
                     }
                 }
@@ -169,13 +191,15 @@ public class CloverService : ICloverService
         c.LastSyncAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
-        return new CloverSalesReportDto(
+        var report = new CloverSalesReportDto(
             from.ToString("yyyy-MM-dd"), to.ToString("yyyy-MM-dd"), orders, gross, tax, tips,
             orders > 0 ? Math.Round(gross / orders, 2) : 0,
             byDay.OrderBy(x => x.Key).Select(x => new CloverDayDto(x.Key, x.Value.total, x.Value.orders)).ToList(),
             byTender.OrderByDescending(x => x.Value.total).Select(x => new CloverTenderDto(x.Key, x.Value.total, x.Value.count)).ToList(),
             items.OrderByDescending(x => x.Value.qty).Take(15).Select(x => new CloverTopItemDto(x.Key, x.Value.qty, x.Value.total)).ToList(),
-            truncated);
+            truncated, new CloverUnlistedDto(unlistedQty, unlistedTotal));
+        _cache.Set(cacheKey, report, ReportTtl);
+        return report;
     }
 
     private static decimal Cents(JsonElement e, string prop) =>

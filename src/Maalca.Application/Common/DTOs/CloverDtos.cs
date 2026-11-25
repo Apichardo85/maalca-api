@@ -10,7 +10,10 @@ public record CloverDayDto(string Date, decimal Total, int Orders);
 public record CloverTenderDto(string Label, decimal Total, int Count);
 public record CloverTopItemDto(string Name, int Qty, decimal Total);
 
+/// <summary>Ventas cobradas sin producto del catálogo (artículo genérico de Clover, ej. "GENERAL ITEMS"): no mueven inventario ni se pueden rankear por producto.</summary>
+public record CloverUnlistedDto(int Qty, decimal Total);
+
 /// <summary>Ventas del local leídas de Clover: pagos exitosos del rango, en la zona horaria del negocio.</summary>
 public record CloverSalesReportDto(
     string From, string To, int Orders, decimal Gross, decimal Tax, decimal Tips, decimal AvgTicket,
-    List<CloverDayDto> ByDay, List<CloverTenderDto> ByTender, List<CloverTopItemDto> TopItems, bool Truncated);
+    List<CloverDayDto> ByDay, List<CloverTenderDto> ByTender, List<CloverTopItemDto> TopItems, bool Truncated, CloverUnlistedDto Unlisted);
