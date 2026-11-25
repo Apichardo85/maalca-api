@@ -27,14 +27,18 @@ public class OrderService : IOrderService
     private readonly IOrderNotificationService _notifications;
     private readonly IOrderRealtimeNotifier _realtime;
     private readonly IPaymentProviderResolver _payments;
+    // Un solo lugar resuelve "quién es este cliente" (CustomerService, tarea #244). Antes este
+    // servicio tenía su propia copia y las dos comparaban el teléfono como texto.
+    private readonly ICustomerService _customers;
 
     public OrderService(AppDbContext db, IOrderNotificationService notifications, IOrderRealtimeNotifier realtime,
-        IPaymentProviderResolver payments)
+        IPaymentProviderResolver payments, ICustomerService customers)
     {
         _db = db;
         _notifications = notifications;
         _realtime = realtime;
         _payments = payments;
+        _customers = customers;
     }
 
     public const string ShippingFulfillment = "shipping";
@@ -225,11 +229,13 @@ public class OrderService : IOrderService
     /// Unidades apartadas por pedidos que todavía no descontaron stock: "pagar al recoger" abiertos (24 h) y
     /// checkouts de Stripe vigentes (<see cref="StripeReservationMinutes"/>). Lo usan la validación del pedido
     /// y el catálogo público, para que "Quedan N" coincida con lo que el API aceptará.
-    /// <paramref name="excludeEmail"/>/<paramref name="excludePhone"/>: los pedidos pendientes del MISMO cliente
-    /// no cuentan, para que quien abandonó un checkout pueda reintentar sin bloquearse a sí mismo.
+    /// <paramref name="excludeCustomerId"/>: los pedidos pendientes del MISMO cliente no cuentan, para que
+    /// quien abandonó un checkout pueda reintentar sin bloquearse a sí mismo. Se identifica por la LLAVE del
+    /// cliente (Orders.CustomerId); antes se comparaba el teléfono/correo escrito en cada pedido, así que un
+    /// formato distinto del mismo número hacía que el cliente se bloqueara a sí mismo.
     /// </summary>
     internal static async Task<Dictionary<Guid, decimal>> ReservedUnitsAsync(
-        AppDbContext db, Guid affiliateId, string? excludeEmail = null, string? excludePhone = null)
+        AppDbContext db, Guid affiliateId, Guid? excludeCustomerId = null)
     {
         var now = DateTime.UtcNow;
         var pickupSince = now.AddHours(-24);
@@ -241,27 +247,19 @@ public class OrderService : IOrderService
                         && ((o.PaymentMethod == PayAtPickupMethod && o.CreatedAt >= pickupSince)
                             || (o.PaymentMethod == null && o.Status == OrderStatus.Pending
                                 && o.StripeCheckoutSessionId != null && o.CreatedAt >= stripeSince)))
-            .Select(o => new { o.ItemsJson, o.CustomerEmail, o.CustomerPhone })
+            .Select(o => new { o.ItemsJson, o.CustomerId })
             .ToListAsync();
 
-        var email = excludeEmail?.Trim();
-        var phone = DigitsOnly(excludePhone);
         var reserved = new Dictionary<Guid, decimal>();
         foreach (var o in open)
         {
-            var sameCustomer =
-                (!string.IsNullOrEmpty(email) && string.Equals(o.CustomerEmail?.Trim(), email, StringComparison.OrdinalIgnoreCase))
-                || (phone.Length >= 7 && DigitsOnly(o.CustomerPhone) == phone);
-            if (sameCustomer) continue;
+            if (excludeCustomerId is not null && o.CustomerId == excludeCustomerId) continue;
             foreach (var line in JsonArrayField.Parse<OrderItemDto>(o.ItemsJson))
                 if (Guid.TryParse(line.ItemId, out var id))
                     reserved[id] = reserved.GetValueOrDefault(id) + line.Qty;
         }
         return reserved;
     }
-
-    private static string DigitsOnly(string? s) =>
-        string.IsNullOrEmpty(s) ? string.Empty : new string(s.Where(char.IsDigit).ToArray());
 
     private const int MaxQtyPerLine = 99;
     private const int MaxQtyPerLineWholesale = 999;
@@ -392,7 +390,9 @@ public class OrderService : IOrderService
         var trackedInventory = inventory.Where(i => i.TrackStock).ToList();
         if (trackedInventory.Count > 0)
         {
-            var reserved = await ReservedUnitsAsync(_db, affiliateId, contactEmail, contactPhone);
+            // Sin crear al cliente: acá todavía se está validando, el pedido puede no aceptarse.
+            var excludeCustomerId = (await _customers.FindCustomerAsync(affiliateId, contactPhone, contactEmail))?.Id;
+            var reserved = await ReservedUnitsAsync(_db, affiliateId, excludeCustomerId);
 
             foreach (var inv in trackedInventory)
             {
@@ -1083,13 +1083,10 @@ public class OrderService : IOrderService
 
     private static string? Clean(string? v) => string.IsNullOrWhiteSpace(v) ? null : v.Trim();
 
-    /// <summary>
-    /// Enlaza el pedido con un Customer del negocio (mismo criterio que reservas y citas: dedup
-    /// por teléfono; si no hay teléfono, por correo). Sin teléfono ni correo no se crea nada —
-    /// no hay cómo reconocer al cliente la próxima vez.
-    /// </summary>
-    /// <summary>Cliente (Customers) de una cuenta de tienda: se busca por el correo verificado de la cuenta y, si no
-    /// existe, se crea con el nombre de su empresa. Null si la cuenta no tiene correo (cae al enlace normal).</summary>
+    /// <summary>Cliente (Customers) de una cuenta de tienda. Se resuelve con la llave de contacto de la
+    /// CUENTA (su correo verificado y su teléfono), no con lo que el cliente escribió en el formulario del
+    /// pedido — así quien ya compró como invitado con ese mismo teléfono conserva su historial al abrir
+    /// cuenta, en vez de quedar partido en dos registros. Null si la cuenta no tiene correo (cae al enlace normal).</summary>
     private async Task<Maalca.Domain.Entities.Customer?> LinkStoreAccountCustomerAsync(Guid affiliateId, Guid storeCustomerId)
     {
         var account = await _db.StoreCustomers.AsNoTracking()
@@ -1099,54 +1096,15 @@ public class OrderService : IOrderService
         var email = Clean(account?.Email)?.ToLowerInvariant();
         if (account is null || email is null) return null;
 
-        var customer = await _db.Customers.FirstOrDefaultAsync(c =>
-            c.AffiliateId == affiliateId && c.Email != null && c.Email.ToLower() == email);
-        if (customer is not null)
-        {
-            if (customer.Phone is null && Clean(account.Phone) is { } phone) customer.Phone = phone;
-            return customer;
-        }
-
-        customer = new Maalca.Domain.Entities.Customer
-        {
-            AffiliateId = affiliateId,
-            Name = Clean(account.BusinessName) ?? Clean(account.Name) ?? email,
-            Email = email,
-            Phone = Clean(account.Phone),
-        };
-        _db.Customers.Add(customer);
-        await _db.SaveChangesAsync();
-        return customer;
+        return await _customers.ResolveOrCreateCustomerAsync(affiliateId,
+            Clean(account.BusinessName) ?? Clean(account.Name) ?? email, Clean(account.Phone), email);
     }
 
-    private async Task<Maalca.Domain.Entities.Customer?> LinkCustomerAsync(Guid affiliateId, string? name, string? phone, string? email)
-    {
-        phone = Clean(phone);
-        email = Clean(email);
-        name = Clean(name);
-        if (phone is null && email is null) return null;
-
-        var customer = await _db.Customers.FirstOrDefaultAsync(c =>
-            c.AffiliateId == affiliateId &&
-            ((phone != null && c.Phone == phone) || (email != null && c.Email == email)));
-        if (customer is not null)
-        {
-            if (customer.Email is null && email is not null) customer.Email = email;
-            if (customer.Phone is null && phone is not null) customer.Phone = phone;
-            return customer;
-        }
-
-        customer = new Maalca.Domain.Entities.Customer
-        {
-            AffiliateId = affiliateId,
-            Name = name ?? phone ?? email!,
-            Phone = phone,
-            Email = email,
-        };
-        _db.Customers.Add(customer);
-        await _db.SaveChangesAsync();
-        return customer;
-    }
+    /// <summary>Cliente del pedido, reconocido por su llave de contacto. La implementación vive en
+    /// CustomerService (tarea #244): este servicio tenía una copia que comparaba el teléfono como
+    /// texto, así que el mismo cliente se duplicaba al escribirlo con otro formato.</summary>
+    private Task<Maalca.Domain.Entities.Customer?> LinkCustomerAsync(Guid affiliateId, string? name, string? phone, string? email)
+        => _customers.ResolveOrCreateCustomerAsync(affiliateId, name ?? string.Empty, phone, email);
 
     private const string PayAtTableMethod = "PayAtTable";
     internal const string PayAtPickupMethod = "PayAtPickup";
@@ -1163,21 +1121,17 @@ public class OrderService : IOrderService
         var email = request.CustomerEmail?.Trim();
         if (string.IsNullOrEmpty(name) || (string.IsNullOrEmpty(phone) && string.IsNullOrEmpty(email)))
             throw new ArgumentException("Para pedir y pagar al recoger necesitamos tu nombre y un teléfono o correo.");
+        // "El mismo cliente" es una LLAVE, no un teléfono escrito: se resuelve una vez (SIN crearlo,
+        // el pedido todavía puede rechazarse) y tanto el anti-spam como las reglas de confianza
+        // cuentan por Orders.CustomerId. Antes bastaba cambiar el formato del número para esquivar
+        // el límite de pendientes y para aparecer como cliente nuevo sin "No vino" encima.
+        var known = await _customers.FindCustomerAsync(affiliate.Id, phone, email);
         var since = DateTime.UtcNow.AddHours(-3);
-        var pending = await _db.Orders.CountAsync(o =>
-            o.AffiliateId == affiliate.Id && o.PaymentMethod == PayAtPickupMethod && o.Status == OrderStatus.Pending &&
-            o.CreatedAt >= since &&
-            ((phone != null && phone != "" && o.CustomerPhone == phone) || (email != null && email != "" && o.CustomerEmail == email)));
+        var pending = known is null ? 0 : await _db.Orders.CountAsync(o =>
+            o.AffiliateId == affiliate.Id && o.CustomerId == known.Id &&
+            o.PaymentMethod == PayAtPickupMethod && o.Status == OrderStatus.Pending && o.CreatedAt >= since);
         if (pending >= MaxPendingPickupPerContact)
             throw new ArgumentException("Ya tienes pedidos pendientes. Espera a que el negocio los confirme.");
-
-        // Reglas de confianza: mismo criterio de identificación que LinkCustomerAsync (teléfono, o
-        // correo si no hay teléfono), pero SIN crear el cliente todavía.
-        var cPhone = Clean(phone);
-        var cEmail = Clean(email);
-        var known = await _db.Customers.FirstOrDefaultAsync(c =>
-            c.AffiliateId == affiliate.Id &&
-            ((cPhone != null && c.Phone == cPhone) || (cEmail != null && c.Email == cEmail)));
         var stripeReady = _payments.For(affiliate).IsReady(affiliate);
         var blocked = PickupTrustDecision(affiliate.PickupNoShowRequiresCard, affiliate.PickupNewCustomerLimit,
             known?.TotalVisits ?? 0, known?.NoShows ?? 0, total, stripeReady,

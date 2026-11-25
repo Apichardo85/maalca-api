@@ -32,6 +32,15 @@ public interface ICustomerService
     /// </summary>
     Task<Customer?> ResolveOrCreateCustomerAsync(Guid affiliateId, string name, string? phone);
 
+    /// <summary>Igual que el anterior pero reconociendo también por correo (lo usan los pedidos del
+    /// storefront, donde el cliente puede dejar teléfono, correo o los dos).</summary>
+    Task<Customer?> ResolveOrCreateCustomerAsync(Guid affiliateId, string name, string? phone, string? email);
+
+    /// <summary>Busca al cliente por su llave de contacto SIN crearlo (null = todavía no es cliente
+    /// de este negocio). Lo usan las validaciones que necesitan saber si ya lo conocen ANTES de
+    /// aceptar el pedido, para no dejar un cliente a medias si el pedido se rechaza.</summary>
+    Task<Customer?> FindCustomerAsync(Guid affiliateId, string? phone, string? email);
+
     /// <summary>Tarea #245 — incrementa TotalVisits y marca LastVisit cuando una cita/fila/reserva
     /// vinculada a este cliente llega a "Completed"/"completed".</summary>
     Task MarkVisitCompletedAsync(Guid customerId);

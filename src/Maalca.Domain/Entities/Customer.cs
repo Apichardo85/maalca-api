@@ -15,6 +15,17 @@ public class Customer : AuditableEntity
     /// Pedidos para recoger que nunca vino a buscar (marcados "No vino" en la Estación/Pedidos).
     public int NoShows { get; set; } = 0;
 
+    // ── Llave de contacto: con esto se reconoce al cliente ────────────────────
+    // Las calcula Postgres (columnas generadas STORED, migración AddCustomerContactKeys) a partir
+    // de Phone/Email. Al ser generadas, NINGÚN camino de escritura puede dejarlas desincronizadas:
+    // ni un servicio nuevo que olvide normalizar, ni un UPDATE a mano en la base.
+    // Phone/Email siguen guardando lo que escribió el cliente, tal cual, para mostrárselo.
+    // La MISMA regla en C# está en ContactKey (Maalca.Domain.Common), para armar la búsqueda.
+    /// <summary>Últimos 10 dígitos del teléfono, sin formato. Null si no hay teléfono.</summary>
+    public string? PhoneKey { get; private set; }
+    /// <summary>Correo en minúsculas, sin espacios al borde. Null si no hay correo.</summary>
+    public string? EmailKey { get; private set; }
+
     // ── Clientes por contrato (Nueva Era / agua y hielo, Fase 1) ─────────────
     // Todos opcionales: un cliente sin ellos se comporta exactamente como antes.
     /// <summary>RNC o cédula del cliente (para la factura fiscal futura).</summary>

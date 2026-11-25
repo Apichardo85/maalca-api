@@ -623,6 +623,16 @@ public class AppDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired();
+            // Llave de contacto: la calcula Postgres (ver migración AddCustomerContactKeys). Acá solo
+            // se declara como generada para que EF nunca intente escribirla y la lea de vuelta después
+            // de insertar. El SQL es idéntico al de la migración: si cambia uno, cambian los dos.
+            entity.Property(e => e.PhoneKey).HasComputedColumnSql(
+                @"CASE WHEN length(regexp_replace(COALESCE(""Phone"", ''), '[^0-9]', '', 'g')) >= 10 THEN right(regexp_replace(COALESCE(""Phone"", ''), '[^0-9]', '', 'g'), 10) ELSE NULLIF(regexp_replace(COALESCE(""Phone"", ''), '[^0-9]', '', 'g'), '') END",
+                stored: true);
+            entity.Property(e => e.EmailKey).HasComputedColumnSql(
+                @"NULLIF(lower(btrim(COALESCE(""Email"", ''))), '')", stored: true);
+            entity.HasIndex(e => new { e.AffiliateId, e.PhoneKey });
+            entity.HasIndex(e => new { e.AffiliateId, e.EmailKey });
             entity.Property(e => e.GpsLat).HasPrecision(9, 6);
             entity.Property(e => e.GpsLng).HasPrecision(9, 6);
             entity.Property(e => e.BillingCycle).HasMaxLength(20);

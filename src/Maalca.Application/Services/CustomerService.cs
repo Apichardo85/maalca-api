@@ -1,5 +1,6 @@
 using Maalca.Application.Common.DTOs;
 using Maalca.Application.Common.Interfaces;
+using Maalca.Domain.Common;
 using Maalca.Domain.Entities;
 using Maalca.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -103,25 +104,68 @@ public class CustomerService : ICustomerService
 
     // Tarea #244 — centraliza el patrón que antes vivía inline en
     // PublicBookingService.CreatePublicAppointmentAsync (dedup por AffiliateId+Phone). Ahora lo
-    // reusan Queue/Reservations/Proposals para que las visitas de un mismo cliente, sin importar
-    // por qué módulo entraron, se acumulen en el mismo registro.
-    public async Task<Customer?> ResolveOrCreateCustomerAsync(Guid affiliateId, string name, string? phone)
-    {
-        if (string.IsNullOrWhiteSpace(phone)) return null;
+    // reusan Queue/Reservations/Proposals y también Pedidos (OrderService.LinkCustomerAsync, que
+    // antes tenía su propia copia de esta lógica), para que las visitas de un mismo cliente, sin
+    // importar por qué módulo entraron, se acumulen en el MISMO registro.
+    //
+    // El dedup va por LLAVE de contacto (Customer.PhoneKey/EmailKey, columnas generadas), no por el
+    // texto que escribió el cliente: antes "(908) 560-9244" y "9085609244" creaban dos clientes.
+    public Task<Customer?> ResolveOrCreateCustomerAsync(Guid affiliateId, string name, string? phone)
+        => ResolveOrCreateCustomerAsync(affiliateId, name, phone, null);
 
-        var customer = await _context.Customers.FirstOrDefaultAsync(c =>
-            c.AffiliateId == affiliateId && c.Phone == phone);
-        if (customer is not null) return customer;
+    public async Task<Customer?> ResolveOrCreateCustomerAsync(Guid affiliateId, string name, string? phone, string? email)
+    {
+        var phoneKey = ContactKey.Phone(phone);
+        var emailKey = ContactKey.Email(email);
+        // Sin teléfono ni correo no hay forma de reconocerlo la próxima vez: no se crea nada.
+        if (phoneKey is null && emailKey is null) return null;
+
+        var customer = await FindByKeyAsync(affiliateId, phoneKey, emailKey);
+        if (customer is not null)
+        {
+            // Completa el dato que falte: quien antes solo dejó teléfono y ahora deja correo queda
+            // con los dos, y la próxima vez lo reconocemos por cualquiera de ellos.
+            var changed = false;
+            if (string.IsNullOrWhiteSpace(customer.Phone) && !string.IsNullOrWhiteSpace(phone)) { customer.Phone = phone.Trim(); changed = true; }
+            if (string.IsNullOrWhiteSpace(customer.Email) && !string.IsNullOrWhiteSpace(email)) { customer.Email = email.Trim(); changed = true; }
+            if (changed)
+            {
+                customer.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+            }
+            return customer;
+        }
 
         customer = new Customer
         {
             AffiliateId = affiliateId,
-            Name = string.IsNullOrWhiteSpace(name) ? phone : name,
-            Phone = phone,
+            Name = string.IsNullOrWhiteSpace(name) ? (phone?.Trim() ?? email!.Trim()) : name.Trim(),
+            Phone = string.IsNullOrWhiteSpace(phone) ? null : phone.Trim(),
+            Email = string.IsNullOrWhiteSpace(email) ? null : email.Trim(),
         };
         _context.Customers.Add(customer);
         await _context.SaveChangesAsync();
         return customer;
+    }
+
+    public Task<Customer?> FindCustomerAsync(Guid affiliateId, string? phone, string? email)
+        => FindByKeyAsync(affiliateId, ContactKey.Phone(phone), ContactKey.Email(email));
+
+    /// <summary>
+    /// Dos búsquedas por índice en vez de un OR: el teléfono manda. Si un registro coincide por
+    /// teléfono y otro distinto por correo, gana el del teléfono — es la llave que usan todos los
+    /// módulos desde la tarea #244, y así el resultado no depende del orden de las filas.
+    /// </summary>
+    private async Task<Customer?> FindByKeyAsync(Guid affiliateId, string? phoneKey, string? emailKey)
+    {
+        if (phoneKey is not null)
+        {
+            var byPhone = await _context.Customers.FirstOrDefaultAsync(c => c.AffiliateId == affiliateId && c.PhoneKey == phoneKey);
+            if (byPhone is not null) return byPhone;
+        }
+        if (emailKey is not null)
+            return await _context.Customers.FirstOrDefaultAsync(c => c.AffiliateId == affiliateId && c.EmailKey == emailKey);
+        return null;
     }
 
     // Tarea #245 — sin esto, TotalVisits/LastVisit se quedan en 0/null para siempre y la
