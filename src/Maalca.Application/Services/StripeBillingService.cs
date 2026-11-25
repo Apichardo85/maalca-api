@@ -54,6 +54,8 @@ public class StripeBillingService : IStripeBillingService
     public const string NoSubscriptionMessage = "Todavía no tienes pantallas contratadas: contrátalas primero.";
     public const int MaxExtraScreens = 20;
 
+    private const int StripeLookupKeysPerRequest = 10;
+
     private static readonly string[] AllLookupKeys =
     {
         GrowthMonthly, GrowthYearly, ProfessionalMonthly, ProfessionalYearly,
@@ -147,16 +149,24 @@ public class StripeBillingService : IStripeBillingService
             if (_prices is not null && _pricesKey == apiKey && DateTime.UtcNow - _pricesAt < TimeSpan.FromMinutes(10))
                 return _prices;
 
-            var list = await new PriceService().ListAsync(new PriceListOptions
+            // Stripe acepta como máximo 10 lookup_keys por consulta ("Array lookup_keys exceeded
+            // maximum 10 allowed elements"): se piden en lotes para que agregar precios no rompa el cobro.
+            var service = new PriceService();
+            var data = new List<Price>();
+            foreach (var batch in AllLookupKeys.Chunk(StripeLookupKeysPerRequest))
             {
-                LookupKeys = AllLookupKeys.ToList(),
-                Active = true,
-                Limit = 20,
-                // Los precios escalonados (pantalla extra) no traen UnitAmount: los montos viven
-                // en Tiers, que Stripe solo devuelve si se piden expandidos.
-                Expand = new List<string> { "data.tiers" },
-            });
-            var found = list.Data.Where(p => !string.IsNullOrEmpty(p.LookupKey))
+                var list = await service.ListAsync(new PriceListOptions
+                {
+                    LookupKeys = batch.ToList(),
+                    Active = true,
+                    Limit = 100,
+                    // Los precios escalonados (pantallas) no traen UnitAmount: los montos viven
+                    // en Tiers, que Stripe solo devuelve si se piden expandidos.
+                    Expand = new List<string> { "data.tiers" },
+                });
+                data.AddRange(list.Data);
+            }
+            var found = data.Where(p => !string.IsNullOrEmpty(p.LookupKey))
                 .GroupBy(p => p.LookupKey).ToDictionary(g => g.Key, g => g.First());
             // Una lista vacía no se cachea: si los precios se crean después, se ven al instante.
             if (found.Count == 0) return found;
