@@ -101,6 +101,7 @@ public class AppDbContext : DbContext
     public DbSet<Vehicle> Vehicles => Set<Vehicle>();
     public DbSet<DeliveryRoute> DeliveryRoutes => Set<DeliveryRoute>();
     public DbSet<RouteStop> RouteStops => Set<RouteStop>();
+    public DbSet<RouteStopLine> RouteStopLines => Set<RouteStopLine>();
     public DbSet<RouteTemplate> RouteTemplates => Set<RouteTemplate>();
     public DbSet<RouteTemplateStop> RouteTemplateStops => Set<RouteTemplateStop>();
     public DbSet<VehiclePosition> VehiclePositions => Set<VehiclePosition>();
@@ -1479,6 +1480,22 @@ public class AppDbContext : DbContext
                   .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(e => new { e.RouteId, e.SortOrder });
             entity.HasIndex(e => new { e.AffiliateId, e.CustomerId });
+            entity.Property(e => e.Kind).HasMaxLength(20).HasDefaultValue(RouteStopKinds.Delivery);
+            entity.Property(e => e.SubjectType).HasMaxLength(40);
+            entity.HasIndex(e => new { e.AffiliateId, e.SubjectType, e.SubjectId });
+        });
+
+        modelBuilder.Entity<RouteStopLine>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Description).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Quantity).HasPrecision(18, 2);
+            entity.Property(e => e.Notes).HasMaxLength(500);
+            entity.HasOne(e => e.RouteStop)
+                  .WithMany(s => s.PlannedLines)
+                  .HasForeignKey(e => e.RouteStopId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.RouteStopId, e.SortOrder });
         });
 
         modelBuilder.Entity<Delivery>(entity =>
