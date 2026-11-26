@@ -35,6 +35,10 @@ public static class ModuleCatalog
         new ModuleDefinition("vehicles", "Vehículos", "Vehicles",
             "Tu inventario de vehículos y los interesados en cada uno.", "Your vehicle inventory and the leads on each one.",
             new[] { "dealer" }, null, PlanTier.Starter),
+        // Creator (autor): obras, capítulos y lectura gratis (Work / WorkChapter, ver Work.cs).
+        new ModuleDefinition("works", "Obras", "Works",
+            "Tus libros, capítulos y lo que se puede leer gratis en tu página.", "Your books, chapters and what can be read free on your page.",
+            new[] { "creator", "publisher" }, null, PlanTier.Starter),
         new ModuleDefinition("page", "Página", "Page",
             "Tu página pública en maalca.com.", "Your public page on maalca.com.",
             null, null, PlanTier.Starter),

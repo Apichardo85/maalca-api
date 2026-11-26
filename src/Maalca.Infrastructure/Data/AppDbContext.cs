@@ -67,6 +67,8 @@ public class AppDbContext : DbContext
     public DbSet<Donation> Donations => Set<Donation>();
     public DbSet<CommunityProgram> CommunityPrograms => Set<CommunityProgram>();
     public DbSet<VehicleListing> VehicleListings => Set<VehicleListing>();
+    public DbSet<Work> Works => Set<Work>();
+    public DbSet<WorkChapter> WorkChapters => Set<WorkChapter>();
     public DbSet<VehicleLead> VehicleLeads => Set<VehicleLead>();
     public DbSet<PriceList> PriceLists => Set<PriceList>();
     public DbSet<PriceListItem> PriceListItems => Set<PriceListItem>();
@@ -831,6 +833,40 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => new { e.AffiliateId, e.Year });
             entity.HasIndex(e => new { e.AffiliateId, e.Price });
             entity.HasIndex(e => new { e.AffiliateId, e.BodyType });
+        });
+
+        // Work / WorkChapter -- obras de un negocio Creator (autor) y sus capítulos. Ver Work.cs.
+        modelBuilder.Entity<Work>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.TitleEn).HasMaxLength(200);
+            entity.Property(e => e.Subtitle).HasMaxLength(200);
+            entity.Property(e => e.Slug).IsRequired().HasMaxLength(120);
+            entity.Property(e => e.Kind).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.Status).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.CoverUrl).HasMaxLength(500);
+            entity.Property(e => e.Isbn).HasMaxLength(20);
+            entity.Property(e => e.Imprint).HasMaxLength(120);
+            entity.Property(e => e.ContentNotice).HasMaxLength(300);
+            entity.Property(e => e.ReadingAccess).IsRequired().HasMaxLength(20);
+            entity.HasOne(e => e.Affiliate)
+                  .WithMany()
+                  .HasForeignKey(e => e.AffiliateId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.AffiliateId, e.Slug }).IsUnique();
+            entity.HasIndex(e => new { e.AffiliateId, e.Status, e.SortOrder });
+        });
+
+        modelBuilder.Entity<WorkChapter>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
+            entity.HasOne(e => e.Work)
+                  .WithMany(w => w.Chapters)
+                  .HasForeignKey(e => e.WorkId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.WorkId, e.Number }).IsUnique();
         });
 
         // VehicleLead -- interesados de la vitrina Dealer (financiamiento, trade-in, prueba de manejo, consulta).

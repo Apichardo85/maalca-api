@@ -134,6 +134,7 @@ builder.Services.AddScoped<IScreenWallService, ScreenWallService>();
 builder.Services.AddScoped<IPublicBookingService, PublicBookingService>();
 // Orquestador de agentes: servicios, conectores y worker de la cola (ver Endpoints/AgentEndpoints.cs).
 Maalca.Api.Endpoints.AgentEndpoints.AddAgentServices(builder.Services);
+Maalca.Api.Endpoints.WorkEndpoints.AddWorkServices(builder.Services);
 // Facturación electrónica (e-CF / DGII vía Alanube): proveedor, servicio y worker (ver Endpoints/FiscalEndpoints.cs).
 Maalca.Api.Endpoints.FiscalEndpoints.AddFiscalServices(builder.Services);
 
@@ -6059,6 +6060,7 @@ using (var scope = app.Services.CreateScope())
 
 // Orquestador de agentes — endpoints de /api/ops/agents (ver Endpoints/AgentEndpoints.cs).
 Maalca.Api.Endpoints.AgentEndpoints.MapAgentEndpoints(app);
+Maalca.Api.Endpoints.WorkEndpoints.MapWorkEndpoints(app);
 Maalca.Api.Endpoints.FiscalEndpoints.MapFiscalEndpoints(app);
 
 app.MapGet("/health", () =>
