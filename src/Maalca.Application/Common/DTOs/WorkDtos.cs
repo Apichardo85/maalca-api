@@ -33,7 +33,9 @@ public record WorkDto(
     DateTime CreatedAt,
     DateTime? UpdatedAt,
     // Versión de la ficha. El dashboard la devuelve como ExpectedRevision al guardar.
-    int Revision
+    int Revision,
+    // Portada en inglés (opcional; sin ella, en inglés se usa CoverUrl).
+    string? CoverUrlEn = null
 );
 
 /// <summary>Obra + índice de capítulos (sin texto). El texto se pide capítulo por capítulo.</summary>
@@ -66,7 +68,8 @@ public record UpsertWorkRequest(
     int SortOrder,
     // Revisión que tenía la ficha cuando se abrió el formulario. Si ya no coincide, 409 (no se pisa).
     // null = sin comprobación (clientes viejos durante el despliegue).
-    int? ExpectedRevision = null
+    int? ExpectedRevision = null,
+    string? CoverUrlEn = null
 );
 
 /// <summary>Number null en el alta = va al final.</summary>
@@ -101,7 +104,9 @@ public record PublicWorkSummaryDto(
     DateTime? FreeUntil,
     IReadOnlyList<WorkBuyLinkDto> BuyLinks,
     // true = la obra se abre para los miembros del club (ReadingAccess "members").
-    bool ForMembers
+    bool ForMembers,
+    // Portada de la edición en inglés (null = usar CoverUrl).
+    string? CoverUrlEn = null
 );
 
 /// <summary>Una obra publicada para el sitemap de la web: dónde vive y cuándo cambió.</summary>

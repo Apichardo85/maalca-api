@@ -853,6 +853,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Kind).IsRequired().HasMaxLength(20);
             entity.Property(e => e.Status).IsRequired().HasMaxLength(20);
             entity.Property(e => e.CoverUrl).HasMaxLength(500);
+            entity.Property(e => e.CoverUrlEn).HasMaxLength(500);
             entity.Property(e => e.Isbn).HasMaxLength(20);
             entity.Property(e => e.Imprint).HasMaxLength(120);
             entity.Property(e => e.ContentNotice).HasMaxLength(300);

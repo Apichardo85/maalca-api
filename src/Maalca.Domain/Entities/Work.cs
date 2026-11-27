@@ -37,6 +37,8 @@ public class Work : AuditableEntity
     public string? Synopsis { get; set; }
     public string? SynopsisEn { get; set; }
     public string? CoverUrl { get; set; }
+    /// <summary>Portada de la edición en inglés (título y sello en inglés). Opcional: sin ella, en inglés se usa CoverUrl.</summary>
+    public string? CoverUrlEn { get; set; }
 
     public int? Year { get; set; }
     public string? Isbn { get; set; }

@@ -523,6 +523,7 @@ public class WorkService : IWorkService
         w.Synopsis = HtmlScrub.SanitizeRichText(Clip(r.Synopsis, 20_000));
         w.SynopsisEn = HtmlScrub.SanitizeRichText(Clip(r.SynopsisEn, 20_000));
         w.CoverUrl = HttpUrl(Clip(r.CoverUrl, 500));
+        w.CoverUrlEn = HttpUrl(Clip(r.CoverUrlEn, 500));
         w.Year = r.Year;
         w.Isbn = Clip(r.Isbn, 20);
         w.Imprint = Clip(r.Imprint, 120);
@@ -565,7 +566,7 @@ public class WorkService : IWorkService
             w.Id, w.Title, w.TitleEn, w.Subtitle, w.Slug, w.Kind, w.Status, w.Synopsis, w.SynopsisEn, w.CoverUrl,
             w.Year, w.Isbn, w.Imprint, w.ContentNotice, JsonArrayField.Parse<WorkBuyLinkDto>(w.BuyLinks),
             w.ReadingAccess, w.FreeFrom, w.FreeUntil, w.Featured, w.SortOrder, w.IsDemo,
-            s.Count, s.Words, w.CreatedAt, w.UpdatedAt, w.Revision);
+            s.Count, s.Words, w.CreatedAt, w.UpdatedAt, w.Revision, w.CoverUrlEn);
     }
 
     private static PublicWorkSummaryDto ToPublicSummary(Work w, int chapterCount, int readableCount, DateTime now)
@@ -576,7 +577,7 @@ public class WorkService : IWorkService
             w.Year, w.Imprint, w.Featured, chapterCount, readable,
             InFreeWindow(w, now) ? w.FreeUntil : null,
             JsonArrayField.Parse<WorkBuyLinkDto>(w.BuyLinks),
-            w.ReadingAccess == "members");
+            w.ReadingAccess == "members", w.CoverUrlEn);
     }
 
     private static WorkChapterDto ToChapterDto(WorkChapter c)
