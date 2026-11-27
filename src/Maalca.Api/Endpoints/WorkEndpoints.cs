@@ -1,5 +1,6 @@
 using Maalca.Application.Common.DTOs;
 using Maalca.Application.Common.Interfaces;
+using Maalca.Application.Creator;
 using Maalca.Application.Services;
 
 namespace Maalca.Api.Endpoints;
@@ -92,6 +93,16 @@ public static class WorkEndpoints
             return await svc.DeleteChapterAsync(id, workId, chapterId) ? Results.NoContent() : Results.NotFound();
         }).RequireAuthorization();
 
+        app.MapPost("/api/affiliates/{id:guid}/works/{workId:guid}/chapters-import", async (HttpContext ctx, IWorkService svc, Guid id, Guid workId, ImportWorkChaptersRequest request) =>
+        {
+            if (!CanWrite(ctx, id)) return Results.Forbid();
+            return await Guard(async () =>
+            {
+                var result = await svc.ImportChaptersAsync(id, workId, request);
+                return result is null ? Results.NotFound() : Results.Ok(result);
+            });
+        }).RequireAuthorization();
+
         app.MapPut("/api/affiliates/{id:guid}/works/{workId:guid}/chapters-order", async (HttpContext ctx, IWorkService svc, Guid id, Guid workId, ReorderWorkChaptersRequest request) =>
         {
             if (!CanWrite(ctx, id)) return Results.Forbid();
@@ -105,29 +116,49 @@ public static class WorkEndpoints
         // ── Página pública del autor ──────────────────────────────────────────────
         // Borradores y capítulos cerrados nunca salen. Caché corta: la ventana gratis abre y cierra sola.
 
-        app.MapGet("/api/public/affiliates/{slug}/works", async (IWorkService svc, string slug, HttpResponse response) =>
+        // Con X-Reader-Token (sesión del club) la respuesta depende del lector: nunca se cachea en público.
+
+        app.MapGet("/api/public/affiliates/{slug}/works", async (HttpContext ctx, IWorkService svc, IReaderClubService club, string slug) =>
         {
-            var result = await svc.GetPublicAsync(slug);
+            var reader = await ReaderAsync(ctx, club, slug);
+            var result = await svc.GetPublicAsync(slug, reader);
             if (result is null) return NotFound();
-            response.Headers.CacheControl = "public, max-age=60";
+            Cache(ctx, reader);
             return Results.Ok(result);
         }).AllowAnonymous();
 
-        app.MapGet("/api/public/affiliates/{slug}/works/{workSlug}", async (IWorkService svc, string slug, string workSlug, HttpResponse response) =>
+        app.MapGet("/api/public/affiliates/{slug}/works/{workSlug}", async (HttpContext ctx, IWorkService svc, IReaderClubService club, string slug, string workSlug) =>
         {
-            var result = await svc.GetPublicWorkAsync(slug, workSlug);
+            var reader = await ReaderAsync(ctx, club, slug);
+            var result = await svc.GetPublicWorkAsync(slug, workSlug, reader);
             if (result is null) return NotFound();
-            response.Headers.CacheControl = "public, max-age=60";
+            Cache(ctx, reader);
             return Results.Ok(result);
         }).AllowAnonymous();
 
-        app.MapGet("/api/public/affiliates/{slug}/works/{workSlug}/chapters/{number:int}", async (IWorkService svc, string slug, string workSlug, int number, HttpResponse response) =>
+        app.MapGet("/api/public/affiliates/{slug}/works/{workSlug}/chapters/{number:int}", async (HttpContext ctx, IWorkService svc, IReaderClubService club, string slug, string workSlug, int number) =>
         {
-            var result = await svc.GetPublicChapterAsync(slug, workSlug, number);
+            var reader = await ReaderAsync(ctx, club, slug);
+            var result = await svc.GetPublicChapterAsync(slug, workSlug, number, reader);
             if (result is null) return NotFound();
-            response.Headers.CacheControl = "public, max-age=60";
+            Cache(ctx, reader);
             return Results.Ok(result);
         }).AllowAnonymous();
+    }
+
+    internal static string? ReaderToken(HttpContext ctx)
+        => ctx.Request.Headers.TryGetValue("X-Reader-Token", out var v) && !string.IsNullOrWhiteSpace(v) ? v.ToString() : null;
+
+    private static async Task<ReaderContext?> ReaderAsync(HttpContext ctx, IReaderClubService club, string slug)
+    {
+        var token = ReaderToken(ctx);
+        return token is null ? null : await club.ResolveAsync(slug, token);
+    }
+
+    private static void Cache(HttpContext ctx, ReaderContext? reader)
+    {
+        var personal = reader is not null || ReaderToken(ctx) is not null;
+        ctx.Response.Headers.CacheControl = personal ? "private, no-store" : "public, max-age=60";
     }
 
     private static bool IsActiveAffiliate(HttpContext ctx, Guid id)

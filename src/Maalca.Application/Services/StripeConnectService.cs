@@ -29,9 +29,12 @@ public class StripeConnectService : IStripeConnectService
     private readonly IOrderService _orderService;
     private readonly IInvoiceService _invoiceService;
     private readonly IDonationService _donationService;
+    private readonly Maalca.Application.Creator.IReaderClubService _readerClub;
 
-    public StripeConnectService(AppDbContext db, IOrderService orderService, IInvoiceService invoiceService, IDonationService donationService)
+    public StripeConnectService(AppDbContext db, IOrderService orderService, IInvoiceService invoiceService, IDonationService donationService,
+        Maalca.Application.Creator.IReaderClubService readerClub)
     {
+        _readerClub = readerClub;
         _db = db;
         _orderService = orderService;
         _invoiceService = invoiceService;
@@ -173,6 +176,9 @@ public class StripeConnectService : IStripeConnectService
             await _invoiceService.ConfirmFromWebhookAsync(session.Id, session.PaymentIntentId);
             await _donationService.ConfirmFromWebhookAsync(session.Id, session.PaymentIntentId);
         }
+
+        // Membresía del club de lectores (suscripción en la cuenta del autor). No-op para cualquier otro evento.
+        await _readerClub.HandleStripeEventAsync(stripeEvent);
 
         _db.StripeProcessedEvents.Add(new StripeProcessedEvent
         {

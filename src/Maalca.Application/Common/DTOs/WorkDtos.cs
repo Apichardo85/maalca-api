@@ -67,6 +67,9 @@ public record UpsertWorkRequest(
 /// <summary>Number null en el alta = va al final.</summary>
 public record UpsertWorkChapterRequest(int? Number, string Title, string? ContentHtml, bool IsSample);
 
+/// <summary>Importar un manuscrito ya partido en capítulos. Mode "append" (al final) o "replace" (borra los actuales).</summary>
+public record ImportWorkChaptersRequest(string? Mode, IReadOnlyList<UpsertWorkChapterRequest> Chapters);
+
 /// <summary>Nuevo orden de lectura: todos los ids de capítulos de la obra, en orden.</summary>
 public record ReorderWorkChaptersRequest(IReadOnlyList<Guid> ChapterIds);
 
@@ -91,16 +94,21 @@ public record PublicWorkSummaryDto(
     string ReadableNow,
     // Solo si hay una ventana de lectura gratis abierta ahora: cuándo cierra.
     DateTime? FreeUntil,
-    IReadOnlyList<WorkBuyLinkDto> BuyLinks
+    IReadOnlyList<WorkBuyLinkDto> BuyLinks,
+    // true = la obra se abre para los miembros del club (ReadingAccess "members").
+    bool ForMembers
 );
 
-public record PublicWorkChapterRefDto(int Number, string Title, int WordCount, bool Readable);
+// MembersOnly: cerrado ahora, pero un miembro del club lo puede leer.
+public record PublicWorkChapterRefDto(int Number, string Title, int WordCount, bool Readable, bool MembersOnly);
 
 public record PublicWorkDto(
     PublicWorkSummaryDto Work,
     string? Isbn,
     string? ContentNotice,
-    IReadOnlyList<PublicWorkChapterRefDto> Chapters
+    IReadOnlyList<PublicWorkChapterRefDto> Chapters,
+    // Último capítulo que abrió este lector (solo con sesión de lector).
+    int? ContinueAt
 );
 
 /// <summary>Un capítulo legible. Solo existe si el servidor decidió que se puede leer ahora.</summary>

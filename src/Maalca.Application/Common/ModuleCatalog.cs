@@ -39,6 +39,10 @@ public static class ModuleCatalog
         new ModuleDefinition("works", "Obras", "Works",
             "Tus libros, capítulos y lo que se puede leer gratis en tu página.", "Your books, chapters and what can be read free on your page.",
             new[] { "creator", "publisher" }, null, PlanTier.Starter),
+        // Club de lectores del autor: cartas por correo, membresía y lectores (ver Application/Creator/ReaderClub.cs).
+        new ModuleDefinition("readers", "Lectores", "Readers",
+            "Quién te lee: cartas por correo, membresía mensual y tu lista de lectores.", "Who reads you: letters by email, monthly membership and your reader list.",
+            new[] { "creator", "publisher" }, null, PlanTier.Starter),
         new ModuleDefinition("page", "Página", "Page",
             "Tu página pública en maalca.com.", "Your public page on maalca.com.",
             null, null, PlanTier.Starter),

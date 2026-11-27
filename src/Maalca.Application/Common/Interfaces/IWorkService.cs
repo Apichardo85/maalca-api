@@ -1,4 +1,5 @@
 using Maalca.Application.Common.DTOs;
+using Maalca.Application.Creator;
 
 namespace Maalca.Application.Common.Interfaces;
 
@@ -17,10 +18,12 @@ public interface IWorkService
     Task<WorkChapterDto?> UpdateChapterAsync(Guid affiliateId, Guid workId, Guid chapterId, UpsertWorkChapterRequest request);
     Task<bool> DeleteChapterAsync(Guid affiliateId, Guid workId, Guid chapterId);
     Task<IReadOnlyList<WorkChapterRefDto>?> ReorderChaptersAsync(Guid affiliateId, Guid workId, ReorderWorkChaptersRequest request);
+    Task<IReadOnlyList<WorkChapterRefDto>?> ImportChaptersAsync(Guid affiliateId, Guid workId, ImportWorkChaptersRequest request);
 
     // Página pública. null = el autor no existe, no está publicado, no es Creator/Publisher,
     // o la obra/capítulo no existe, es borrador o no se puede leer ahora.
-    Task<List<PublicWorkSummaryDto>?> GetPublicAsync(string affiliateSlug);
-    Task<PublicWorkDto?> GetPublicWorkAsync(string affiliateSlug, string workSlug);
-    Task<PublicWorkChapterDto?> GetPublicChapterAsync(string affiliateSlug, string workSlug, int number);
+    // reader: lector con sesión (club). null = visitante; IsMember abre lo de ReadingAccess "members".
+    Task<List<PublicWorkSummaryDto>?> GetPublicAsync(string affiliateSlug, ReaderContext? reader = null);
+    Task<PublicWorkDto?> GetPublicWorkAsync(string affiliateSlug, string workSlug, ReaderContext? reader = null);
+    Task<PublicWorkChapterDto?> GetPublicChapterAsync(string affiliateSlug, string workSlug, int number, ReaderContext? reader = null);
 }

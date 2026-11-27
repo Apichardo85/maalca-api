@@ -69,6 +69,11 @@ public class AppDbContext : DbContext
     public DbSet<VehicleListing> VehicleListings => Set<VehicleListing>();
     public DbSet<Work> Works => Set<Work>();
     public DbSet<WorkChapter> WorkChapters => Set<WorkChapter>();
+    public DbSet<Reader> Readers => Set<Reader>();
+    public DbSet<ReaderClubSettings> ReaderClubSettings => Set<ReaderClubSettings>();
+    public DbSet<ReaderLetter> ReaderLetters => Set<ReaderLetter>();
+    public DbSet<ReaderLetterDelivery> ReaderLetterDeliveries => Set<ReaderLetterDelivery>();
+    public DbSet<ReaderProgress> ReaderProgress => Set<ReaderProgress>();
     public DbSet<VehicleLead> VehicleLeads => Set<VehicleLead>();
     public DbSet<PriceList> PriceLists => Set<PriceList>();
     public DbSet<PriceListItem> PriceListItems => Set<PriceListItem>();
@@ -867,6 +872,68 @@ public class AppDbContext : DbContext
                   .HasForeignKey(e => e.WorkId)
                   .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.WorkId, e.Number }).IsUnique();
+        });
+
+        // Club de lectores del autor (Reader*, ver ReaderClub.cs).
+        modelBuilder.Entity<Reader>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Email).IsRequired().HasMaxLength(254);
+            entity.Property(e => e.Name).HasMaxLength(120);
+            entity.Property(e => e.Language).IsRequired().HasMaxLength(5);
+            entity.Property(e => e.Status).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.Source).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.StripeCustomerId).HasMaxLength(100);
+            entity.Property(e => e.StripeSubscriptionId).HasMaxLength(100);
+            entity.Property(e => e.MembershipStatus).IsRequired().HasMaxLength(20);
+            entity.HasOne(e => e.Affiliate).WithMany().HasForeignKey(e => e.AffiliateId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Work>().WithMany().HasForeignKey(e => e.SourceWorkId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(e => new { e.AffiliateId, e.Email }).IsUnique();
+            entity.HasIndex(e => e.ConfirmToken).IsUnique();
+            entity.HasIndex(e => e.StripeSubscriptionId);
+        });
+
+        modelBuilder.Entity<ReaderClubSettings>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.LettersPitch).HasMaxLength(600);
+            entity.Property(e => e.LettersPitchEn).HasMaxLength(600);
+            entity.Property(e => e.MembershipMonthlyPrice).HasPrecision(10, 2);
+            entity.Property(e => e.MembershipCurrency).IsRequired().HasMaxLength(3);
+            entity.Property(e => e.StripeProductId).HasMaxLength(100);
+            entity.Property(e => e.StripePriceId).HasMaxLength(100);
+            entity.Property(e => e.StripePriceAmount).HasPrecision(10, 2);
+            entity.Property(e => e.StripePriceCurrency).HasMaxLength(3);
+            entity.HasOne(e => e.Affiliate).WithMany().HasForeignKey(e => e.AffiliateId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => e.AffiliateId).IsUnique();
+        });
+
+        modelBuilder.Entity<ReaderLetter>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Subject).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Audience).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.Status).IsRequired().HasMaxLength(20);
+            entity.HasOne(e => e.Affiliate).WithMany().HasForeignKey(e => e.AffiliateId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.AffiliateId, e.CreatedAt });
+            entity.HasIndex(e => e.Status);
+        });
+
+        modelBuilder.Entity<ReaderLetterDelivery>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Error).HasMaxLength(300);
+            entity.HasOne(e => e.Letter).WithMany().HasForeignKey(e => e.LetterId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Reader).WithMany().HasForeignKey(e => e.ReaderId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.LetterId, e.ReaderId }).IsUnique();
+        });
+
+        modelBuilder.Entity<ReaderProgress>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasOne(e => e.Reader).WithMany().HasForeignKey(e => e.ReaderId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Work).WithMany().HasForeignKey(e => e.WorkId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.ReaderId, e.WorkId }).IsUnique();
         });
 
         // VehicleLead -- interesados de la vitrina Dealer (financiamiento, trade-in, prueba de manejo, consulta).

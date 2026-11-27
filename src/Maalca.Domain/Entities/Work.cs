@@ -12,6 +12,7 @@ namespace Maalca.Domain.Entities;
 /// Lectura en el sitio (la "biblioteca"):
 ///   - ReadingAccess = "free"   → todos los capítulos se leen gratis.
 ///   - ReadingAccess = "sample" → solo los capítulos marcados IsSample.
+///   - ReadingAccess = "members" → las muestras para todos; la obra completa para los miembros del club (ReaderClub.cs).
 ///   - ReadingAccess = "closed" → ninguno (solo ficha y enlaces de compra).
 ///   - FreeFrom/FreeUntil abren la obra completa por un tiempo, sin importar ReadingAccess
 ///     ("dejar leer gratis por momentos"). Cerrada la ventana, vuelve a su ReadingAccess.
@@ -47,7 +48,7 @@ public class Work : AuditableEntity
     /// <summary>JSON array de { label, url } — dónde comprarla (Amazon, librería, tienda propia).</summary>
     public string? BuyLinks { get; set; }
 
-    /// <summary>"free" | "sample" | "closed".</summary>
+    /// <summary>"free" | "sample" | "members" | "closed".</summary>
     public string ReadingAccess { get; set; } = "sample";
     public DateTime? FreeFrom { get; set; }
     public DateTime? FreeUntil { get; set; }

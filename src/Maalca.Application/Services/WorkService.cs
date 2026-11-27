@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using Maalca.Application.Common;
 using Maalca.Application.Common.DTOs;
 using Maalca.Application.Common.Interfaces;
+using Maalca.Application.Creator;
 using Maalca.Domain.Entities;
 using Maalca.Domain.Enums;
 using Maalca.Infrastructure.Data;
@@ -20,7 +21,7 @@ public class WorkService : IWorkService
 {
     private static readonly string[] Kinds = { "novel", "poetry", "stories", "micro", "essay", "chronicle", "other" };
     private static readonly string[] Statuses = { "draft", "published" };
-    private static readonly string[] Accesses = { "free", "sample", "closed" };
+    private static readonly string[] Accesses = { "free", "sample", "members", "closed" };
     private static readonly BusinessType[] AuthorTypes = { BusinessType.Creator, BusinessType.Publisher };
 
     private const int MaxBuyLinks = 8;
@@ -176,9 +177,44 @@ public class WorkService : IWorkService
         return await ChapterRefsAsync(workId);
     }
 
+    public async Task<IReadOnlyList<WorkChapterRefDto>?> ImportChaptersAsync(Guid affiliateId, Guid workId, ImportWorkChaptersRequest r)
+    {
+        if (!await OwnsWorkAsync(affiliateId, workId)) return null;
+        var incoming = r.Chapters ?? Array.Empty<UpsertWorkChapterRequest>();
+        if (incoming.Count == 0) throw new ArgumentException("El manuscrito no trae capítulos.");
+        var replace = string.Equals(r.Mode, "replace", StringComparison.OrdinalIgnoreCase);
+
+        var existing = await _db.WorkChapters.Where(c => c.WorkId == workId).ToListAsync();
+        var start = replace || existing.Count == 0 ? 1 : existing.Max(c => c.Number) + 1;
+        if ((replace ? 0 : existing.Count) + incoming.Count > MaxChapters)
+            throw new ArgumentException($"Obra: máximo {MaxChapters} capítulos.");
+
+        // Validar todo antes de tocar nada: un capítulo malo no deja la obra a medias.
+        var now = DateTime.UtcNow;
+        var built = incoming.Select((c, i) =>
+        {
+            var ch = new WorkChapter { Id = Guid.NewGuid(), WorkId = workId, Number = start + i, CreatedAt = now };
+            try { ApplyChapter(ch, c); }
+            catch (ArgumentException ex) { throw new ArgumentException($"Capítulo {i + 1}: {ex.Message}"); }
+            return ch;
+        }).ToList();
+
+        await using var tx = await _db.Database.BeginTransactionAsync();
+        if (replace && existing.Count > 0)
+        {
+            _db.WorkChapters.RemoveRange(existing);
+            await _db.SaveChangesAsync();
+        }
+        _db.WorkChapters.AddRange(built);
+        await TouchWorkAsync(workId);
+        await _db.SaveChangesAsync();
+        await tx.CommitAsync();
+        return await ChapterRefsAsync(workId);
+    }
+
     // ── Página pública ───────────────────────────────────────────────────────────
 
-    public async Task<List<PublicWorkSummaryDto>?> GetPublicAsync(string affiliateSlug)
+    public async Task<List<PublicWorkSummaryDto>?> GetPublicAsync(string affiliateSlug, ReaderContext? reader = null)
     {
         var affiliateId = await PublicAuthorIdAsync(affiliateSlug);
         if (affiliateId is null) return null;
@@ -197,12 +233,12 @@ public class WorkService : IWorkService
         return works.Select(w =>
         {
             var mine = chapters.Where(c => c.WorkId == w.Id).ToList();
-            var readable = mine.Count(c => CanRead(w, c.IsSample, now));
+            var readable = mine.Count(c => CanRead(w, c.IsSample, now, reader?.IsMember == true));
             return ToPublicSummary(w, mine.Count, readable, now);
         }).ToList();
     }
 
-    public async Task<PublicWorkDto?> GetPublicWorkAsync(string affiliateSlug, string workSlug)
+    public async Task<PublicWorkDto?> GetPublicWorkAsync(string affiliateSlug, string workSlug, ReaderContext? reader = null)
     {
         var work = await PublicWorkAsync(affiliateSlug, workSlug);
         if (work is null) return null;
@@ -213,28 +249,45 @@ public class WorkService : IWorkService
             .OrderBy(c => c.Number)
             .Select(c => new { c.Number, c.Title, c.WordCount, c.IsSample })
             .ToListAsync();
+        var member = reader?.IsMember == true;
         var refs = chapters
-            .Select(c => new PublicWorkChapterRefDto(c.Number, c.Title, c.WordCount, CanRead(work, c.IsSample, now)))
+            .Select(c =>
+            {
+                var readable = CanRead(work, c.IsSample, now, member);
+                var forMembers = !readable && work.ReadingAccess == "members";
+                return new PublicWorkChapterRefDto(c.Number, c.Title, c.WordCount, readable, forMembers);
+            })
             .ToList();
         var summary = ToPublicSummary(work, refs.Count, refs.Count(c => c.Readable), now);
-        return new PublicWorkDto(summary, work.Isbn, work.ContentNotice, refs);
+
+        int? continueAt = null;
+        if (reader is not null)
+        {
+            var at = await _db.ReaderProgress.AsNoTracking()
+                .Where(p => p.ReaderId == reader.ReaderId && p.WorkId == work.Id)
+                .Select(p => (int?)p.ChapterNumber)
+                .FirstOrDefaultAsync();
+            if (at is int n && refs.Any(c => c.Number == n && c.Readable)) continueAt = n;
+        }
+        return new PublicWorkDto(summary, work.Isbn, work.ContentNotice, refs, continueAt);
     }
 
-    public async Task<PublicWorkChapterDto?> GetPublicChapterAsync(string affiliateSlug, string workSlug, int number)
+    public async Task<PublicWorkChapterDto?> GetPublicChapterAsync(string affiliateSlug, string workSlug, int number, ReaderContext? reader = null)
     {
         var work = await PublicWorkAsync(affiliateSlug, workSlug);
         if (work is null) return null;
 
         var ch = await _db.WorkChapters.AsNoTracking().FirstOrDefaultAsync(c => c.WorkId == work.Id && c.Number == number);
         var now = DateTime.UtcNow;
-        if (ch is null || !CanRead(work, ch.IsSample, now)) return null;
+        var member = reader?.IsMember == true;
+        if (ch is null || !CanRead(work, ch.IsSample, now, member)) return null;
 
         // Anterior/siguiente solo entre los que también se pueden leer: el lector nunca lleva a un 404.
         var readableNumbers = (await _db.WorkChapters.AsNoTracking()
                 .Where(c => c.WorkId == work.Id)
                 .Select(c => new { c.Number, c.IsSample })
                 .ToListAsync())
-            .Where(c => CanRead(work, c.IsSample, now))
+            .Where(c => CanRead(work, c.IsSample, now, member))
             .Select(c => c.Number)
             .OrderBy(n => n)
             .ToList();
@@ -246,11 +299,15 @@ public class WorkService : IWorkService
 
     // ── Regla de lectura ─────────────────────────────────────────────────────────
 
-    /// <summary>La ventana gratis abre todo; fuera de ella manda ReadingAccess.</summary>
-    public static bool CanRead(Work w, bool isSample, DateTime nowUtc)
+    /// <summary>
+    /// La ventana gratis abre todo; fuera de ella manda ReadingAccess. "members" deja leer las muestras
+    /// a cualquiera y la obra completa a los miembros activos del club (ReaderClubService.IsMember).
+    /// </summary>
+    public static bool CanRead(Work w, bool isSample, DateTime nowUtc, bool isMember = false)
         => InFreeWindow(w, nowUtc)
            || w.ReadingAccess == "free"
-           || (w.ReadingAccess == "sample" && isSample);
+           || ((w.ReadingAccess == "sample" || w.ReadingAccess == "members") && isSample)
+           || (w.ReadingAccess == "members" && isMember);
 
     private static bool InFreeWindow(Work w, DateTime nowUtc)
         => (w.FreeFrom.HasValue || w.FreeUntil.HasValue)
@@ -416,7 +473,8 @@ public class WorkService : IWorkService
             w.Id, w.Slug, w.Title, w.TitleEn, w.Subtitle, w.Kind, w.Synopsis, w.SynopsisEn, w.CoverUrl,
             w.Year, w.Imprint, w.Featured, chapterCount, readable,
             InFreeWindow(w, now) ? w.FreeUntil : null,
-            JsonArrayField.Parse<WorkBuyLinkDto>(w.BuyLinks));
+            JsonArrayField.Parse<WorkBuyLinkDto>(w.BuyLinks),
+            w.ReadingAccess == "members");
     }
 
     private static WorkChapterDto ToChapterDto(WorkChapter c)
