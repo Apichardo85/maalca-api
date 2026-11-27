@@ -105,10 +105,12 @@ public record PublicWorkSummaryDto(
 );
 
 /// <summary>Una obra publicada para el sitemap de la web: dónde vive y cuándo cambió.</summary>
-public record SitemapWorkDto(string AffiliateSlug, string WorkSlug, DateTime LastModified);
+// Languages: idiomas en que se puede leer ("es" siempre; otros si hay capítulos traducidos y publicados).
+public record SitemapWorkDto(string AffiliateSlug, string WorkSlug, DateTime LastModified, IReadOnlyList<string>? Languages = null);
 
 // MembersOnly: cerrado ahora, pero un miembro del club lo puede leer.
-public record PublicWorkChapterRefDto(int Number, string Title, int WordCount, bool Readable, bool MembersOnly);
+// Translated: con ?lang, este capítulo tiene traducción publicada en ese idioma (Title ya viene traducido).
+public record PublicWorkChapterRefDto(int Number, string Title, int WordCount, bool Readable, bool MembersOnly, bool Translated = false);
 
 public record PublicWorkDto(
     PublicWorkSummaryDto Work,
@@ -116,7 +118,13 @@ public record PublicWorkDto(
     string? ContentNotice,
     IReadOnlyList<PublicWorkChapterRefDto> Chapters,
     // Último capítulo que abrió este lector (solo con sesión de lector).
-    int? ContinueAt
+    int? ContinueAt,
+    // Idioma en que viene el índice ("es" si no se pidió otro o no hay traducción publicada).
+    string Language = "es",
+    // Idiomas en que se puede leer esta obra ("es" + los que tienen algún capítulo traducido y publicado).
+    IReadOnlyList<string>? Languages = null,
+    // Crédito de la traducción en ese idioma (null = la web pone el texto por defecto).
+    string? TranslationCredit = null
 );
 
 /// <summary>Un capítulo legible. Solo existe si el servidor decidió que se puede leer ahora.</summary>
@@ -129,5 +137,12 @@ public record PublicWorkChapterDto(
     int WordCount,
     int? PrevNumber,
     int? NextNumber,
-    string? ContentNotice
+    string? ContentNotice,
+    // Idioma del texto que viene ("es" = el original).
+    string Language = "es",
+    // Idiomas en que se puede leer este capítulo.
+    IReadOnlyList<string>? Languages = null,
+    string? TranslationCredit = null,
+    // Título original, cuando el texto viene traducido.
+    string? OriginalTitle = null
 );

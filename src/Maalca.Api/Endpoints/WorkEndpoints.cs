@@ -202,19 +202,20 @@ public static class WorkEndpoints
             return Results.Ok(result);
         }).AllowAnonymous();
 
-        app.MapGet("/api/public/affiliates/{slug}/works/{workSlug}", async (HttpContext ctx, IWorkService svc, IReaderClubService club, string slug, string workSlug) =>
+        // ?lang=en: títulos y texto traducidos donde haya traducción publicada; el resto, en español.
+        app.MapGet("/api/public/affiliates/{slug}/works/{workSlug}", async (HttpContext ctx, IWorkService svc, IReaderClubService club, string slug, string workSlug, string? lang) =>
         {
             var reader = await ReaderAsync(ctx, club, slug);
-            var result = await svc.GetPublicWorkAsync(slug, workSlug, reader);
+            var result = await svc.GetPublicWorkAsync(slug, workSlug, reader, lang);
             if (result is null) return NotFound();
             Cache(ctx, reader);
             return Results.Ok(result);
         }).AllowAnonymous();
 
-        app.MapGet("/api/public/affiliates/{slug}/works/{workSlug}/chapters/{number:int}", async (HttpContext ctx, IWorkService svc, IReaderClubService club, string slug, string workSlug, int number) =>
+        app.MapGet("/api/public/affiliates/{slug}/works/{workSlug}/chapters/{number:int}", async (HttpContext ctx, IWorkService svc, IReaderClubService club, string slug, string workSlug, int number, string? lang) =>
         {
             var reader = await ReaderAsync(ctx, club, slug);
-            var result = await svc.GetPublicChapterAsync(slug, workSlug, number, reader);
+            var result = await svc.GetPublicChapterAsync(slug, workSlug, number, reader, lang);
             if (result is null) return NotFound();
             Cache(ctx, reader);
             return Results.Ok(result);

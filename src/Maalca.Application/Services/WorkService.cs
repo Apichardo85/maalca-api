@@ -251,16 +251,17 @@ public class WorkService : IWorkService
         }).ToList();
     }
 
-    public async Task<PublicWorkDto?> GetPublicWorkAsync(string affiliateSlug, string workSlug, ReaderContext? reader = null)
+    public async Task<PublicWorkDto?> GetPublicWorkAsync(string affiliateSlug, string workSlug, ReaderContext? reader = null, string? language = null)
     {
         var work = await PublicWorkAsync(affiliateSlug, workSlug);
         if (work is null) return null;
+        var tr = await PublishedTranslationsAsync(work.Id, language);
 
         var now = DateTime.UtcNow;
         var chapters = await _db.WorkChapters.AsNoTracking()
             .Where(c => c.WorkId == work.Id)
             .OrderBy(c => c.Number)
-            .Select(c => new { c.Number, c.Title, c.WordCount, c.IsSample })
+            .Select(c => new { c.Id, c.Number, c.Title, c.WordCount, c.IsSample })
             .ToListAsync();
         var member = reader?.IsMember == true;
         var refs = chapters
@@ -268,7 +269,8 @@ public class WorkService : IWorkService
             {
                 var readable = CanRead(work, c.IsSample, now, member);
                 var forMembers = !readable && work.ReadingAccess == "members";
-                return new PublicWorkChapterRefDto(c.Number, c.Title, c.WordCount, readable, forMembers);
+                var t = tr.ForChapter(c.Id);
+                return new PublicWorkChapterRefDto(c.Number, t?.Title ?? c.Title, t?.WordCount ?? c.WordCount, readable, forMembers, t is not null);
             })
             .ToList();
         var summary = ToPublicSummary(work, refs.Count, refs.Count(c => c.Readable), now);
@@ -282,10 +284,11 @@ public class WorkService : IWorkService
                 .FirstOrDefaultAsync();
             if (at is int n && refs.Any(c => c.Number == n && c.Readable)) continueAt = n;
         }
-        return new PublicWorkDto(summary, work.Isbn, work.ContentNotice, refs, continueAt);
+        return new PublicWorkDto(summary, work.Isbn, work.ContentNotice, refs, continueAt,
+            tr.Active ? tr.Language! : "es", tr.Languages, tr.Active ? tr.Credit : null);
     }
 
-    public async Task<PublicWorkChapterDto?> GetPublicChapterAsync(string affiliateSlug, string workSlug, int number, ReaderContext? reader = null)
+    public async Task<PublicWorkChapterDto?> GetPublicChapterAsync(string affiliateSlug, string workSlug, int number, ReaderContext? reader = null, string? language = null)
     {
         var work = await PublicWorkAsync(affiliateSlug, workSlug);
         if (work is null) return null;
@@ -307,17 +310,43 @@ public class WorkService : IWorkService
         int? prev = readableNumbers.Where(n => n < number).Select(n => (int?)n).LastOrDefault();
         int? next = readableNumbers.Where(n => n > number).Select(n => (int?)n).FirstOrDefault();
 
-        return new PublicWorkChapterDto(work.Slug, work.Title, ch.Number, ch.Title, ch.ContentHtml, ch.WordCount, prev, next, work.ContentNotice);
+        // Traducido solo si este capítulo tiene traducción publicada en ese idioma; si no, el original.
+        var tr = await PublishedTranslationsAsync(work.Id, language);
+        var langs = tr.LanguagesFor(ch.Id);
+        var t = tr.ForChapter(ch.Id);
+        if (t is not null)
+        {
+            var workTitle = tr.Language == "en" && !string.IsNullOrWhiteSpace(work.TitleEn) ? work.TitleEn! : work.Title;
+            return new PublicWorkChapterDto(work.Slug, workTitle, ch.Number, t.Title, t.ContentHtml, t.WordCount, prev, next, work.ContentNotice,
+                tr.Language!, langs, tr.Credit, ch.Title);
+        }
+        return new PublicWorkChapterDto(work.Slug, work.Title, ch.Number, ch.Title, ch.ContentHtml, ch.WordCount, prev, next, work.ContentNotice,
+            "es", langs);
     }
 
     public async Task<List<SitemapWorkDto>> GetSitemapAsync()
-        => await _db.Works.AsNoTracking()
+    {
+        var works = await _db.Works.AsNoTracking()
             .Where(w => w.Status == "published" && !w.IsDemo
                         && w.Affiliate!.Published && AuthorTypes.Contains(w.Affiliate.BusinessType))
             .OrderBy(w => w.Affiliate!.Slug).ThenBy(w => w.SortOrder)
             .Take(5000)
-            .Select(w => new SitemapWorkDto(w.Affiliate!.Slug, w.Slug, w.UpdatedAt ?? w.CreatedAt))
+            .Select(w => new { w.Id, AffiliateSlug = w.Affiliate!.Slug, w.Slug, LastModified = w.UpdatedAt ?? w.CreatedAt })
             .ToListAsync();
+        var ids = works.Select(w => w.Id).ToList();
+        // Idiomas con algún capítulo traducido y publicado (para las URL alternas del sitemap).
+        var translated = (await _db.WorkChapterTranslations.AsNoTracking()
+                .Where(t => ids.Contains(t.WorkId) && t.Status == "published")
+                .Select(t => new { t.WorkId, t.Language })
+                .Distinct()
+                .ToListAsync())
+            .GroupBy(t => t.WorkId)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.Language).OrderBy(l => l).ToList());
+        return works.Select(w => new SitemapWorkDto(
+                w.AffiliateSlug, w.Slug, w.LastModified,
+                new[] { "es" }.Concat(translated.TryGetValue(w.Id, out var langs) ? langs : new List<string>()).ToList()))
+            .ToList();
+    }
 
     // ── Regla de lectura ─────────────────────────────────────────────────────────
 
@@ -335,6 +364,57 @@ public class WorkService : IWorkService
         => (w.FreeFrom.HasValue || w.FreeUntil.HasValue)
            && (!w.FreeFrom.HasValue || w.FreeFrom.Value <= nowUtc)
            && (!w.FreeUntil.HasValue || w.FreeUntil.Value > nowUtc);
+
+    // ── Traducciones publicadas (WorkTranslation.cs) ─────────────────────────────
+
+    private sealed record PublishedTranslation(Guid ChapterId, string Language, string Title, string? ContentHtml, int WordCount);
+
+    /// <summary>
+    /// Lo publicado de una obra en otros idiomas. Active = se pidió un idioma permitido y hay al menos un
+    /// capítulo publicado en él. Borradores y revisados sin publicar nunca salen.
+    /// </summary>
+    private sealed class PublishedTranslations
+    {
+        private readonly List<PublishedTranslation> _rows;
+        public string? Language { get; }
+        public string? Credit { get; }
+        public IReadOnlyList<string> Languages { get; }
+        public bool Active => Language is not null;
+
+        public PublishedTranslations(List<PublishedTranslation> rows, string? requested, string? credit)
+        {
+            _rows = rows;
+            Languages = new[] { "es" }.Concat(rows.Select(r => r.Language).Distinct().OrderBy(l => l)).ToList();
+            Language = requested is not null && rows.Any(r => r.Language == requested) ? requested : null;
+            Credit = Language is null ? null : credit;
+        }
+
+        public PublishedTranslation? ForChapter(Guid chapterId)
+            => Language is null ? null : _rows.FirstOrDefault(r => r.ChapterId == chapterId && r.Language == Language);
+
+        public IReadOnlyList<string> LanguagesFor(Guid chapterId)
+            => new[] { "es" }.Concat(_rows.Where(r => r.ChapterId == chapterId).Select(r => r.Language).Distinct().OrderBy(l => l)).ToList();
+    }
+
+    private async Task<PublishedTranslations> PublishedTranslationsAsync(Guid workId, string? language)
+    {
+        var requested = language?.Trim().ToLowerInvariant();
+        if (requested is null || !WorkTranslationService.Languages.ContainsKey(requested)) requested = null;
+
+        var rows = await _db.WorkChapterTranslations.AsNoTracking()
+            .Where(t => t.WorkId == workId && t.Status == "published" && t.Title != null)
+            .Select(t => new PublishedTranslation(t.ChapterId, t.Language, t.Title!, t.ContentHtml, t.WordCount))
+            .ToListAsync();
+        string? credit = null;
+        if (requested is not null)
+        {
+            credit = await _db.WorkTranslationSettings.AsNoTracking()
+                .Where(s => s.WorkId == workId && s.Language == requested)
+                .Select(s => s.Credit)
+                .FirstOrDefaultAsync();
+        }
+        return new PublishedTranslations(rows, requested, credit);
+    }
 
     // ── Apoyo ────────────────────────────────────────────────────────────────────
 

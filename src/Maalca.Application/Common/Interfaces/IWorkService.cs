@@ -24,8 +24,9 @@ public interface IWorkService
     // o la obra/capítulo no existe, es borrador o no se puede leer ahora.
     // reader: lector con sesión (club). null = visitante; IsMember abre lo de ReadingAccess "members".
     Task<List<PublicWorkSummaryDto>?> GetPublicAsync(string affiliateSlug, ReaderContext? reader = null);
-    Task<PublicWorkDto?> GetPublicWorkAsync(string affiliateSlug, string workSlug, ReaderContext? reader = null);
+    // language: "en" devuelve títulos y texto traducidos donde haya traducción publicada; el resto, en español.
+    Task<PublicWorkDto?> GetPublicWorkAsync(string affiliateSlug, string workSlug, ReaderContext? reader = null, string? language = null);
     /// <summary>Todas las obras publicadas de autores publicados (para el sitemap). Sin borradores.</summary>
     Task<List<SitemapWorkDto>> GetSitemapAsync();
-    Task<PublicWorkChapterDto?> GetPublicChapterAsync(string affiliateSlug, string workSlug, int number, ReaderContext? reader = null);
+    Task<PublicWorkChapterDto?> GetPublicChapterAsync(string affiliateSlug, string workSlug, int number, ReaderContext? reader = null, string? language = null);
 }
