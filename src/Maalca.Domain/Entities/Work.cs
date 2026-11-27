@@ -57,6 +57,13 @@ public class Work : AuditableEntity
     public int SortOrder { get; set; } = 0;
     public bool IsDemo { get; set; } = false;
 
+    /// <summary>
+    /// Versión de la ficha (concurrencia optimista). Sube solo al guardar la ficha (UpdateAsync), no al tocar
+    /// capítulos: así cargar poemas y luego guardar la ficha no da un falso conflicto. El dashboard manda la
+    /// que leyó (ExpectedRevision) y, si otro guardó en medio, el API responde 409 en vez de pisar sus cambios.
+    /// </summary>
+    public int Revision { get; set; } = 0;
+
     public Affiliate? Affiliate { get; set; }
     public List<WorkChapter> Chapters { get; set; } = new();
 }

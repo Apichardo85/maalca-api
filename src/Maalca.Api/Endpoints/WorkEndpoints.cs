@@ -1,3 +1,4 @@
+using Maalca.Application.Common;
 using Maalca.Application.Common.DTOs;
 using Maalca.Application.Common.Interfaces;
 using Maalca.Application.Creator;
@@ -181,5 +182,6 @@ public static class WorkEndpoints
     {
         try { return await action(); }
         catch (ArgumentException ex) { return Results.BadRequest(new { error = new { code = "INVALID_INPUT", message = ex.Message } }); }
+        catch (WorkConflictException ex) { return Results.Conflict(new { error = new { code = "STALE_WORK", message = ex.Message, currentRevision = ex.CurrentRevision } }); }
     }
 }

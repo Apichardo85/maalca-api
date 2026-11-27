@@ -855,6 +855,8 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Imprint).HasMaxLength(120);
             entity.Property(e => e.ContentNotice).HasMaxLength(300);
             entity.Property(e => e.ReadingAccess).IsRequired().HasMaxLength(20);
+            // Token de concurrencia: el UPDATE lleva WHERE "Revision" = <la leída>; si otro guardó en medio, no toca filas.
+            entity.Property(e => e.Revision).IsConcurrencyToken();
             entity.HasOne(e => e.Affiliate)
                   .WithMany()
                   .HasForeignKey(e => e.AffiliateId)

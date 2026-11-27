@@ -72,12 +72,25 @@ public class WorkService : IWorkService
     {
         var work = await _db.Works.FirstOrDefaultAsync(w => w.Id == workId && w.AffiliateId == affiliateId);
         if (work is null) return null;
+        // Concurrencia optimista: el formulario se abrió con otra versión → no pisar lo que otro guardó.
+        if (r.ExpectedRevision is int expected && expected != work.Revision)
+            throw new WorkConflictException(work.Revision);
         Apply(work, r);
         // El slug solo cambia si el dueño lo pide: cambiarlo rompe los enlaces que ya compartió.
         if (!string.IsNullOrWhiteSpace(r.Slug) && Slugify(r.Slug) != work.Slug)
             work.Slug = await UniqueSlugAsync(affiliateId, r.Slug, work.Title, work.Id);
         work.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync();
+        work.Revision++;
+        try
+        {
+            await _db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Otro guardado entró entre la lectura y el UPDATE (WHERE "Revision" = leída no tocó filas).
+            var current = await _db.Works.AsNoTracking().Where(w => w.Id == workId).Select(w => w.Revision).FirstOrDefaultAsync();
+            throw new WorkConflictException(current);
+        }
         return ToDto(work, await ChapterStatsAsync(new List<Guid> { work.Id }));
     }
 
@@ -472,7 +485,7 @@ public class WorkService : IWorkService
             w.Id, w.Title, w.TitleEn, w.Subtitle, w.Slug, w.Kind, w.Status, w.Synopsis, w.SynopsisEn, w.CoverUrl,
             w.Year, w.Isbn, w.Imprint, w.ContentNotice, JsonArrayField.Parse<WorkBuyLinkDto>(w.BuyLinks),
             w.ReadingAccess, w.FreeFrom, w.FreeUntil, w.Featured, w.SortOrder, w.IsDemo,
-            s.Count, s.Words, w.CreatedAt, w.UpdatedAt);
+            s.Count, s.Words, w.CreatedAt, w.UpdatedAt, w.Revision);
     }
 
     private static PublicWorkSummaryDto ToPublicSummary(Work w, int chapterCount, int readableCount, DateTime now)

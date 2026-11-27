@@ -31,7 +31,9 @@ public record WorkDto(
     int ChapterCount,
     int WordCount,
     DateTime CreatedAt,
-    DateTime? UpdatedAt
+    DateTime? UpdatedAt,
+    // Versión de la ficha. El dashboard la devuelve como ExpectedRevision al guardar.
+    int Revision
 );
 
 /// <summary>Obra + índice de capítulos (sin texto). El texto se pide capítulo por capítulo.</summary>
@@ -61,7 +63,10 @@ public record UpsertWorkRequest(
     DateTime? FreeFrom,
     DateTime? FreeUntil,
     bool Featured,
-    int SortOrder
+    int SortOrder,
+    // Revisión que tenía la ficha cuando se abrió el formulario. Si ya no coincide, 409 (no se pisa).
+    // null = sin comprobación (clientes viejos durante el despliegue).
+    int? ExpectedRevision = null
 );
 
 /// <summary>Number null en el alta = va al final.</summary>
