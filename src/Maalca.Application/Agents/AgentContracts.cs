@@ -32,7 +32,11 @@ public record ModelRequest(
     string SystemPrompt,
     IReadOnlyList<ModelMessage> Messages,
     IReadOnlyList<ModelToolSpec> Tools,
-    int MaxOutputTokens);
+    int MaxOutputTokens,
+    // Cachea el prompt del sistema en el proveedor (se reutiliza entre llamadas con el mismo prefijo).
+    bool CacheSystemPrompt = false,
+    // Tareas de fondo que pueden tardar minutos (p. ej. traducir un capítulo): cliente HTTP con más margen.
+    bool LongRunning = false);
 
 public record ModelResponse(
     string? Text,

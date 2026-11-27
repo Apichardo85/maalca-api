@@ -16,6 +16,8 @@ public static class AgentEndpoints
         // El modelo puede tardar: más margen que el cliente HTTP por defecto de 100 s no hace falta,
         // pero se fija explícito para que no dependa de un cambio global.
         services.AddHttpClient(AnthropicModelClient.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(120));
+        // Trabajos de fondo (traducción de capítulos): un capítulo largo puede pasar de 2 minutos.
+        services.AddHttpClient(AnthropicModelClient.LongHttpClientName, c => c.Timeout = TimeSpan.FromMinutes(10));
 
         // Contrato de modelo
         services.AddScoped<IAgentModelClient, AnthropicModelClient>();

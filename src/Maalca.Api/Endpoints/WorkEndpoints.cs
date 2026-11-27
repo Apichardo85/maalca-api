@@ -15,6 +15,9 @@ public static class WorkEndpoints
     public static void AddWorkServices(IServiceCollection services)
     {
         services.AddScoped<IWorkService, WorkService>();
+        // Traducción de obras: el panel pide borradores, el worker los hace (WorkTranslationService).
+        services.AddScoped<IWorkTranslationService, WorkTranslationService>();
+        services.AddHostedService<Maalca.Api.Workers.WorkTranslationWorker>();
     }
 
     public static void MapWorkEndpoints(WebApplication app)
@@ -111,6 +114,70 @@ public static class WorkEndpoints
             {
                 var result = await svc.ReorderChaptersAsync(id, workId, request);
                 return result is null ? Results.NotFound() : Results.Ok(result);
+            });
+        }).RequireAuthorization();
+
+        // ── Traducción (WorkTranslationService) ───────────────────────────────────
+        // Mismas reglas: leer cualquiera del negocio; pedir borradores, editar y publicar solo dueño/gerente.
+        const string tr = "/api/affiliates/{id:guid}/works/{workId:guid}/translations/{lang}";
+
+        app.MapGet(tr, async (HttpContext ctx, IWorkTranslationService svc, Guid id, Guid workId, string lang) =>
+        {
+            if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+            return await Guard(async () =>
+            {
+                var result = await svc.GetOverviewAsync(id, workId, lang);
+                return result is null ? NotFound() : Results.Ok(result);
+            });
+        }).RequireAuthorization();
+
+        app.MapPut(tr + "/settings", async (HttpContext ctx, IWorkTranslationService svc, Guid id, Guid workId, string lang, UpsertWorkTranslationSettingsRequest request) =>
+        {
+            if (!CanWrite(ctx, id)) return Results.Forbid();
+            return await Guard(async () =>
+            {
+                var result = await svc.SaveSettingsAsync(id, workId, lang, request);
+                return result is null ? NotFound() : Results.Ok(result);
+            });
+        }).RequireAuthorization();
+
+        app.MapPost(tr + "/queue", async (HttpContext ctx, IWorkTranslationService svc, Guid id, Guid workId, string lang, QueueWorkTranslationRequest request) =>
+        {
+            if (!CanWrite(ctx, id)) return Results.Forbid();
+            return await Guard(async () =>
+            {
+                var result = await svc.QueueAsync(id, workId, lang, request);
+                return result is null ? NotFound() : Results.Ok(result);
+            });
+        }).RequireAuthorization();
+
+        app.MapGet(tr + "/chapters/{chapterId:guid}", async (HttpContext ctx, IWorkTranslationService svc, Guid id, Guid workId, string lang, Guid chapterId) =>
+        {
+            if (!IsActiveAffiliate(ctx, id)) return Results.Forbid();
+            return await Guard(async () =>
+            {
+                var result = await svc.GetChapterAsync(id, workId, lang, chapterId);
+                return result is null ? NotFound() : Results.Ok(result);
+            });
+        }).RequireAuthorization();
+
+        app.MapPut(tr + "/chapters/{chapterId:guid}", async (HttpContext ctx, IWorkTranslationService svc, Guid id, Guid workId, string lang, Guid chapterId, UpdateWorkChapterTranslationRequest request) =>
+        {
+            if (!CanWrite(ctx, id)) return Results.Forbid();
+            return await Guard(async () =>
+            {
+                var result = await svc.UpdateChapterAsync(id, workId, lang, chapterId, request);
+                return result is null ? NotFound() : Results.Ok(result);
+            });
+        }).RequireAuthorization();
+
+        app.MapPost(tr + "/chapters/{chapterId:guid}/publish", async (HttpContext ctx, IWorkTranslationService svc, Guid id, Guid workId, string lang, Guid chapterId, PublishWorkChapterTranslationRequest request) =>
+        {
+            if (!CanWrite(ctx, id)) return Results.Forbid();
+            return await Guard(async () =>
+            {
+                var result = await svc.SetPublishedAsync(id, workId, lang, chapterId, request.Published);
+                return result is null ? NotFound() : Results.Ok(result);
             });
         }).RequireAuthorization();
 

@@ -69,6 +69,8 @@ public class AppDbContext : DbContext
     public DbSet<VehicleListing> VehicleListings => Set<VehicleListing>();
     public DbSet<Work> Works => Set<Work>();
     public DbSet<WorkChapter> WorkChapters => Set<WorkChapter>();
+    public DbSet<WorkTranslationSettings> WorkTranslationSettings => Set<WorkTranslationSettings>();
+    public DbSet<WorkChapterTranslation> WorkChapterTranslations => Set<WorkChapterTranslation>();
     public DbSet<Reader> Readers => Set<Reader>();
     public DbSet<ReaderClubSettings> ReaderClubSettings => Set<ReaderClubSettings>();
     public DbSet<ReaderLetter> ReaderLetters => Set<ReaderLetter>();
@@ -874,6 +876,41 @@ public class AppDbContext : DbContext
                   .HasForeignKey(e => e.WorkId)
                   .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.WorkId, e.Number }).IsUnique();
+        });
+
+        // Traducciones de obras (WorkTranslation.cs). Llave con llave: obra y capítulo por FK.
+        modelBuilder.Entity<WorkTranslationSettings>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Language).IsRequired().HasMaxLength(5);
+            entity.Property(e => e.Credit).HasMaxLength(200);
+            entity.HasOne(e => e.Work)
+                  .WithMany()
+                  .HasForeignKey(e => e.WorkId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.WorkId, e.Language }).IsUnique();
+        });
+
+        modelBuilder.Entity<WorkChapterTranslation>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Language).IsRequired().HasMaxLength(5);
+            entity.Property(e => e.Title).HasMaxLength(200);
+            entity.Property(e => e.Status).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.SourceHash).HasMaxLength(64);
+            entity.Property(e => e.ModelId).HasMaxLength(100);
+            entity.Property(e => e.CostUsd).HasPrecision(10, 4);
+            entity.HasOne(e => e.Work)
+                  .WithMany()
+                  .HasForeignKey(e => e.WorkId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Chapter)
+                  .WithMany()
+                  .HasForeignKey(e => e.ChapterId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.ChapterId, e.Language }).IsUnique();
+            entity.HasIndex(e => new { e.WorkId, e.Language });
+            entity.HasIndex(e => e.Status);
         });
 
         // Club de lectores del autor (Reader*, ver ReaderClub.cs).

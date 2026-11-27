@@ -12,6 +12,8 @@ namespace Maalca.Application.Agents;
 public class AnthropicModelClient : IAgentModelClient
 {
     public const string HttpClientName = "agents-anthropic";
+    /// <summary>Mismo proveedor, sin el tope de 120 s: solo para trabajos de fondo (ModelRequest.LongRunning).</summary>
+    public const string LongHttpClientName = "agents-anthropic-long";
     private const string ApiVersion = "2023-06-01";
 
     private readonly IHttpClientFactory _http;
@@ -32,7 +34,16 @@ public class AnthropicModelClient : IAgentModelClient
             ["messages"] = BuildMessages(request.Messages),
         };
         if (!string.IsNullOrWhiteSpace(request.SystemPrompt))
-            body["system"] = request.SystemPrompt;
+        {
+            body["system"] = request.CacheSystemPrompt
+                ? new JsonArray(new JsonObject
+                {
+                    ["type"] = "text",
+                    ["text"] = request.SystemPrompt,
+                    ["cache_control"] = new JsonObject { ["type"] = "ephemeral" },
+                })
+                : request.SystemPrompt;
+        }
         if (request.Tools.Count > 0)
         {
             var tools = new JsonArray();
@@ -48,7 +59,7 @@ public class AnthropicModelClient : IAgentModelClient
             body["tools"] = tools;
         }
 
-        var client = _http.CreateClient(HttpClientName);
+        var client = _http.CreateClient(request.LongRunning ? LongHttpClientName : HttpClientName);
         using var message = new HttpRequestMessage(HttpMethod.Post, request.BaseUrl.TrimEnd('/') + "/v1/messages");
         message.Headers.Add("x-api-key", request.ApiKey);
         message.Headers.Add("anthropic-version", ApiVersion);
