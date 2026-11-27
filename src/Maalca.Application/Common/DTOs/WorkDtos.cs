@@ -99,6 +99,9 @@ public record PublicWorkSummaryDto(
     bool ForMembers
 );
 
+/// <summary>Una obra publicada para el sitemap de la web: dónde vive y cuándo cambió.</summary>
+public record SitemapWorkDto(string AffiliateSlug, string WorkSlug, DateTime LastModified);
+
 // MembersOnly: cerrado ahora, pero un miembro del club lo puede leer.
 public record PublicWorkChapterRefDto(int Number, string Title, int WordCount, bool Readable, bool MembersOnly);
 

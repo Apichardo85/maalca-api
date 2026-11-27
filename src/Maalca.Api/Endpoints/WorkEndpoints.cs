@@ -118,6 +118,13 @@ public static class WorkEndpoints
 
         // Con X-Reader-Token (sesión del club) la respuesta depende del lector: nunca se cachea en público.
 
+        // Sitemap de la web: obras publicadas de autores publicados. Público y cacheable (solo slugs y fechas).
+        app.MapGet("/api/public/sitemap/works", async (IWorkService svc, HttpResponse response) =>
+        {
+            response.Headers.CacheControl = "public, max-age=3600";
+            return Results.Ok(await svc.GetSitemapAsync());
+        }).AllowAnonymous();
+
         app.MapGet("/api/public/affiliates/{slug}/works", async (HttpContext ctx, IWorkService svc, IReaderClubService club, string slug) =>
         {
             var reader = await ReaderAsync(ctx, club, slug);

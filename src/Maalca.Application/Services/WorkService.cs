@@ -297,6 +297,15 @@ public class WorkService : IWorkService
         return new PublicWorkChapterDto(work.Slug, work.Title, ch.Number, ch.Title, ch.ContentHtml, ch.WordCount, prev, next, work.ContentNotice);
     }
 
+    public async Task<List<SitemapWorkDto>> GetSitemapAsync()
+        => await _db.Works.AsNoTracking()
+            .Where(w => w.Status == "published" && !w.IsDemo
+                        && w.Affiliate!.Published && AuthorTypes.Contains(w.Affiliate.BusinessType))
+            .OrderBy(w => w.Affiliate!.Slug).ThenBy(w => w.SortOrder)
+            .Take(5000)
+            .Select(w => new SitemapWorkDto(w.Affiliate!.Slug, w.Slug, w.UpdatedAt ?? w.CreatedAt))
+            .ToListAsync();
+
     // ── Regla de lectura ─────────────────────────────────────────────────────────
 
     /// <summary>

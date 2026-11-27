@@ -25,5 +25,7 @@ public interface IWorkService
     // reader: lector con sesión (club). null = visitante; IsMember abre lo de ReadingAccess "members".
     Task<List<PublicWorkSummaryDto>?> GetPublicAsync(string affiliateSlug, ReaderContext? reader = null);
     Task<PublicWorkDto?> GetPublicWorkAsync(string affiliateSlug, string workSlug, ReaderContext? reader = null);
+    /// <summary>Todas las obras publicadas de autores publicados (para el sitemap). Sin borradores.</summary>
+    Task<List<SitemapWorkDto>> GetSitemapAsync();
     Task<PublicWorkChapterDto?> GetPublicChapterAsync(string affiliateSlug, string workSlug, int number, ReaderContext? reader = null);
 }
