@@ -24,7 +24,8 @@ namespace Maalca.Application.Creator;
 
 public record ReaderContext(Guid ReaderId, bool IsMember);
 
-public record ReaderSubscribeRequest(string Email, string? Name, string? Language, string? WorkSlug, string? Source);
+// Website: campo trampa del formulario (oculto para personas). Si llega con texto, es un bot.
+public record ReaderSubscribeRequest(string Email, string? Name, string? Language, string? WorkSlug, string? Source, string? Website = null);
 public record ReaderEmailRequest(string Email, string? Language);
 public record ReaderTokenRequest(string Token);
 public record ReaderMeDto(string Email, string? Name, string Status, bool LettersOptIn, bool IsMember, string MembershipStatus, DateTime? MembershipCurrentPeriodEnd);
@@ -149,6 +150,8 @@ public sealed class ReaderClubService : IReaderClubService
 {
     private const string MembershipKind = "reader_membership";
     private const int LetterBatch = 50;
+    /// <summary>Altas sin confirmar por autor por hora. Por encima se responde igual pero no se crea nada ni sale correo.</summary>
+    private const int MaxPendingSignupsPerHour = 30;
     private static readonly TimeSpan MailCooldown = TimeSpan.FromSeconds(60);
     private static readonly BusinessType[] AuthorTypes = { BusinessType.Creator, BusinessType.Publisher };
     private static readonly Regex EmailRx = new(@"^[^\s@]+@[^\s@]+\.[^\s@]{2,}$", RegexOptions.Compiled);
@@ -195,6 +198,12 @@ public sealed class ReaderClubService : IReaderClubService
         if (!s.LettersEnabled) throw new ArgumentException("Este autor no está recibiendo suscripciones ahora.");
 
         var email = NormalizeEmail(r.Email);
+        // Bot: misma respuesta que a una persona, sin crear nada ni mandar correo (no se le avisa que lo vimos).
+        if (!string.IsNullOrWhiteSpace(r.Website))
+        {
+            _logger.LogInformation("[ReaderClub] alta descartada por campo trampa en {Slug}", slug);
+            return true;
+        }
         var lang = Lang(r.Language);
         Guid? workId = null;
         if (!string.IsNullOrWhiteSpace(r.WorkSlug))
@@ -207,6 +216,14 @@ public sealed class ReaderClubService : IReaderClubService
         var now = DateTime.UtcNow;
         if (reader is null)
         {
+            // Tope contra altas masivas con correos ajenos: protege la reputación del remitente (Resend).
+            var hourAgo = now.AddHours(-1);
+            var recentPending = await _db.Readers.CountAsync(x => x.AffiliateId == author.Id && x.Status == "pending" && x.CreatedAt > hourAgo);
+            if (recentPending >= MaxPendingSignupsPerHour)
+            {
+                _logger.LogWarning("[ReaderClub] tope de altas por hora alcanzado en {Slug}", slug);
+                return true;
+            }
             reader = new Reader
             {
                 Id = Guid.NewGuid(), AffiliateId = author.Id, Email = email, Name = Clip(r.Name, 120), Language = lang,
