@@ -35,7 +35,12 @@ public record WorkDto(
     // Versión de la ficha. El dashboard la devuelve como ExpectedRevision al guardar.
     int Revision,
     // Portada en inglés (opcional; sin ella, en inglés se usa CoverUrl).
-    string? CoverUrlEn = null
+    string? CoverUrlEn = null,
+    // Sello de MaalCa (por llave) y su nombre. Imprint (arriba) es el texto libre para sellos de fuera.
+    Guid? ImprintId = null,
+    string? ImprintName = null,
+    // Nombre del autor como sale en el libro (null = el del espacio).
+    string? Byline = null
 );
 
 /// <summary>Obra + índice de capítulos (sin texto). El texto se pide capítulo por capítulo.</summary>
@@ -69,7 +74,10 @@ public record UpsertWorkRequest(
     // Revisión que tenía la ficha cuando se abrió el formulario. Si ya no coincide, 409 (no se pisa).
     // null = sin comprobación (clientes viejos durante el despliegue).
     int? ExpectedRevision = null,
-    string? CoverUrlEn = null
+    string? CoverUrlEn = null,
+    // Sello de MaalCa: debe tener contrato activo con el autor (o ser el propio sello). null = ninguno.
+    Guid? ImprintId = null,
+    string? Byline = null
 );
 
 /// <summary>Number null en el alta = va al final.</summary>
@@ -106,7 +114,12 @@ public record PublicWorkSummaryDto(
     // true = la obra se abre para los miembros del club (ReadingAccess "members").
     bool ForMembers,
     // Portada de la edición en inglés (null = usar CoverUrl).
-    string? CoverUrlEn = null
+    string? CoverUrlEn = null,
+    // Imprint ya trae el nombre efectivo (sello de MaalCa por llave, o el texto libre). ImprintSlug: su página.
+    string? ImprintSlug = null,
+    // Autor de la obra: en el catálogo de un sello cada obra se lee en la página de su autor.
+    string? AuthorName = null,
+    string? AuthorSlug = null
 );
 
 /// <summary>Una obra publicada para el sitemap de la web: dónde vive y cuándo cambió.</summary>

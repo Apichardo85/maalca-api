@@ -333,13 +333,15 @@ public class PlatformAdminService : IPlatformAdminService
     }
 
     // Solo estos tienen plantilla pública real (src/components/public/templates/ en
-    // maalca-web) — Creator/Publisher/Professional existen en el enum de negocio pero todavía
-    // no tienen template, así que asignarlos desde acá dejaría la página en blanco/rota. Community
+    // maalca-web) — Professional existe en el enum de negocio pero todavía
+    // no tiene template, así que asignarlos desde acá dejaría la página en blanco/rota. Community
     // sí tiene plantilla (Community.tsx, comunidad/causas/eventos) desde 2026-09-25.
     private static readonly HashSet<BusinessType> BusinessTypesWithTemplate = new()
     {
         BusinessType.Restaurant, BusinessType.Barber, BusinessType.Service, BusinessType.Retail,
         BusinessType.Community, BusinessType.Dealer, BusinessType.Creator,
+        // Sello editorial: usa la plantilla de autor con el catálogo de sus autores (2026-11-28).
+        BusinessType.Publisher,
     };
 
     /// <summary>
@@ -358,7 +360,7 @@ public class PlatformAdminService : IPlatformAdminService
             || !BusinessTypesWithTemplate.Contains(parsedType))
         {
             throw new InvalidOperationException(
-                $"Tipo de negocio inválido: '{businessType}'. Debe ser Restaurant, Barber, Service, Retail o Community.");
+                $"Tipo de negocio inválido: '{businessType}'. Debe ser uno con plantilla: {string.Join(", ", BusinessTypesWithTemplate)}.");
         }
 
         affiliate.BusinessType = parsedType;

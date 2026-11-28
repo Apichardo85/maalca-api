@@ -34,8 +34,13 @@ public class WorkService : IWorkService
     private static readonly Regex Words = new(@"[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*", RegexOptions.Compiled);
 
     private readonly AppDbContext _db;
+    private readonly IImprintService _imprints;
 
-    public WorkService(AppDbContext db) => _db = db;
+    public WorkService(AppDbContext db, IImprintService imprints)
+    {
+        _db = db;
+        _imprints = imprints;
+    }
 
     // ── Dashboard: obras ─────────────────────────────────────────────────────────
 
@@ -46,7 +51,8 @@ public class WorkService : IWorkService
             .OrderBy(w => w.SortOrder).ThenByDescending(w => w.CreatedAt)
             .ToListAsync();
         var stats = await ChapterStatsAsync(works.Select(w => w.Id).ToList());
-        return works.Select(w => ToDto(w, stats)).ToList();
+        var imprints = await ImprintNamesAsync(works);
+        return works.Select(w => ToDto(w, stats, imprints)).ToList();
     }
 
     public async Task<WorkDetailDto?> GetDetailAsync(Guid affiliateId, Guid workId)
@@ -55,17 +61,18 @@ public class WorkService : IWorkService
         if (work is null) return null;
         var chapters = await ChapterRefsAsync(workId);
         var stats = new Dictionary<Guid, (int, int)> { [workId] = (chapters.Count, chapters.Sum(c => c.WordCount)) };
-        return new WorkDetailDto(ToDto(work, stats), chapters);
+        return new WorkDetailDto(ToDto(work, stats, await ImprintNamesAsync(new[] { work })), chapters);
     }
 
     public async Task<WorkDto> CreateAsync(Guid affiliateId, UpsertWorkRequest r)
     {
         var work = new Work { Id = Guid.NewGuid(), AffiliateId = affiliateId, CreatedAt = DateTime.UtcNow };
         Apply(work, r);
+        work.ImprintId = await ResolveImprintAsync(affiliateId, r.ImprintId);
         work.Slug = await UniqueSlugAsync(affiliateId, r.Slug, work.Title, null);
         _db.Works.Add(work);
         await _db.SaveChangesAsync();
-        return ToDto(work, new Dictionary<Guid, (int, int)>());
+        return ToDto(work, new Dictionary<Guid, (int, int)>(), await ImprintNamesAsync(new[] { work }));
     }
 
     public async Task<WorkDto?> UpdateAsync(Guid affiliateId, Guid workId, UpsertWorkRequest r)
@@ -76,6 +83,7 @@ public class WorkService : IWorkService
         if (r.ExpectedRevision is int expected && expected != work.Revision)
             throw new WorkConflictException(work.Revision);
         Apply(work, r);
+        work.ImprintId = await ResolveImprintAsync(affiliateId, r.ImprintId);
         // El slug solo cambia si el dueño lo pide: cambiarlo rompe los enlaces que ya compartió.
         if (!string.IsNullOrWhiteSpace(r.Slug) && Slugify(r.Slug) != work.Slug)
             work.Slug = await UniqueSlugAsync(affiliateId, r.Slug, work.Title, work.Id);
@@ -91,7 +99,7 @@ public class WorkService : IWorkService
             var current = await _db.Works.AsNoTracking().Where(w => w.Id == workId).Select(w => w.Revision).FirstOrDefaultAsync();
             throw new WorkConflictException(current);
         }
-        return ToDto(work, await ChapterStatsAsync(new List<Guid> { work.Id }));
+        return ToDto(work, await ChapterStatsAsync(new List<Guid> { work.Id }), await ImprintNamesAsync(new[] { work }));
     }
 
     public async Task<bool> DeleteAsync(Guid affiliateId, Guid workId)
@@ -229,11 +237,21 @@ public class WorkService : IWorkService
 
     public async Task<List<PublicWorkSummaryDto>?> GetPublicAsync(string affiliateSlug, ReaderContext? reader = null)
     {
-        var affiliateId = await PublicAuthorIdAsync(affiliateSlug);
-        if (affiliateId is null) return null;
+        var owner = await _db.Affiliates.AsNoTracking()
+            .Where(a => a.Slug == affiliateSlug && a.Published && AuthorTypes.Contains(a.BusinessType))
+            .Select(a => new { a.Id, a.BusinessType })
+            .FirstOrDefaultAsync();
+        if (owner is null) return null;
+        var affiliateId = owner.Id;
+        // Un sello muestra su catálogo: sus obras y las de sus autores con contrato activo (ImprintId lo garantiza),
+        // solo de autores con la página publicada. Cada obra se sigue leyendo en la página de su autor.
+        var isImprint = owner.BusinessType == BusinessType.Publisher;
 
         var works = await _db.Works.AsNoTracking()
-            .Where(w => w.AffiliateId == affiliateId && w.Status == "published")
+            .Include(w => w.Affiliate)
+            .Where(w => w.Status == "published"
+                        && (w.AffiliateId == affiliateId
+                            || (isImprint && w.ImprintId == affiliateId && w.Affiliate!.Published)))
             .OrderByDescending(w => w.Featured).ThenBy(w => w.SortOrder).ThenByDescending(w => w.Year).ThenByDescending(w => w.CreatedAt)
             .ToListAsync();
         var workIds = works.Select(w => w.Id).ToList();
@@ -243,11 +261,14 @@ public class WorkService : IWorkService
             .ToListAsync();
 
         var now = DateTime.UtcNow;
+        var imprints = await ImprintNamesAsync(works);
         return works.Select(w =>
         {
             var mine = chapters.Where(c => c.WorkId == w.Id).ToList();
-            var readable = mine.Count(c => CanRead(w, c.IsSample, now, reader?.IsMember == true));
-            return ToPublicSummary(w, mine.Count, readable, now);
+            // La membresía del club es del autor: en el catálogo de un sello, solo cuenta para sus obras propias.
+            var member = reader?.IsMember == true && w.AffiliateId == affiliateId;
+            var readable = mine.Count(c => CanRead(w, c.IsSample, now, member));
+            return ToPublicSummary(w, mine.Count, readable, now, imprints);
         }).ToList();
     }
 
@@ -273,7 +294,7 @@ public class WorkService : IWorkService
                 return new PublicWorkChapterRefDto(c.Number, t?.Title ?? c.Title, t?.WordCount ?? c.WordCount, readable, forMembers, t is not null);
             })
             .ToList();
-        var summary = ToPublicSummary(work, refs.Count, refs.Count(c => c.Readable), now);
+        var summary = ToPublicSummary(work, refs.Count, refs.Count(c => c.Readable), now, await ImprintNamesAsync(new[] { work }));
 
         int? continueAt = null;
         if (reader is not null)
@@ -430,6 +451,7 @@ public class WorkService : IWorkService
         if (affiliateId is null) return null;
         var slug = workSlug.Trim().ToLowerInvariant();
         return await _db.Works.AsNoTracking()
+            .Include(w => w.Affiliate)
             .FirstOrDefaultAsync(w => w.AffiliateId == affiliateId && w.Slug == slug && w.Status == "published");
     }
 
@@ -527,6 +549,7 @@ public class WorkService : IWorkService
         w.Year = r.Year;
         w.Isbn = Clip(r.Isbn, 20);
         w.Imprint = Clip(r.Imprint, 120);
+        w.Byline = Clip(r.Byline, 120);
         w.ContentNotice = Clip(r.ContentNotice, 300);
         w.ReadingAccess = Token(r.ReadingAccess, Accesses, "sample", "acceso de lectura");
         w.FreeFrom = ToUtc(r.FreeFrom);
@@ -559,25 +582,55 @@ public class WorkService : IWorkService
         return Words.Matches(text).Count;
     }
 
-    private static WorkDto ToDto(Work w, IReadOnlyDictionary<Guid, (int Count, int Words)> stats)
+    private static WorkDto ToDto(Work w, IReadOnlyDictionary<Guid, (int Count, int Words)> stats, IReadOnlyDictionary<Guid, ImprintRef> imprints)
     {
         stats.TryGetValue(w.Id, out var s);
+        var imprint = w.ImprintId is Guid id && imprints.TryGetValue(id, out var i) ? i : null;
         return new WorkDto(
             w.Id, w.Title, w.TitleEn, w.Subtitle, w.Slug, w.Kind, w.Status, w.Synopsis, w.SynopsisEn, w.CoverUrl,
             w.Year, w.Isbn, w.Imprint, w.ContentNotice, JsonArrayField.Parse<WorkBuyLinkDto>(w.BuyLinks),
             w.ReadingAccess, w.FreeFrom, w.FreeUntil, w.Featured, w.SortOrder, w.IsDemo,
-            s.Count, s.Words, w.CreatedAt, w.UpdatedAt, w.Revision, w.CoverUrlEn);
+            s.Count, s.Words, w.CreatedAt, w.UpdatedAt, w.Revision, w.CoverUrlEn,
+            w.ImprintId, imprint?.Name, w.Byline);
     }
 
-    private static PublicWorkSummaryDto ToPublicSummary(Work w, int chapterCount, int readableCount, DateTime now)
+    private static PublicWorkSummaryDto ToPublicSummary(Work w, int chapterCount, int readableCount, DateTime now, IReadOnlyDictionary<Guid, ImprintRef> imprints)
     {
         var readable = chapterCount == 0 || readableCount == 0 ? "none" : readableCount == chapterCount ? "full" : "sample";
+        var imprint = w.ImprintId is Guid id && imprints.TryGetValue(id, out var i) ? i : null;
         return new PublicWorkSummaryDto(
             w.Id, w.Slug, w.Title, w.TitleEn, w.Subtitle, w.Kind, w.Synopsis, w.SynopsisEn, w.CoverUrl,
-            w.Year, w.Imprint, w.Featured, chapterCount, readable,
+            w.Year, imprint?.Name ?? w.Imprint, w.Featured, chapterCount, readable,
             InFreeWindow(w, now) ? w.FreeUntil : null,
             JsonArrayField.Parse<WorkBuyLinkDto>(w.BuyLinks),
-            w.ReadingAccess == "members", w.CoverUrlEn);
+            w.ReadingAccess == "members", w.CoverUrlEn,
+            imprint?.Slug,
+            w.Byline ?? w.Affiliate?.Name,
+            w.Affiliate?.Slug);
+    }
+
+    /// <summary>Nombre y dirección del sello de MaalCa (por llave) de cada obra que tenga uno.</summary>
+    public sealed record ImprintRef(string Name, string? Slug);
+
+    private async Task<IReadOnlyDictionary<Guid, ImprintRef>> ImprintNamesAsync(IEnumerable<Work> works)
+    {
+        var ids = works.Where(w => w.ImprintId != null).Select(w => w.ImprintId!.Value).Distinct().ToList();
+        if (ids.Count == 0) return new Dictionary<Guid, ImprintRef>();
+        return await _db.Affiliates.AsNoTracking()
+            .Where(a => ids.Contains(a.Id))
+            .ToDictionaryAsync(a => a.Id, a => new ImprintRef(a.Name, a.Published ? a.Slug : null));
+    }
+
+    /// <summary>
+    /// El sello elegido en la ficha: solo uno con contrato activo con este autor, o el propio sello.
+    /// Sin eso, 400: una obra nunca dice salir con un sello que no la firmó.
+    /// </summary>
+    private async Task<Guid?> ResolveImprintAsync(Guid affiliateId, Guid? imprintId)
+    {
+        if (imprintId is not Guid id || id == Guid.Empty) return null;
+        if (!await _imprints.CanUseImprintAsync(affiliateId, id))
+            throw new ArgumentException("Obra: ese sello no tiene un contrato activo contigo.");
+        return id;
     }
 
     private static WorkChapterDto ToChapterDto(WorkChapter c)

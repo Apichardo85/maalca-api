@@ -71,6 +71,7 @@ public class AppDbContext : DbContext
     public DbSet<WorkChapter> WorkChapters => Set<WorkChapter>();
     public DbSet<WorkTranslationSettings> WorkTranslationSettings => Set<WorkTranslationSettings>();
     public DbSet<WorkChapterTranslation> WorkChapterTranslations => Set<WorkChapterTranslation>();
+    public DbSet<ImprintAuthor> ImprintAuthors => Set<ImprintAuthor>();
     public DbSet<Reader> Readers => Set<Reader>();
     public DbSet<ReaderClubSettings> ReaderClubSettings => Set<ReaderClubSettings>();
     public DbSet<ReaderLetter> ReaderLetters => Set<ReaderLetter>();
@@ -856,6 +857,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.CoverUrlEn).HasMaxLength(500);
             entity.Property(e => e.Isbn).HasMaxLength(20);
             entity.Property(e => e.Imprint).HasMaxLength(120);
+            entity.Property(e => e.Byline).HasMaxLength(120);
             entity.Property(e => e.ContentNotice).HasMaxLength(300);
             entity.Property(e => e.ReadingAccess).IsRequired().HasMaxLength(20);
             // Token de concurrencia: el UPDATE lleva WHERE "Revision" = <la leída>; si otro guardó en medio, no toca filas.
@@ -866,6 +868,32 @@ public class AppDbContext : DbContext
                   .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.AffiliateId, e.Slug }).IsUnique();
             entity.HasIndex(e => new { e.AffiliateId, e.Status, e.SortOrder });
+            // Sello (otro Affiliate). Borrar el sello no borra la obra: solo la desenlaza.
+            entity.HasOne<Affiliate>()
+                  .WithMany()
+                  .HasForeignKey(e => e.ImprintId)
+                  .OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(e => e.ImprintId);
+        });
+
+        modelBuilder.Entity<ImprintAuthor>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Status).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.Rights).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Notes).HasMaxLength(2000);
+            entity.Property(e => e.RoyaltyEbookPercent).HasPrecision(5, 2);
+            entity.Property(e => e.RoyaltyPrintPercent).HasPrecision(5, 2);
+            entity.HasOne(e => e.Imprint)
+                  .WithMany()
+                  .HasForeignKey(e => e.ImprintId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Author)
+                  .WithMany()
+                  .HasForeignKey(e => e.AuthorId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.ImprintId, e.AuthorId }).IsUnique();
+            entity.HasIndex(e => new { e.AuthorId, e.Status });
         });
 
         modelBuilder.Entity<WorkChapter>(entity =>

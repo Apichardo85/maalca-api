@@ -42,8 +42,15 @@ public class Work : AuditableEntity
 
     public int? Year { get; set; }
     public string? Isbn { get; set; }
-    /// <summary>Sello que la publica (ej. "Duende Ediciones"). Texto libre: un autor puede tener obras con otros sellos.</summary>
+    /// <summary>
+    /// Sello de MaalCa que la publica (Affiliate tipo Publisher), enlazado por llave. Solo si hay contrato activo
+    /// (ImprintAuthor) o si la obra es del propio sello. Con él, el nombre del sello sale del Affiliate.
+    /// </summary>
+    public Guid? ImprintId { get; set; }
+    /// <summary>Sello de fuera de MaalCa (texto libre). Se ignora si hay ImprintId.</summary>
     public string? Imprint { get; set; }
+    /// <summary>Nombre del autor como sale impreso en el libro ("Ciriaco Pichardo"). null = el nombre del espacio.</summary>
+    public string? Byline { get; set; }
     /// <summary>Aviso de contenido sensible que la web muestra antes de leer. null = sin aviso.</summary>
     public string? ContentNotice { get; set; }
 
