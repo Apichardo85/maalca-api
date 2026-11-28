@@ -21,8 +21,23 @@ public class OnboardingService : IOnboardingService
         _canalService = canalService;
     }
 
+    /// <summary>
+    /// Tipos que cualquiera puede elegir al registrarse. Publisher (sello editorial) no está a propósito:
+    /// el único sello es Duende Ediciones, de MaalCa, y no se vende; solo se crea desde /ops (CreateTrialAsync).
+    /// Professional todavía no tiene plantilla.
+    /// </summary>
+    private static readonly HashSet<BusinessType> SelfServeTypes = new()
+    {
+        BusinessType.Restaurant, BusinessType.Barber, BusinessType.Service, BusinessType.Retail,
+        BusinessType.Community, BusinessType.Dealer, BusinessType.Creator,
+    };
+
     public async Task<OnboardingResponse> OnboardAsync(string supabaseUserId, string email, OnboardingRequest request)
     {
+        if (!Enum.TryParse<BusinessType>(request.BusinessType, ignoreCase: true, out var requestedType)
+            || !SelfServeTypes.Contains(requestedType))
+            throw new ArgumentException($"Invalid BusinessType: {request.BusinessType}");
+
         var existingMaps = await _mapService.GetMapsForUserAsync(supabaseUserId);
         if (existingMaps.Count > 0)
             throw new InvalidOperationException("User already has an affiliate.");
